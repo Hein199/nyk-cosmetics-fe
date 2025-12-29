@@ -98,31 +98,29 @@ function formatCurrency(amount: number) {
 export default function SalespersonPage() {
     const router = useRouter();
     
-    // Date selection state
-    const [selectedDateYear, setSelectedDateYear] = useState("2025");
-    const [selectedDateMonth, setSelectedDateMonth] = useState("12");
-    const [selectedDateDay, setSelectedDateDay] = useState("05");
+    // Date range selection state
+    const [fromDate, setFromDate] = useState("2025-12-01");
+    const [toDate, setToDate] = useState("2025-12-05");
     
     // Monthly target state
     const [selectedYear, setSelectedYear] = useState("2025");
     const [selectedMonthNum, setSelectedMonthNum] = useState("12");
     
-    // Combine date parts for filtering
-    const selectedDate = `${selectedDateYear}-${selectedDateMonth.padStart(2, '0')}-${selectedDateDay.padStart(2, '0')}`;
-    
     // Combine year and month for monthly targets
     const selectedMonth = `${selectedYear}-${selectedMonthNum.padStart(2, '0')}`;
     
-    // Filter orders by selected date
+    // Filter orders by date range
     const filteredOrders = useMemo(() => {
-        return mockOrders.filter(order => order.date === selectedDate);
-    }, [selectedDate]);
+        return mockOrders.filter(order => {
+            const orderDate = order.date;
+            return orderDate >= fromDate && orderDate <= toDate;
+        });
+    }, [fromDate, toDate]);
     
-    // Calculate statistics for selected date
-    const dayStats = useMemo(() => {
+    // Calculate statistics for the date range
+    const rangeStats = useMemo(() => {
         const totalOrders = filteredOrders.length;
         const completedOrders = filteredOrders.filter(o => o.status === "completed").length;
-        const processingOrders = filteredOrders.filter(o => o.status === "processing").length;
         const cancelledOrders = filteredOrders.filter(o => o.status === "cancelled").length;
         const totalSales = filteredOrders
             .filter(o => o.status === "completed")
@@ -131,7 +129,6 @@ export default function SalespersonPage() {
         return {
             totalOrders,
             completedOrders,
-            processingOrders,
             cancelledOrders,
             totalSales
         };
@@ -162,6 +159,14 @@ export default function SalespersonPage() {
             day: 'numeric' 
         });
     };
+
+    // Format date range for display
+    const formatDateRange = (from: string, to: string) => {
+        if (from === to) {
+            return formatDate(from);
+        }
+        return `${formatDate(from)} - ${formatDate(to)}`;
+    };
     
     // Format month for display
     const formatMonth = (monthString: string) => {
@@ -177,13 +182,56 @@ export default function SalespersonPage() {
     const getDaysInMonth = (year: string, month: string) => {
         return new Date(parseInt(year), parseInt(month), 0).getDate();
     };
-    
-    // Helper function to set date quickly
-    const setQuickDate = (dateString: string) => {
-        const [year, month, day] = dateString.split('-');
-        setSelectedDateYear(year);
-        setSelectedDateMonth(month);
-        setSelectedDateDay(day);
+
+    // Helper function to set preset date ranges quickly
+    const setPresetRange = (type: string) => {
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0];
+        
+        switch(type) {
+            case 'today':
+                setFromDate(todayStr);
+                setToDate(todayStr);
+                break;
+            case 'yesterday':
+                const yesterday = new Date(today);
+                yesterday.setDate(yesterday.getDate() - 1);
+                const yesterdayStr = yesterday.toISOString().split('T')[0];
+                setFromDate(yesterdayStr);
+                setToDate(yesterdayStr);
+                break;
+            case 'thisWeek':
+                const weekStart = new Date(today);
+                weekStart.setDate(today.getDate() - today.getDay());
+                const weekStartStr = weekStart.toISOString().split('T')[0];
+                setFromDate(weekStartStr);
+                setToDate(todayStr);
+                break;
+            case 'thisMonth':
+                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+                const monthStartStr = monthStart.toISOString().split('T')[0];
+                setFromDate(monthStartStr);
+                setToDate(todayStr);
+                break;
+            case 'last7days':
+                const sevenDaysAgo = new Date(today);
+                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+                const sevenDaysStr = sevenDaysAgo.toISOString().split('T')[0];
+                setFromDate(sevenDaysStr);
+                setToDate(todayStr);
+                break;
+            case 'last30days':
+                const thirtyDaysAgo = new Date(today);
+                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
+                const thirtyDaysStr = thirtyDaysAgo.toISOString().split('T')[0];
+                setFromDate(thirtyDaysStr);
+                setToDate(todayStr);
+                break;
+            default:
+                // Default to current period (December 1-5, 2025)
+                setFromDate("2025-12-01");
+                setToDate("2025-12-05");
+        }
     };
     
     return (
@@ -195,7 +243,7 @@ export default function SalespersonPage() {
                         Welcome back, {mockUser.name}!
                     </h1>
                     <p className="text-gray-500 mt-1">
-                        Viewing data for {formatDate(selectedDate)}
+                        Viewing data for {formatDateRange(fromDate, toDate)}
                     </p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">
@@ -222,276 +270,60 @@ export default function SalespersonPage() {
                 </div>
             </div>
 
-            {/* Date and Month Filters */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Date & Month Filter</CardTitle>
-                    <CardDescription>Filter your sales data by specific date and month</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="flex flex-col sm:flex-row gap-4">
-                        <div className="flex-1">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Select Date
-                            </label>
-                            <div className="grid grid-cols-3 gap-2">
-                                <div>
-                                    <label htmlFor="date-day-filter" className="block text-xs text-gray-500 mb-1">
-                                        Day
-                                    </label>
-                                    <select
-                                        id="date-day-filter"
-                                        value={selectedDateDay}
-                                        onChange={(e) => setSelectedDateDay(e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-                                    >
-                                        {Array.from({ length: getDaysInMonth(selectedDateYear, selectedDateMonth) }, (_, i) => {
-                                            const day = (i + 1).toString().padStart(2, '0');
-                                            return (
-                                                <option key={day} value={day}>
-                                                    {day}
-                                                </option>
-                                            );
-                                        })}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label htmlFor="date-month-filter" className="block text-xs text-gray-500 mb-1">
-                                        Month
-                                    </label>
-                                    <select
-                                        id="date-month-filter"
-                                        value={selectedDateMonth}
-                                        onChange={(e) => setSelectedDateMonth(e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-                                    >
-                                        <option value="01">Jan</option>
-                                        <option value="02">Feb</option>
-                                        <option value="03">Mar</option>
-                                        <option value="04">Apr</option>
-                                        <option value="05">May</option>
-                                        <option value="06">Jun</option>
-                                        <option value="07">Jul</option>
-                                        <option value="08">Aug</option>
-                                        <option value="09">Sep</option>
-                                        <option value="10">Oct</option>
-                                        <option value="11">Nov</option>
-                                        <option value="12">Dec</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label htmlFor="date-year-filter" className="block text-xs text-gray-500 mb-1">
-                                        Year
-                                    </label>
-                                    <select
-                                        id="date-year-filter"
-                                        value={selectedDateYear}
-                                        onChange={(e) => setSelectedDateYear(e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-                                    >
-                                        <option value="2024">2024</option>
-                                        <option value="2025">2025</option>
-                                        <option value="2026">2026</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <p className="text-xs text-gray-500 mt-1">
-                                Found {filteredOrders.length} orders for {formatDate(selectedDate)}
-                            </p>
-                            <div className="mt-2">
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                        setSelectedDateYear("2025");
-                                        setSelectedDateMonth("12");
-                                        setSelectedDateDay("05");
-                                    }}
-                                    className="text-xs"
-                                >
-                                    Today
-                                </Button>
-                            </div>
-                        </div>
-                        <div className="flex-1">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Monthly Target Period
-                            </label>
-                            <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                    <label htmlFor="year-filter" className="block text-xs text-gray-500 mb-1">
-                                        Year
-                                    </label>
-                                    <select
-                                        id="year-filter"
-                                        value={selectedYear}
-                                        onChange={(e) => setSelectedYear(e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-                                    >
-                                        <option value="2024">2024</option>
-                                        <option value="2025">2025</option>
-                                        <option value="2026">2026</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label htmlFor="month-filter" className="block text-xs text-gray-500 mb-1">
-                                        Month
-                                    </label>
-                                    <select
-                                        id="month-filter"
-                                        value={selectedMonthNum}
-                                        onChange={(e) => setSelectedMonthNum(e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-                                    >
-                                        <option value="01">January</option>
-                                        <option value="02">February</option>
-                                        <option value="03">March</option>
-                                        <option value="04">April</option>
-                                        <option value="05">May</option>
-                                        <option value="06">June</option>
-                                        <option value="07">July</option>
-                                        <option value="08">August</option>
-                                        <option value="09">September</option>
-                                        <option value="10">October</option>
-                                        <option value="11">November</option>
-                                        <option value="12">December</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <p className="text-xs text-gray-500 mt-1">
-                                Viewing: {formatMonth(selectedMonth)}
-                            </p>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-gray-500">
-                                    Total Orders
-                                </p>
-                                <p className="text-3xl font-bold text-gray-900 mt-1">
-                                    {dayStats.totalOrders}
-                                </p>
-                            </div>
-                            <div className="w-12 h-12 bg-pink-100 rounded-full flex items-center justify-center">
-                                <svg
-                                    className="w-6 h-6 text-pink-600"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
-                                    />
-                                </svg>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
 
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-gray-500">
-                                    Completed
-                                </p>
-                                <p className="text-3xl font-bold text-green-600 mt-1">
-                                    {dayStats.completedOrders}
-                                </p>
-                            </div>
-                            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                                <svg
-                                    className="w-6 h-6 text-green-600"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M5 13l4 4L19 7"
-                                    />
-                                </svg>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
 
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-gray-500">
-                                    Cancelled
-                                </p>
-                                <p className="text-3xl font-bold text-red-600 mt-1">
-                                    {dayStats.cancelledOrders}
-                                </p>
-                            </div>
-                            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                                <svg
-                                    className="w-6 h-6 text-red-600"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M6 18L18 6M6 6l12 12"
-                                    />
-                                </svg>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-gray-500">Daily Sales</p>
-                                <p className="text-2xl font-bold text-gray-900 mt-1">
-                                    {formatCurrency(dayStats.totalSales)}
-                                </p>
-                            </div>
-                            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                                <svg
-                                    className="w-6 h-6 text-blue-600"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                    />
-                                </svg>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
 
             {/* Monthly Target Card */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Monthly Target - {formatMonth(selectedMonth)}</CardTitle>
-                    <CardDescription>Sales performance against monthly target</CardDescription>
+            <Card className="bg-gradient-to-r from-pink-50 to-rose-50 border-pink-200">
+                <CardHeader className="pb-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div>
+                            <CardTitle className="text-xl text-gray-800">Monthly Target - {formatMonth(selectedMonth)}</CardTitle>
+                            <CardDescription className="text-gray-600">Sales performance against monthly target</CardDescription>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
+                                <label htmlFor="year-filter" className="text-sm font-medium text-gray-700">
+                                    Year:
+                                </label>
+                                <select
+                                    id="year-filter"
+                                    value={selectedYear}
+                                    onChange={(e) => setSelectedYear(e.target.value)}
+                                    className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                >
+                                    <option value="2024">2024</option>
+                                    <option value="2025">2025</option>
+                                    <option value="2026">2026</option>
+                                </select>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <label htmlFor="month-filter" className="text-sm font-medium text-gray-700">
+                                    Month:
+                                </label>
+                                <select
+                                    id="month-filter"
+                                    value={selectedMonthNum}
+                                    onChange={(e) => setSelectedMonthNum(e.target.value)}
+                                    className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                >
+                                    <option value="01">January</option>
+                                    <option value="02">February</option>
+                                    <option value="03">March</option>
+                                    <option value="04">April</option>
+                                    <option value="05">May</option>
+                                    <option value="06">June</option>
+                                    <option value="07">July</option>
+                                    <option value="08">August</option>
+                                    <option value="09">September</option>
+                                    <option value="10">October</option>
+                                    <option value="11">November</option>
+                                    <option value="12">December</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-4">
@@ -525,17 +357,126 @@ export default function SalespersonPage() {
                 </CardContent>
             </Card>
 
-            {/* Recent Orders */}
+            {/* Orders */}
             <Card>
-                <CardHeader>
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                        <div>
-                            <CardTitle>Recent Orders</CardTitle>
-                            <CardDescription>Your latest order activity</CardDescription>
+                <CardHeader className="pb-4">
+                    <div className="flex flex-col space-y-4">
+                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                            <div>
+                                <CardTitle className="text-xl">Orders</CardTitle>
+                                <CardDescription>Your order activity for {formatDateRange(fromDate, toDate)}</CardDescription>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-6 text-sm">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-gray-600 font-medium">{filteredOrders.length} orders found</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+                                    <span className="text-gray-600">Total:</span>
+                                    <span className="font-semibold text-gray-900">{rangeStats.totalOrders}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                                    <span className="text-gray-600">Completed:</span>
+                                    <span className="font-semibold text-green-600">{rangeStats.completedOrders}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                                    <span className="text-gray-600">Cancelled:</span>
+                                    <span className="font-semibold text-red-600">{rangeStats.cancelledOrders}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                                    <span className="text-gray-600">Sales:</span>
+                                    <span className="font-semibold text-blue-600">{formatCurrency(rangeStats.totalSales)}</span>
+                                </div>
+                            </div>
                         </div>
-                        <Button variant="outline" size="sm">
-                            View All Orders
-                        </Button>
+                        
+                        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 pt-2 border-t border-gray-100">
+                            <div className="flex flex-col sm:flex-row gap-6">
+                                <div className="flex flex-col">
+                                    <label className="text-sm font-medium text-gray-700 mb-2">
+                                        Date Range
+                                    </label>
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex flex-col">
+                                            <label htmlFor="from-date" className="text-xs text-gray-500 mb-1">
+                                                From
+                                            </label>
+                                            <input
+                                                id="from-date"
+                                                type="date"
+                                                value={fromDate}
+                                                onChange={(e) => setFromDate(e.target.value)}
+                                                lang="en-US"
+                                                className="w-40 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                            />
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <label htmlFor="to-date" className="text-xs text-gray-500 mb-1">
+                                                To
+                                            </label>
+                                            <input
+                                                id="to-date"
+                                                type="date"
+                                                value={toDate}
+                                                onChange={(e) => setToDate(e.target.value)}
+                                                lang="en-US"
+                                                className="w-40 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                                min={fromDate}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div className="flex flex-col">
+                                    <label className="text-sm font-medium text-gray-700 mb-2">
+                                        Quick Select
+                                    </label>
+                                    <div className="flex flex-wrap gap-2 pt-6">
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => setPresetRange('today')}
+                                            className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10"
+                                        >
+                                            Today
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => setPresetRange('last7days')}
+                                            className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10"
+                                        >
+                                            Last 7 Days
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => setPresetRange('thisMonth')}
+                                            className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10"
+                                        >
+                                            This Month
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => setPresetRange('last30days')}
+                                            className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10"
+                                        >
+                                            Last 30 Days
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-center justify-end">
+                                <Button variant="outline" size="sm" className="rounded-lg hover:bg-gray-50">
+                                    View All Orders
+                                </Button>
+                            </div>
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent>
@@ -543,7 +484,7 @@ export default function SalespersonPage() {
                     <div className="block sm:hidden space-y-4">
                         {recentOrdersForDisplay.length === 0 ? (
                             <div className="text-center py-8">
-                                <p className="text-gray-500">No orders found for {formatDate(selectedDate)}.</p>
+                                <p className="text-gray-500">No orders found for {formatDateRange(fromDate, toDate)}.</p>
                             </div>
                         ) : (
                             recentOrdersForDisplay.map((order) => (
@@ -600,7 +541,7 @@ export default function SalespersonPage() {
                                 {recentOrdersForDisplay.length === 0 ? (
                                     <tr>
                                         <td colSpan={7} className="text-center py-8 text-gray-500">
-                                            No orders found for {formatDate(selectedDate)}.
+                                            No orders found for {formatDateRange(fromDate, toDate)}.
                                         </td>
                                     </tr>
                                 ) : (
