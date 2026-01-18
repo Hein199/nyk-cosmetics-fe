@@ -291,7 +291,7 @@ export default function SalespersonPage() {
                                     id="year-filter"
                                     value={selectedYear}
                                     onChange={(e) => setSelectedYear(e.target.value)}
-                                    className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                    className="px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
                                 >
                                     <option value="2024">2024</option>
                                     <option value="2025">2025</option>
@@ -306,7 +306,7 @@ export default function SalespersonPage() {
                                     id="month-filter"
                                     value={selectedMonthNum}
                                     onChange={(e) => setSelectedMonthNum(e.target.value)}
-                                    className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                    className="px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
                                 >
                                     <option value="01">January</option>
                                     <option value="02">February</option>
@@ -359,42 +359,44 @@ export default function SalespersonPage() {
 
             {/* Orders */}
             <Card>
-                <CardHeader className="pb-4">
-                    <div className="flex flex-col space-y-4">
-                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <CardHeader className="pb-6">
+                    <div className="flex flex-col space-y-6">
+                        <div className="flex flex-col space-y-4">
                             <div>
-                                <CardTitle className="text-xl">Orders</CardTitle>
-                                <CardDescription>Your order activity for {formatDateRange(fromDate, toDate)}</CardDescription>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-6 text-sm">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-gray-600 font-medium">{filteredOrders.length} orders found</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
-                                    <span className="text-gray-600">Total:</span>
-                                    <span className="font-semibold text-gray-900">{rangeStats.totalOrders}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                                    <span className="text-gray-600">Completed:</span>
-                                    <span className="font-semibold text-green-600">{rangeStats.completedOrders}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                                    <span className="text-gray-600">Cancelled:</span>
-                                    <span className="font-semibold text-red-600">{rangeStats.cancelledOrders}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                                    <span className="text-gray-600">Sales:</span>
-                                    <span className="font-semibold text-blue-600">{formatCurrency(rangeStats.totalSales)}</span>
+                                <CardTitle className="text-xl mb-3">Orders</CardTitle>
+                                <CardDescription className="mb-4">Your order activity for {formatDateRange(fromDate, toDate)}</CardDescription>
+                                
+                                {/* Order Statistics - moved under title */}
+                                <div className="flex flex-wrap items-center gap-6 text-sm">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+                                        <span className="text-gray-600">Total:</span>
+                                        <span className="font-semibold text-gray-900">{rangeStats.totalOrders}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                                        <span className="text-gray-600">Completed:</span>
+                                        <span className="font-semibold text-green-600">{rangeStats.completedOrders}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                                        <span className="text-gray-600">Cancelled:</span>
+                                        <span className="font-semibold text-red-600">{rangeStats.cancelledOrders}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                                        <span className="text-gray-600">Sales:</span>
+                                        <span className="font-semibold text-blue-600">{formatCurrency(rangeStats.totalSales)}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-gray-600 font-medium">{filteredOrders.length} orders found</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                         
                         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 pt-2 border-t border-gray-100">
-                            <div className="flex flex-col sm:flex-row gap-6">
+                            <div className="flex flex-col lg:flex-row lg:items-end gap-6">
                                 <div className="flex flex-col">
                                     <label className="text-sm font-medium text-gray-700 mb-2">
                                         Date Range
@@ -410,7 +412,7 @@ export default function SalespersonPage() {
                                                 value={fromDate}
                                                 onChange={(e) => setFromDate(e.target.value)}
                                                 lang="en-US"
-                                                className="w-40 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                                className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
                                             />
                                         </div>
                                         <div className="flex flex-col">
@@ -423,56 +425,52 @@ export default function SalespersonPage() {
                                                 value={toDate}
                                                 onChange={(e) => setToDate(e.target.value)}
                                                 lang="en-US"
-                                                className="w-40 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                                className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
                                                 min={fromDate}
                                             />
                                         </div>
                                     </div>
                                 </div>
-                                
-                                <div className="flex flex-col">
-                                    <label className="text-sm font-medium text-gray-700 mb-2">
-                                        Quick Select
-                                    </label>
-                                    <div className="flex flex-wrap gap-2 pt-6">
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => setPresetRange('today')}
-                                            className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10"
-                                        >
-                                            Today
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => setPresetRange('last7days')}
-                                            className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10"
-                                        >
-                                            Last 7 Days
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => setPresetRange('thisMonth')}
-                                            className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10"
-                                        >
-                                            This Month
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => setPresetRange('last30days')}
-                                            className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10"
-                                        >
-                                            Last 30 Days
-                                        </Button>
-                                    </div>
-                                </div>
                             </div>
                             
-                            <div className="flex items-center justify-end">
-                                <Button variant="outline" size="sm" className="rounded-lg hover:bg-gray-50">
+                            <div className="grid grid-cols-5 gap-3 pt-6">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setPresetRange('today')}
+                                    className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10 w-full"
+                                >
+                                    Today
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setPresetRange('last7days')}
+                                    className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10 w-full"
+                                >
+                                    Last 7 Days
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setPresetRange('thisMonth')}
+                                    className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10 w-full"
+                                >
+                                    This Month
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setPresetRange('last30days')}
+                                    className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10 w-full"
+                                >
+                                    Last 30 Days
+                                </Button>
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="text-xs px-3 py-2 rounded-lg hover:bg-gray-50 h-10 w-full"
+                                >
                                     View All Orders
                                 </Button>
                             </div>

@@ -85,19 +85,15 @@ export default function OrdersPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
     
-    // Date selection state
-    const [selectedDateYear, setSelectedDateYear] = useState("2025");
-    const [selectedDateMonth, setSelectedDateMonth] = useState("12");
-    const [selectedDateDay, setSelectedDateDay] = useState("05");
-    
-    // Combine date parts for filtering
-    const selectedDate = `${selectedDateYear}-${selectedDateMonth.padStart(2, '0')}-${selectedDateDay.padStart(2, '0')}`;
+    // Date range selection state
+    const [fromDate, setFromDate] = useState("2025-12-01");
+    const [toDate, setToDate] = useState("2025-12-05");
 
     // Filter and search orders
     const filteredOrders = useMemo(() => {
         return mockOrders.filter((order) => {
-            // Date filter
-            const matchesDate = order.date === selectedDate;
+            // Date range filter
+            const matchesDateRange = order.date >= fromDate && order.date <= toDate;
             
             // Status filter
             const matchesStatus = statusFilter === "all" || order.status === statusFilter;
@@ -107,9 +103,9 @@ export default function OrdersPage() {
                 order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 order.customer.toLowerCase().includes(searchQuery.toLowerCase());
             
-            return matchesDate && matchesStatus && matchesSearch;
+            return matchesDateRange && matchesStatus && matchesSearch;
         });
-    }, [selectedDate, searchQuery, statusFilter]);
+    }, [fromDate, toDate, searchQuery, statusFilter]);
 
     // Calculate summary stats
     const orderStats = useMemo(() => {
@@ -120,6 +116,14 @@ export default function OrdersPage() {
         return { total, completed, processing };
     }, []);
 
+    // Format date range for display
+    const formatDateRange = (from: string, to: string) => {
+        if (from === to) {
+            return formatDate(from);
+        }
+        return `${formatDate(from)} - ${formatDate(to)}`;
+    };
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -127,7 +131,7 @@ export default function OrdersPage() {
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">My Orders</h1>
                     <p className="text-gray-500 mt-1">
-                        Viewing orders for {formatDate(selectedDate)}
+                        Viewing orders for {formatDateRange(fromDate, toDate)}
                     </p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">
@@ -144,65 +148,6 @@ export default function OrdersPage() {
                 </div>
             </div>
 
-            {/* Stats Summary */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-gray-500">Total Orders</p>
-                                <p className="text-3xl font-bold text-gray-900 mt-1">
-                                    {orderStats.total}
-                                </p>
-                            </div>
-                            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
-                                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                                </svg>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-gray-500">Completed</p>
-                                <p className="text-3xl font-bold text-green-600 mt-1">
-                                    {orderStats.completed}
-                                </p>
-                            </div>
-                            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-
-
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-gray-500">Processing</p>
-                                <p className="text-3xl font-bold text-blue-600 mt-1">
-                                    {orderStats.processing}
-                                </p>
-                            </div>
-                            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                </svg>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
             {/* Filters and Search */}
             <Card>
                 <CardHeader>
@@ -210,83 +155,49 @@ export default function OrdersPage() {
                     <CardDescription>Filter and search through your orders</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {/* Date Filter */}
+                    {/* Date Range Filter */}
                     <div className="mb-6">
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Select Date
+                            Date Range
                         </label>
-                        <div className="grid grid-cols-3 gap-2 max-w-md">
-                            <div>
-                                <label htmlFor="orders-date-day-filter" className="block text-xs text-gray-500 mb-1">
-                                    Day
+                        <div className="flex items-center gap-3">
+                            <div className="flex flex-col">
+                                <label htmlFor="from-date" className="text-xs text-gray-500 mb-1">
+                                    From
                                 </label>
-                                <select
-                                    id="orders-date-day-filter"
-                                    value={selectedDateDay}
-                                    onChange={(e) => setSelectedDateDay(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-                                >
-                                    {Array.from({ length: getDaysInMonth(selectedDateYear, selectedDateMonth) }, (_, i) => {
-                                        const day = (i + 1).toString().padStart(2, '0');
-                                        return (
-                                            <option key={day} value={day}>
-                                                {day}
-                                            </option>
-                                        );
-                                    })}
-                                </select>
+                                <input
+                                    id="from-date"
+                                    type="date"
+                                    value={fromDate}
+                                    onChange={(e) => setFromDate(e.target.value)}
+                                    className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                />
                             </div>
-                            <div>
-                                <label htmlFor="orders-date-month-filter" className="block text-xs text-gray-500 mb-1">
-                                    Month
+                            <div className="flex flex-col">
+                                <label htmlFor="to-date" className="text-xs text-gray-500 mb-1">
+                                    To
                                 </label>
-                                <select
-                                    id="orders-date-month-filter"
-                                    value={selectedDateMonth}
-                                    onChange={(e) => setSelectedDateMonth(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-                                >
-                                    <option value="01">Jan</option>
-                                    <option value="02">Feb</option>
-                                    <option value="03">Mar</option>
-                                    <option value="04">Apr</option>
-                                    <option value="05">May</option>
-                                    <option value="06">Jun</option>
-                                    <option value="07">Jul</option>
-                                    <option value="08">Aug</option>
-                                    <option value="09">Sep</option>
-                                    <option value="10">Oct</option>
-                                    <option value="11">Nov</option>
-                                    <option value="12">Dec</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label htmlFor="orders-date-year-filter" className="block text-xs text-gray-500 mb-1">
-                                    Year
-                                </label>
-                                <select
-                                    id="orders-date-year-filter"
-                                    value={selectedDateYear}
-                                    onChange={(e) => setSelectedDateYear(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-                                >
-                                    <option value="2024">2024</option>
-                                    <option value="2025">2025</option>
-                                    <option value="2026">2026</option>
-                                </select>
+                                <input
+                                    id="to-date"
+                                    type="date"
+                                    value={toDate}
+                                    onChange={(e) => setToDate(e.target.value)}
+                                    className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                    min={fromDate}
+                                />
                             </div>
                         </div>
                         <p className="text-xs text-gray-500 mt-1">
-                            Found {filteredOrders.length} orders for {formatDate(selectedDate)}
+                            Found {filteredOrders.length} orders for {formatDateRange(fromDate, toDate)}
                         </p>
                         <div className="mt-2">
                             <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => {
-                                    setSelectedDateYear("2025");
-                                    setSelectedDateMonth("12");
-                                    setSelectedDateDay("05");
+                                    const today = new Date().toISOString().split('T')[0];
+                                    setFromDate(today);
+                                    setToDate(today);
                                 }}
                                 className="text-xs"
                             >
@@ -302,7 +213,7 @@ export default function OrdersPage() {
                                 placeholder="Search by Order ID or Customer name..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full"
+                                className="w-full h-10"
                             />
                         </div>
                         
@@ -311,7 +222,7 @@ export default function OrdersPage() {
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                                className="w-full h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
                             >
                                 {statusOptions.map((option) => (
                                     <option key={option.value} value={option.value}>
