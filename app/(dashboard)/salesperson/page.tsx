@@ -511,70 +511,79 @@ export default function SalespersonPage() {
                     </div>
 
                     {/* Desktop: Table layout */}
-                    <div className="hidden sm:block overflow-x-auto">
-                        <table className="w-full">
-                            <thead>
-                                <tr className="border-b border-gray-200">
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Order ID
-                                    </th>
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Customer
-                                    </th>
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Date
-                                    </th>
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Time
-                                    </th>
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Amount
-                                    </th>
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Status
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {recentOrdersForDisplay.length === 0 ? (
+                    <div className="hidden sm:block">
+                        <div className="border-2 border-gray-300 rounded-lg overflow-hidden shadow-sm">
+                            <table className="w-full border-collapse text-sm">
+                                <thead className="bg-blue-600 text-white">
                                     <tr>
-                                        <td colSpan={7} className="text-center py-8 text-gray-500">
-                                            No orders found for {formatDateRange(fromDate, toDate)}.
-                                        </td>
+                                        <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
+                                            Order ID
+                                        </th>
+                                        <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
+                                            Customer
+                                        </th>
+                                        <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
+                                            Date
+                                        </th>
+                                        <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
+                                            Time
+                                        </th>
+                                        <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
+                                            Amount
+                                        </th>
+                                        <th className="text-center py-3 px-4 font-bold">
+                                            Status
+                                        </th>
                                     </tr>
-                                ) : (
-                                    recentOrdersForDisplay.map((order) => (
-                                    <tr
-                                        key={order.id}
-                                        className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                                    >
-                                        <td className="py-3 px-4 text-sm font-medium text-gray-900">
-                                            {order.id}
-                                        </td>
-                                        <td className="py-3 px-4 text-sm text-gray-600">
-                                            {order.customer}
-                                        </td>
-                                        <td className="py-3 px-4 text-sm text-gray-500">
-                                            {order.date}
-                                        </td>
-                                        <td className="py-3 px-4 text-sm text-gray-500">
-                                            {order.time}
-                                        </td>
-                                        <td className="py-3 px-4 text-sm font-medium text-gray-900">
-                                            {formatCurrency(order.amount)}
-                                        </td>
-                                        <td className="py-3 px-4">
-                                            <span
-                                                className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[order.status]}`}
-                                            >
-                                                {order.status}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {recentOrdersForDisplay.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={6} className="text-center py-8 text-gray-500 border-r border-gray-300">
+                                                No orders found for {formatDateRange(fromDate, toDate)}.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        recentOrdersForDisplay.map((order, index) => (
+                                        <tr
+                                            key={order.id}
+                                            className={`border-b border-gray-300 ${
+                                                index % 2 === 0 ? "bg-blue-50 hover:bg-blue-100" : "bg-white hover:bg-gray-50"
+                                            } transition-colors`}
+                                        >
+                                            <td className="py-3 px-4 text-center font-semibold text-gray-900 border-r border-gray-300">
+                                                {order.id}
+                                            </td>
+                                            <td className="py-3 px-4 font-medium text-gray-900 border-r border-gray-300">
+                                                {order.customer}
+                                            </td>
+                                            <td className="py-3 px-4 text-center font-medium text-gray-900 border-r border-gray-300">
+                                                {order.date}
+                                            </td>
+                                            <td className="py-3 px-4 text-center font-medium text-gray-900 border-r border-gray-300">
+                                                {order.time}
+                                            </td>
+                                            <td className="py-3 px-4 text-center font-bold text-gray-900 border-r border-gray-300">
+                                                {formatCurrency(order.amount)}
+                                            </td>
+                                            <td className="py-3 px-4 text-center">
+                                                <span
+                                                    className={`px-2 py-1 text-xs font-bold rounded border ${
+                                                        order.status === 'completed' ? 'bg-green-50 text-green-700 border-green-200' :
+                                                        order.status === 'processing' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                                        order.status === 'pending' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                                        'bg-red-50 text-red-700 border-red-200'
+                                                    }`}
+                                                >
+                                                    {order.status}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </CardContent>
             </Card>
