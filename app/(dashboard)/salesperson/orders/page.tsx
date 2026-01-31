@@ -456,9 +456,9 @@ export default function OrdersPage() {
                                                 <td className="py-3 px-4 text-center border-r border-gray-300">
                                                     <span
                                                         className={`px-2 py-1 text-xs font-bold rounded border ${order.status === 'delivered' ? 'bg-green-50 text-green-700 border-green-200' :
-                                                                order.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                                                    order.status === 'pending_admin' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                                                                        'bg-red-50 text-red-700 border-red-200'
+                                                            order.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                                                order.status === 'pending_admin' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                                                    'bg-red-50 text-red-700 border-red-200'
                                                             }`}
                                                     >
                                                         {order.status.replace("_", " ")}
@@ -547,9 +547,9 @@ export default function OrdersPage() {
                                         <div className="text-right">
                                             <div className="mb-3">
                                                 <span className={`px-3 py-1 text-sm font-medium rounded border ${orderDetails.status === 'delivered' ? 'bg-green-50 text-green-700 border-green-200' :
-                                                        orderDetails.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                                            orderDetails.status === 'pending_admin' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                                                                'bg-red-50 text-red-700 border-red-200'
+                                                    orderDetails.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                                        orderDetails.status === 'pending_admin' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                                            'bg-red-50 text-red-700 border-red-200'
                                                     }`}>
                                                     {orderDetails.status.replace("_", " ")}
                                                 </span>
@@ -623,8 +623,8 @@ export default function OrdersPage() {
                                                     const total = unitPrice * item.quantity;
                                                     return (
                                                         <tr key={item.id} className={`border-b border-gray-300 ${index % 2 === 0
-                                                                ? "bg-blue-50 hover:bg-blue-100"
-                                                                : "bg-white hover:bg-gray-50"
+                                                            ? "bg-blue-50 hover:bg-blue-100"
+                                                            : "bg-white hover:bg-gray-50"
                                                             }`}>
                                                             <td className="py-3 px-4 text-center text-gray-800 font-semibold border-r border-gray-300">
                                                                 {index + 1}
