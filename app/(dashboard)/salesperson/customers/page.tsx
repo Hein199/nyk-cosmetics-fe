@@ -110,6 +110,16 @@ const formatDate = (dateString: string) => {
     });
 };
 
+const getOutstandingColor = (amount: number) => {
+    if (amount > 1000000) {
+        return "text-red-600";
+    }
+    if (amount <= 10000) {
+        return "text-green-600";
+    }
+    return "text-orange-600";
+};
+
 const getStatusColor = (status: string) => {
     switch (status) {
         case "Active":
@@ -127,10 +137,6 @@ export default function CustomersPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState("All");
     const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
-    
-    // Date range state
-    const [fromDate, setFromDate] = useState("2023-01-01");
-    const [toDate, setToDate] = useState("2025-01-31");
     
     // Add New Customer form state
     const [showAddCustomerForm, setShowAddCustomerForm] = useState(false);
@@ -179,13 +185,9 @@ export default function CustomersPage() {
             
             const matchesStatus = statusFilter === "All" || customer.status === statusFilter;
             
-            // Date range filter based on joined date
-            const customerJoinDate = customer.joinedDate;
-            const matchesDateRange = customerJoinDate >= fromDate && customerJoinDate <= toDate;
-            
-            return matchesSearch && matchesStatus && matchesDateRange;
+            return matchesSearch && matchesStatus;
         });
-    }, [searchTerm, statusFilter, fromDate, toDate]);
+    }, [searchTerm, statusFilter]);
 
     const customerStats = useMemo(() => {
         const total = mockCustomers.length;
@@ -197,14 +199,6 @@ export default function CustomersPage() {
         return { total, active, newCustomers, inactive, totalOutstanding };
     }, []);
     
-    // Format date range for display
-    const formatDateRange = (from: string, to: string) => {
-        if (from === to) {
-            return formatDate(from);
-        }
-        return `${formatDate(from)} - ${formatDate(to)}`;
-    };
-
     return (
         <div className="min-h-screen bg-[#FFCDC9] p-6">
             <div className="max-w-7xl mx-auto space-y-6">
@@ -215,7 +209,7 @@ export default function CustomersPage() {
                         <p className="text-gray-500 mt-1">Manage and view customer information</p>
                     </div>
                     <Button 
-                        size="lg"
+                        size="md"
                         className="bg-pink-600 hover:bg-pink-700 text-white"
                         onClick={() => setShowAddCustomerForm(true)}
                     >
@@ -228,7 +222,9 @@ export default function CustomersPage() {
                     <div className="flex items-center justify-between">
                         <div>
                             <div className="text-sm text-gray-500 mb-1">Total Outstanding to Collect</div>
-                            <div className="text-3xl font-bold text-orange-600">{formatCurrency(customerStats.totalOutstanding)}</div>
+                            <div className={`text-3xl font-bold ${getOutstandingColor(customerStats.totalOutstanding)}`}>
+                                {formatCurrency(customerStats.totalOutstanding)}
+                            </div>
                         </div>
                         <div className="text-right text-sm text-gray-500">
                             <div>From {customerStats.total} customers</div>
@@ -237,91 +233,37 @@ export default function CustomersPage() {
                     </div>
                 </Card>
 
-                {/* Filters */}
-                <Card className="bg-white p-6">
-                    {/* Date Range Filter */}
-                    <div className="mb-6">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Date Range
-                        </label>
-                        <div className="flex items-center gap-3">
-                            <div className="flex flex-col">
-                                <label htmlFor="from-date" className="text-xs text-gray-500 mb-1">
-                                    From
-                                </label>
-                                <input
-                                    id="from-date"
-                                    type="date"
-                                    value={fromDate}
-                                    onChange={(e) => setFromDate(e.target.value)}
-                                    className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
-                                />
-                            </div>
-                            <div className="flex flex-col">
-                                <label htmlFor="to-date" className="text-xs text-gray-500 mb-1">
-                                    To
-                                </label>
-                                <input
-                                    id="to-date"
-                                    type="date"
-                                    value={toDate}
-                                    onChange={(e) => setToDate(e.target.value)}
-                                    className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
-                                    min={fromDate}
-                                />
-                            </div>
-                            <div className="flex flex-col">
-                                <label className="text-xs text-transparent mb-1">.</label>
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                        const today = new Date().toISOString().split('T')[0];
-                                        setFromDate(today);
-                                        setToDate(today);
-                                    }}
-                                    className="text-xs h-10"
-                                >
-                                    Today
-                                </Button>
-                            </div>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                            Found {filteredCustomers.length} customers for {formatDateRange(fromDate, toDate)}
-                        </p>
-                    </div>
-                    
-                    <div className="flex flex-col sm:flex-row gap-4">
-                        <div className="flex-1">
-                            <Input
-                                type="text"
-                                placeholder="Search customers by name, email, or phone..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full h-10"
-                            />
-                        </div>
-                        <div className="sm:w-48">
-                            <select
-                                value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value)}
-                                className="w-full h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
-                            >
-                                <option value="All">All Status</option>
-                                <option value="Active">Active</option>
-                                <option value="New">New</option>
-                                <option value="Inactive">Inactive</option>
-                            </select>
-                        </div>
-                    </div>
-                </Card>
-
                 {/* Customer List */}
                 <Card className="bg-white">
                     <div className="p-6">
-                        <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                            Customer List ({filteredCustomers.length})
-                        </h2>
+                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+                            <h2 className="text-lg font-semibold text-gray-900">
+                                Customer List ({filteredCustomers.length})
+                            </h2>
+                            <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
+                                <div className="flex-1 min-w-[260px]">
+                                    <Input
+                                        type="text"
+                                        placeholder="Search by name"
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="w-full h-10"
+                                    />
+                                </div>
+                                <div className="sm:w-48">
+                                    <select
+                                        value={statusFilter}
+                                        onChange={(e) => setStatusFilter(e.target.value)}
+                                        className="w-full h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                    >
+                                        <option value="All">All Status</option>
+                                        <option value="Active">Active</option>
+                                        <option value="New">New</option>
+                                        <option value="Inactive">Inactive</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
                         
                         {filteredCustomers.length === 0 ? (
                             <div className="text-center py-8 text-gray-500">
@@ -335,8 +277,6 @@ export default function CustomersPage() {
                                             <th className="text-left py-3 px-4 font-bold border-r border-blue-500">Customer</th>
                                             <th className="text-left py-3 px-4 font-bold border-r border-blue-500">Contact</th>
                                             <th className="text-center py-3 px-4 font-bold border-r border-blue-500">Orders</th>
-                                            <th className="text-center py-3 px-4 font-bold border-r border-blue-500">Today's Purchase</th>
-                                            <th className="text-center py-3 px-4 font-bold border-r border-blue-500">Last Order</th>
                                             <th className="text-center py-3 px-4 font-bold border-r border-blue-500">Status</th>
                                             <th className="text-center py-3 px-4 font-bold">Outstanding</th>
                                         </tr>
@@ -357,17 +297,6 @@ export default function CustomersPage() {
                                                 </td>
                                                 <td className="py-3 px-4 text-center font-semibold text-gray-900 border-r border-gray-300">
                                                     {customer.totalOrders}
-                                                </td>
-                                                <td className="py-3 px-4 text-center border-r border-gray-300">
-                                                    <div className={`font-semibold ${customer.todayPurchase > 0 ? 'text-green-600' : 'text-gray-500'}`}>
-                                                        {formatCurrency(customer.todayPurchase)}
-                                                    </div>
-                                                    {customer.todayPurchase > 0 && (
-                                                        <div className="text-xs text-green-600 font-medium">Today</div>
-                                                    )}
-                                                </td>
-                                                <td className="py-3 px-4 text-center font-medium text-gray-900 border-r border-gray-300">
-                                                    {customer.lastOrder ? formatDate(customer.lastOrder) : '-'}
                                                 </td>
                                                 <td className="py-3 px-4 text-center border-r border-gray-300">
                                                     <span className={`inline-block px-2 py-1 rounded text-xs font-bold border ${
