@@ -4,16 +4,28 @@ import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useState } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 interface LoginFormData {
-    email: string;
+    username: string;
     password: string;
     rememberMe: boolean;
 }
 
 export default function LoginPage() {
     const [isLoading, setIsLoading] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const { login, user, loading } = useAuth();
+    const router = useRouter();
+
+    useEffect(() => {
+        if (!loading && user) {
+            const destination = user.role === "admin" ? "/admin" : "/salesperson";
+            router.replace(destination);
+        }
+    }, [loading, user, router]);
 
     const {
         register,
@@ -21,7 +33,7 @@ export default function LoginPage() {
         formState: { errors },
     } = useForm<LoginFormData>({
         defaultValues: {
-            email: "",
+            username: "",
             password: "",
             rememberMe: false,
         },
@@ -29,12 +41,18 @@ export default function LoginPage() {
 
     const onSubmit = async (data: LoginFormData) => {
         setIsLoading(true);
+        setErrorMessage(null);
         try {
-            // TODO: Implement actual login logic
-            console.log("Login data:", data);
-            await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API call
+            const loggedInUser = await login({
+                username: data.username,
+                password: data.password,
+                rememberMe: data.rememberMe,
+            });
+            const destination = loggedInUser.role === "admin" ? "/admin" : "/salesperson";
+            router.replace(destination);
         } catch (error) {
-            console.error("Login error:", error);
+            const message = error instanceof Error ? error.message : "Login failed";
+            setErrorMessage(message);
         } finally {
             setIsLoading(false);
         }
@@ -58,16 +76,21 @@ export default function LoginPage() {
 
                 <CardContent>
                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                        {errorMessage && (
+                            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+                                {errorMessage}
+                            </div>
+                        )}
                         <Input
-                            label="Email"
-                            type="email"
-                            placeholder="you@example.com"
-                            error={errors.email?.message}
-                            {...register("email", {
-                                required: "Email is required",
-                                pattern: {
-                                    value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                                    message: "Invalid email address",
+                            label="Username"
+                            type="text"
+                            placeholder="your username"
+                            error={errors.username?.message}
+                            {...register("username", {
+                                required: "Username is required",
+                                minLength: {
+                                    value: 3,
+                                    message: "Username must be at least 3 characters",
                                 },
                             })}
                         />

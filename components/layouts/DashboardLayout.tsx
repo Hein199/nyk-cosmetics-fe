@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/lib/cart-context";
+import { useAuth } from "@/lib/auth-context";
 
 interface DashboardLayoutProps {
     children: React.ReactNode;
@@ -102,14 +103,50 @@ export default function DashboardLayout({
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
     const pathname = usePathname();
+    const router = useRouter();
+    const { user, loading, logout } = useAuth();
 
-    const navItems = userRole === "admin" ? adminNavItems : salespersonNavItems;
+    const resolvedRole = user?.role ?? userRole;
+    const resolvedName = user?.username ?? userName;
+
+    useEffect(() => {
+        if (!loading && !user) {
+            router.replace("/login");
+        }
+    }, [loading, user, router]);
+
+    useEffect(() => {
+        if (!loading && user) {
+            if (user.role === "admin" && pathname.startsWith("/salesperson")) {
+                router.replace("/admin");
+            }
+            if (user.role === "salesperson" && pathname.startsWith("/admin")) {
+                router.replace("/salesperson");
+            }
+        }
+    }, [loading, user, pathname, router]);
+
+    const navItems = useMemo(
+        () => (resolvedRole === "admin" ? adminNavItems : salespersonNavItems),
+        [resolvedRole]
+    );
 
     const handleLogout = () => {
-        // TODO: Implement actual logout logic
-        console.log("Logging out...");
-        window.location.href = "/login";
+        logout();
+        router.replace("/login");
     };
+
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-white">
+                <div className="text-sm text-gray-500">Loading...</div>
+            </div>
+        );
+    }
+
+    if (!user) {
+        return null;
+    }
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -130,7 +167,7 @@ export default function DashboardLayout({
             >
                 {/* Logo */}
                 <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200">
-                    <Link href={userRole === "admin" ? "/admin" : "/salesperson"} className="flex items-center gap-2">
+                    <Link href={resolvedRole === "admin" ? "/admin" : "/salesperson"} className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-gradient-to-br from-pink-500 to-rose-600 rounded-full flex items-center justify-center">
                             <span className="text-white text-sm font-bold">NYK</span>
                         </div>
@@ -199,7 +236,7 @@ export default function DashboardLayout({
                         </button>
 
                         {/* Mobile logo */}
-                        <Link href={userRole === "admin" ? "/admin" : "/salesperson"} className="lg:hidden flex items-center gap-2">
+                        <Link href={resolvedRole === "admin" ? "/admin" : "/salesperson"} className="lg:hidden flex items-center gap-2">
                             <div className="w-8 h-8 bg-gradient-to-br from-pink-500 to-rose-600 rounded-full flex items-center justify-center">
                                 <span className="text-white text-sm font-bold">NYK</span>
                             </div>
@@ -208,7 +245,7 @@ export default function DashboardLayout({
                         {/* Right side items */}
                         <div className="flex items-center gap-3 ml-auto">
                             {/* Cart Button - Only for salesperson */}
-                            {userRole === "salesperson" && (
+                            {resolvedRole === "salesperson" && (
                                 <CartButton />
                             )}
 
@@ -220,11 +257,11 @@ export default function DashboardLayout({
                                 >
                                     <div className="w-8 h-8 bg-gradient-to-br from-pink-400 to-rose-500 rounded-full flex items-center justify-center">
                                         <span className="text-white text-sm font-medium">
-                                            {userName.charAt(0).toUpperCase()}
+                                            {resolvedName.charAt(0).toUpperCase()}
                                         </span>
                                     </div>
-                                    <span className="text-sm font-medium text-gray-700">
-                                        {userName}
+                                    <span className="hidden sm:block text-sm font-medium text-gray-700">
+                                        {resolvedName}
                                     </span>
                                     <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -240,8 +277,8 @@ export default function DashboardLayout({
                                         />
                                         <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
                                             <div className="px-4 py-2 border-b border-gray-100">
-                                                <p className="text-sm font-medium text-gray-900">{userName}</p>
-                                                <p className="text-xs text-gray-500 capitalize">{userRole}</p>
+                                                <p className="text-sm font-medium text-gray-900">{resolvedName}</p>
+                                                <p className="text-xs text-gray-500 capitalize">{resolvedRole}</p>
                                             </div>
                                             <Link
                                                 href="/profile"
@@ -300,7 +337,7 @@ function CartButton() {
 
     return (
         <Link href="/salesperson/cart">
-            <button 
+            <button
                 className="p-2 rounded-full hover:bg-gray-100 relative"
             >
                 <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
