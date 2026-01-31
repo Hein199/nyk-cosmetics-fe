@@ -295,7 +295,7 @@ export default function ProductsPage() {
                                     className="h-9 px-3 text-xs"
                                     onClick={() => {
                                         setCustomerSearch("");
-                                        setSelectedCustomer(null);
+                                        setSelectedCustomer("");
                                         setShowCustomerDropdown(false);
                                     }}
                                 >
