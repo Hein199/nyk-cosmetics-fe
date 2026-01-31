@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -31,7 +32,7 @@ const mockProducts = [
         name: "NYK Matte Lipstick Red",
         category: "Lipstick",
         price: 15000,
-        image: "/api/placeholder/300/300",
+        image: "/mock/product-1.svg",
         description: "Long-lasting matte finish lipstick",
         stock: 50
     },
@@ -40,7 +41,7 @@ const mockProducts = [
         name: "NYK Foundation Light",
         category: "Foundation",
         price: 25000,
-        image: "/api/placeholder/300/300",
+        image: "/mock/product-2.svg",
         description: "Full coverage liquid foundation",
         stock: 30
     },
@@ -49,7 +50,7 @@ const mockProducts = [
         name: "NYK Eyeshadow Palette",
         category: "Eyeshadow",
         price: 35000,
-        image: "/api/placeholder/300/300",
+        image: "/mock/product-3.svg",
         description: "12-color eyeshadow palette",
         stock: 20
     },
@@ -58,7 +59,7 @@ const mockProducts = [
         name: "NYK Mascara Black",
         category: "Mascara",
         price: 18000,
-        image: "/api/placeholder/300/300",
+        image: "/mock/product-4.svg",
         description: "Volumizing mascara",
         stock: 45
     },
@@ -67,7 +68,7 @@ const mockProducts = [
         name: "NYK Blush Pink",
         category: "Blush",
         price: 12000,
-        image: "/api/placeholder/300/300",
+        image: "/mock/product-1.svg",
         description: "Natural pink blush",
         stock: 35
     },
@@ -76,7 +77,7 @@ const mockProducts = [
         name: "NYK Concealer Medium",
         category: "Concealer",
         price: 20000,
-        image: "/api/placeholder/300/300",
+        image: "/mock/product-2.svg",
         description: "High coverage concealer",
         stock: 40
     },
@@ -85,7 +86,7 @@ const mockProducts = [
         name: "NYK Highlighter Gold",
         category: "Highlighter",
         price: 22000,
-        image: "/api/placeholder/300/300",
+        image: "/mock/product-3.svg",
         description: "Shimmery gold highlighter",
         stock: 25
     },
@@ -94,7 +95,7 @@ const mockProducts = [
         name: "NYK Lip Gloss Clear",
         category: "Lip Gloss",
         price: 10000,
-        image: "/api/placeholder/300/300",
+        image: "/mock/product-4.svg",
         description: "Glossy clear lip gloss",
         stock: 60
     }
@@ -188,11 +189,11 @@ export default function ProductsPage() {
     }, [selectedCustomer]);
 
     // Local add to cart function that uses global context
-    const localAddToCart = (productId: string, quantity: number, unit: string, customPrice?: number) => {
+    const localAddToCart = (productId: string) => {
         const product = mockProducts.find(p => p.id === productId);
-        if (!product || quantity <= 0) return;
+        if (!product) return;
 
-        addToCart(productId, quantity, unit, customPrice, product.name, product.price);
+        addToCart(productId, 1, INVENTORY_UNITS.PIECES, undefined, product.name, product.price);
     };
 
     return (
@@ -218,7 +219,6 @@ export default function ProductsPage() {
 
                 {/* Customer Selection Card */}
                 <Card className="p-6">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Select Customer</h2>
                     <div className="grid grid-cols-1 md:grid-cols-[160px_1fr] gap-4 items-start">
                         <div>
                             <label htmlFor="order-date" className="block text-sm font-medium text-gray-900 mb-2">
@@ -326,38 +326,44 @@ export default function ProductsPage() {
                                 id="remark"
                                 value={remark}
                                 onChange={(e) => setRemark(e.target.value)}
-                                rows={2}
+                                rows={1}
                                 placeholder="Add remark..."
-                                className="w-full px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm resize-none"
+                                className="w-full h-9 px-3 py-2 text-sm text-black font-medium placeholder:text-gray-400 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm resize-none"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Product Filters */}
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-[160px_1fr] gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-900 mb-2">
+                                All Categories
+                            </label>
+                            <select
+                                value={selectedCategory}
+                                onChange={(e) => setSelectedCategory(e.target.value)}
+                                className="w-full h-9 px-3 text-sm text-black border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 font-medium"
+                            >
+                                {categories.map((category) => (
+                                    <option key={category} value={category}>
+                                        {category === "all" ? "All Categories" : category}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-900 mb-2">
+                                Search Product
+                            </label>
+                            <Input
+                                placeholder="Search products..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full h-9 text-black font-medium"
                             />
                         </div>
                     </div>
                 </Card>
-
-                {/* Filters */}
-                <div className="mb-6 flex flex-col sm:flex-row gap-4">
-                    <div className="flex-1">
-                        <Input
-                            placeholder="Search products..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full text-black font-medium"
-                        />
-                    </div>
-                    <div className="sm:w-48">
-                        <select
-                            value={selectedCategory}
-                            onChange={(e) => setSelectedCategory(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 text-black font-medium"
-                        >
-                            {categories.map((category) => (
-                                <option key={category} value={category}>
-                                    {category === "all" ? "All Categories" : category}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                </div>
 
                 {/* Products Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -389,116 +395,39 @@ export default function ProductsPage() {
 // Product Card Component
 interface ProductCardProps {
     product: typeof mockProducts[0];
-    onAddToCart: (productId: string, quantity: number, unit: string, customPrice?: number) => void;
+    onAddToCart: (productId: string) => void;
 }
 
 function ProductCard({ product, onAddToCart }: ProductCardProps) {
-    const [quantity, setQuantity] = useState(1);
-    const [selectedUnit, setSelectedUnit] = useState<string>(INVENTORY_UNITS.PIECES);
-    const [customPrice, setCustomPrice] = useState<string>("");
-    const [useCustomPrice, setUseCustomPrice] = useState(false);
-
-    const handleAddToCart = () => {
-        const finalCustomPrice = useCustomPrice && customPrice ? parseFloat(customPrice) : undefined;
-        onAddToCart(product.id, quantity, selectedUnit, finalCustomPrice);
-        // Reset to default values
-        setQuantity(1);
-        setSelectedUnit(INVENTORY_UNITS.PIECES);
-        setCustomPrice("");
-        setUseCustomPrice(false);
-    };
-
     return (
         <Card className="overflow-hidden hover:shadow-lg transition-shadow">
-            <div className="aspect-square bg-gray-100 relative">
-                <img 
-                    src={product.image} 
-                    alt={product.name}
-                    className="w-full h-full object-cover"
-                />
-                <div className="absolute top-2 right-2 bg-white rounded-full px-2 py-1 text-xs font-medium text-black">
-                    {product.stock} in stock
+            <Link href={`/salesperson/products/${product.id}`} className="block">
+                <div className="aspect-square bg-gray-100 relative">
+                    <img 
+                        src={product.image} 
+                        alt={product.name}
+                        className="w-full h-full object-cover"
+                    />
                 </div>
-            </div>
-            <CardHeader className="pb-2 border-b-0">
-                <CardTitle className="text-sm line-clamp-2">{product.name}</CardTitle>
-                <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-700">{product.category}</span>
-                    <span className="text-lg font-bold text-black">{formatCurrency(product.price)}</span>
-                </div>
-            </CardHeader>
+                <CardHeader className="pb-2 border-b-0">
+                    <CardTitle className="text-sm line-clamp-2">{product.name}</CardTitle>
+                    <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-700">{product.category}</span>
+                        <span className="text-sm font-normal text-black">
+                            {formatCurrency(product.price)}
+                        </span>
+                    </div>
+                </CardHeader>
+            </Link>
             <CardContent className="pt-0">
-                {/* Quantity and Unit Selection */}
-                <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-2">
-                        <div>
-                            <label className="block text-xs text-gray-800 mb-1">Qty</label>
-                            <Input
-                                type="number"
-                                min="1"
-                                max={product.stock}
-                                value={quantity}
-                                onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                                className="text-sm text-black font-medium"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs text-gray-800 mb-1">Unit</label>
-                            <select
-                                value={selectedUnit}
-                                onChange={(e) => setSelectedUnit(e.target.value)}
-                                className="w-full px-2 py-1.5 text-sm text-black font-medium border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-                            >
-                                <option value={INVENTORY_UNITS.PIECES}>Pcs</option>
-                                <option value={INVENTORY_UNITS.DOZEN}>Dozen</option>
-                                <option value={INVENTORY_UNITS.PACKAGE}>Package</option>
-                                <option value={INVENTORY_UNITS.BOX}>Box</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    {/* Custom Price Section */}
-                    <div className="space-y-2">
-                        <div className="flex items-center space-x-2">
-                            <input
-                                type="checkbox"
-                                id={`custom-price-${product.id}`}
-                                checked={useCustomPrice}
-                                onChange={(e) => setUseCustomPrice(e.target.checked)}
-                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                            />
-                            <label 
-                                htmlFor={`custom-price-${product.id}`}
-                                className="text-xs text-gray-800 cursor-pointer"
-                            >
-                                Custom Price
-                            </label>
-                        </div>
-                        
-                        {useCustomPrice && (
-                            <div>
-                                <label className="block text-xs text-gray-800 mb-1">Custom Price (MMK)</label>
-                                <Input
-                                    type="number"
-                                    min="0"
-                                    step="100"
-                                    value={customPrice}
-                                    onChange={(e) => setCustomPrice(e.target.value)}
-                                    placeholder={`Default: ${formatCurrency(product.price)}`}
-                                    className="text-sm text-black font-medium"
-                                />
-                            </div>
-                        )}
-                    </div>
-                    
-                    <Button 
-                        onClick={handleAddToCart}
-                        className="w-full text-sm bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700"
-                        disabled={product.stock === 0}
-                    >
-                        Add to Cart
-                    </Button>
-                </div>
+                <Button
+                    type="button"
+                    onClick={() => onAddToCart(product.id)}
+                    className="w-full text-sm bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700"
+                    aria-label="Add to cart"
+                >
+                    Add to Cart
+                </Button>
             </CardContent>
         </Card>
     );
