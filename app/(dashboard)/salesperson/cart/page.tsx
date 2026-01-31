@@ -6,18 +6,15 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { useCart } from "@/lib/cart-context";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth-context";
+import { API_BASE_URL } from "@/lib/constants";
 
-// Mock customer data
-const mockCustomers = [
-    { id: "CUST-001", name: "Beauty Store A", address: "123 Main Street, Yangon", phone: "09-123-456-789" },
-    { id: "CUST-002", name: "Cosmetics Shop B", address: "456 Market Road, Mandalay", phone: "09-987-654-321" },
-    { id: "CUST-003", name: "Salon C", address: "789 Beauty Lane, Yangon", phone: "09-111-222-333" },
-    { id: "CUST-004", name: "Retail Store D", address: "321 Shopping Center, Naypyidaw", phone: "09-444-555-666" },
-    { id: "CUST-005", name: "Beauty Outlet E", address: "555 Fashion Street, Yangon", phone: "09-777-888-999" },
-    { id: "CUST-006", name: "Makeup Corner F", address: "666 Style Avenue, Mandalay", phone: "09-222-333-444" },
-    { id: "CUST-007", name: "Glam Studio G", address: "777 Glamour Road, Yangon", phone: "09-555-666-777" },
-    { id: "CUST-008", name: "Style Shop H", address: "888 Fashion Plaza, Naypyidaw", phone: "09-888-999-000" }
-];
+type Customer = {
+    id: string;
+    name: string;
+    address: string;
+    phone_number: string;
+};
 
 function formatCurrency(amount: number) {
     return new Intl.NumberFormat("en-MM", {
@@ -29,22 +26,29 @@ function formatCurrency(amount: number) {
 
 export default function CartPage() {
     const router = useRouter();
-    const { 
-        cart, 
-        cartSummary, 
-        removeFromCart, 
-        clearCart, 
-        selectedCustomer, 
-        customerSearch, 
-        setSelectedCustomer, 
-        setCustomerSearch 
+    const { token } = useAuth();
+    const {
+        cart,
+        cartSummary,
+        removeFromCart,
+        clearCart,
+        selectedCustomer,
+        customerSearch,
+        setSelectedCustomer,
+        setCustomerSearch,
+        orderDate,
+        paymentType,
+        remark,
+        setOrderDate,
+        setPaymentType,
+        setRemark
     } = useCart();
-    
+
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-    const [voucherDate, setVoucherDate] = useState(() => {
-        const today = new Date();
-        return today.toISOString().split('T')[0];
-    });
+    const [customers, setCustomers] = useState<Customer[]>([]);
+    const [loadingCustomers, setLoadingCustomers] = useState(true);
+    const [customerError, setCustomerError] = useState<string | null>(null);
+    const [orderError, setOrderError] = useState<string | null>(null);
     const customerDropdownRef = useRef<HTMLDivElement>(null);
 
     // Close dropdown when clicking outside
@@ -59,31 +63,95 @@ export default function CartPage() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    useEffect(() => {
+        if (!token) {
+            return;
+        }
+
+        let isMounted = true;
+        const fetchCustomers = async () => {
+            setLoadingCustomers(true);
+            setCustomerError(null);
+            try {
+                const response = await fetch(`${API_BASE_URL}/_api/customers`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!response.ok) {
+                    const message = await response.text();
+                    throw new Error(message || "Failed to load customers");
+                }
+                const data = (await response.json()) as Customer[];
+                if (isMounted) {
+                    setCustomers(data);
+                }
+            } catch (err) {
+                if (isMounted) {
+                    const message = err instanceof Error ? err.message : "Failed to load customers";
+                    setCustomerError(message);
+                }
+            } finally {
+                if (isMounted) {
+                    setLoadingCustomers(false);
+                }
+            }
+        };
+
+        fetchCustomers();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [token]);
+
     // Filter customers based on search
     const filteredCustomers = useMemo(() => {
-        return mockCustomers.filter(customer =>
-            customer.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
-            customer.phone.includes(customerSearch) ||
-            customer.address.toLowerCase().includes(customerSearch.toLowerCase())
+        if (!customerSearch) return customers;
+        return customers.filter(customer =>
+            customer.name.toLowerCase().includes(customerSearch.toLowerCase())
         );
-    }, [customerSearch]);
+    }, [customerSearch, customers]);
 
     // Get selected customer details
     const selectedCustomerDetails = useMemo(() => {
-        return mockCustomers.find(c => c.id === selectedCustomer);
+        return customers.find(c => c.id === selectedCustomer);
     }, [selectedCustomer]);
 
-    const createOrder = () => {
-        if (!selectedCustomer || cart.length === 0) return;
-        
-        // Here you would normally send the order to your backend
-        alert(`Order created for ${selectedCustomerDetails?.name} with ${cart.length} items totaling ${formatCurrency(cartSummary.total)} on ${voucherDate}`);
-        
-        // Clear cart after creating order
-        clearCart();
-        
-        // Navigate back to products or dashboard
-        router.push('/salesperson/products');
+    const createOrder = async () => {
+        if (!selectedCustomer || cart.length === 0 || !token) return;
+
+        setOrderError(null);
+        try {
+            const response = await fetch(`${API_BASE_URL}/_api/orders`, {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    customer_id: selectedCustomer,
+                    order_date: orderDate,
+                    payment_type: paymentType,
+                    remark,
+                    items: cart.map((item) => ({
+                        product_id: item.id,
+                        quantity: item.quantity,
+                        unit_price: String(item.customPrice ?? item.price),
+                    })),
+                }),
+            });
+
+            if (!response.ok) {
+                const message = await response.text();
+                throw new Error(message || "Failed to create order");
+            }
+
+            clearCart();
+            setRemark("");
+            router.push('/salesperson/products');
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Failed to create order";
+            setOrderError(message);
+        }
     };
 
     return (
@@ -131,11 +199,13 @@ export default function CartPage() {
                                             onFocus={() => setShowCustomerDropdown(true)}
                                             className="w-full text-black font-medium"
                                         />
-                                        
+
                                         {/* Customer Dropdown */}
                                         {showCustomerDropdown && (
                                             <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                                                {filteredCustomers.length === 0 ? (
+                                                {loadingCustomers ? (
+                                                    <div className="p-3 text-sm text-gray-800">Loading customers...</div>
+                                                ) : filteredCustomers.length === 0 ? (
                                                     <div className="p-3 text-sm text-gray-800">No customers found</div>
                                                 ) : (
                                                     filteredCustomers.map((customer) => (
@@ -149,7 +219,7 @@ export default function CartPage() {
                                                             className="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
                                                         >
                                                             <div className="font-medium text-sm text-gray-900">{customer.name}</div>
-                                                            <div className="text-xs text-gray-700">{customer.phone}</div>
+                                                            <div className="text-xs text-gray-700">{customer.phone_number}</div>
                                                             <div className="text-xs text-gray-600 truncate">{customer.address}</div>
                                                         </button>
                                                     ))
@@ -157,13 +227,18 @@ export default function CartPage() {
                                             </div>
                                         )}
                                     </div>
-                                    
+
                                     {/* Selected Customer Display */}
                                     {selectedCustomerDetails && (
                                         <div className="mt-2 p-2 bg-pink-50 border border-pink-200 rounded-md">
                                             <div className="text-sm font-medium text-gray-900">{selectedCustomerDetails.name}</div>
-                                            <div className="text-xs text-gray-800">{selectedCustomerDetails.phone}</div>
+                                            <div className="text-xs text-gray-800">{selectedCustomerDetails.phone_number}</div>
                                             <div className="text-xs text-gray-700 truncate">{selectedCustomerDetails.address}</div>
+                                        </div>
+                                    )}
+                                    {customerError && (
+                                        <div className="mt-2 text-sm text-red-600">
+                                            {customerError}
                                         </div>
                                     )}
                                 </div>
@@ -175,8 +250,8 @@ export default function CartPage() {
                                     </label>
                                     <Input
                                         type="date"
-                                        value={voucherDate}
-                                        onChange={(e) => setVoucherDate(e.target.value)}
+                                        value={orderDate}
+                                        onChange={(e) => setOrderDate(e.target.value)}
                                         className="w-full h-10 text-black font-medium"
                                     />
                                 </div>
@@ -205,6 +280,11 @@ export default function CartPage() {
                                             >
                                                 Create Order
                                             </Button>
+                                            {orderError && (
+                                                <div className="text-sm text-red-600">
+                                                    {orderError}
+                                                </div>
+                                            )}
                                             <Button
                                                 onClick={clearCart}
                                                 variant="outline"
