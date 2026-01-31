@@ -128,6 +128,10 @@ export default function CustomersPage() {
     const [statusFilter, setStatusFilter] = useState("All");
     const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
     
+    // Date range state
+    const [fromDate, setFromDate] = useState("2023-01-01");
+    const [toDate, setToDate] = useState("2025-01-31");
+    
     // Add New Customer form state
     const [showAddCustomerForm, setShowAddCustomerForm] = useState(false);
     const [newCustomer, setNewCustomer] = useState({
@@ -175,9 +179,13 @@ export default function CustomersPage() {
             
             const matchesStatus = statusFilter === "All" || customer.status === statusFilter;
             
-            return matchesSearch && matchesStatus;
+            // Date range filter based on joined date
+            const customerJoinDate = customer.joinedDate;
+            const matchesDateRange = customerJoinDate >= fromDate && customerJoinDate <= toDate;
+            
+            return matchesSearch && matchesStatus && matchesDateRange;
         });
-    }, [searchTerm, statusFilter]);
+    }, [searchTerm, statusFilter, fromDate, toDate]);
 
     const customerStats = useMemo(() => {
         const total = mockCustomers.length;
@@ -188,6 +196,14 @@ export default function CustomersPage() {
 
         return { total, active, newCustomers, inactive, totalOutstanding };
     }, []);
+    
+    // Format date range for display
+    const formatDateRange = (from: string, to: string) => {
+        if (from === to) {
+            return formatDate(from);
+        }
+        return `${formatDate(from)} - ${formatDate(to)}`;
+    };
 
     return (
         <div className="min-h-screen bg-[#FFCDC9] p-6">
@@ -195,8 +211,8 @@ export default function CustomersPage() {
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold text-gray-900">Customer Management</h1>
-                        <p className="text-gray-600 mt-1">Manage and view customer information</p>
+                        <h1 className="text-2xl font-bold text-gray-900">Customer Management</h1>
+                        <p className="text-gray-500 mt-1">Manage and view customer information</p>
                     </div>
                     <Button 
                         size="lg"
@@ -208,15 +224,73 @@ export default function CustomersPage() {
                 </div>
 
                 {/* Stats Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4 max-w-sm">
-                    <Card className="bg-white p-4">
-                        <div className="text-sm text-gray-500 mb-1">Total Outstanding</div>
-                        <div className="text-2xl font-bold text-orange-600">{formatCurrency(customerStats.totalOutstanding)}</div>
-                    </Card>
-                </div>
+                <Card className="bg-white p-6">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <div className="text-sm text-gray-500 mb-1">Total Outstanding to Collect</div>
+                            <div className="text-3xl font-bold text-orange-600">{formatCurrency(customerStats.totalOutstanding)}</div>
+                        </div>
+                        <div className="text-right text-sm text-gray-500">
+                            <div>From {customerStats.total} customers</div>
+                            <div>{customerStats.active} Active • {customerStats.inactive} Inactive</div>
+                        </div>
+                    </div>
+                </Card>
 
                 {/* Filters */}
                 <Card className="bg-white p-6">
+                    {/* Date Range Filter */}
+                    <div className="mb-6">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Date Range
+                        </label>
+                        <div className="flex items-center gap-3">
+                            <div className="flex flex-col">
+                                <label htmlFor="from-date" className="text-xs text-gray-500 mb-1">
+                                    From
+                                </label>
+                                <input
+                                    id="from-date"
+                                    type="date"
+                                    value={fromDate}
+                                    onChange={(e) => setFromDate(e.target.value)}
+                                    className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                />
+                            </div>
+                            <div className="flex flex-col">
+                                <label htmlFor="to-date" className="text-xs text-gray-500 mb-1">
+                                    To
+                                </label>
+                                <input
+                                    id="to-date"
+                                    type="date"
+                                    value={toDate}
+                                    onChange={(e) => setToDate(e.target.value)}
+                                    className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                    min={fromDate}
+                                />
+                            </div>
+                            <div className="flex flex-col">
+                                <label className="text-xs text-transparent mb-1">.</label>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                        const today = new Date().toISOString().split('T')[0];
+                                        setFromDate(today);
+                                        setToDate(today);
+                                    }}
+                                    className="text-xs h-10"
+                                >
+                                    Today
+                                </Button>
+                            </div>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                            Found {filteredCustomers.length} customers for {formatDateRange(fromDate, toDate)}
+                        </p>
+                    </div>
+                    
                     <div className="flex flex-col sm:flex-row gap-4">
                         <div className="flex-1">
                             <Input
@@ -224,14 +298,14 @@ export default function CustomersPage() {
                                 placeholder="Search customers by name, email, or phone..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full"
+                                className="w-full h-10"
                             />
                         </div>
                         <div className="sm:w-48">
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                                className="w-full h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
                             >
                                 <option value="All">All Status</option>
                                 <option value="Active">Active</option>
@@ -254,62 +328,65 @@ export default function CustomersPage() {
                                 No customers found matching your criteria.
                             </div>
                         ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead>
-                                        <tr className="border-b border-gray-200">
-                                            <th className="text-left py-3 px-4 font-medium text-gray-700">Customer</th>
-                                            <th className="text-left py-3 px-4 font-medium text-gray-700">Contact</th>
-                                            <th className="text-left py-3 px-4 font-medium text-gray-700">Orders</th>
-                                            <th className="text-left py-3 px-4 font-medium text-gray-700">Today's Purchase</th>
-                                            <th className="text-left py-3 px-4 font-medium text-gray-700">Last Order</th>
-                                            <th className="text-left py-3 px-4 font-medium text-gray-700">Status</th>
-                                            <th className="text-left py-3 px-4 font-medium text-gray-700">Outstanding</th>
+                            <div className="border-2 border-gray-300 rounded-lg overflow-hidden shadow-sm">
+                                <table className="w-full border-collapse text-sm">
+                                    <thead className="bg-blue-600 text-white">
+                                        <tr>
+                                            <th className="text-left py-3 px-4 font-bold border-r border-blue-500">Customer</th>
+                                            <th className="text-left py-3 px-4 font-bold border-r border-blue-500">Contact</th>
+                                            <th className="text-center py-3 px-4 font-bold border-r border-blue-500">Orders</th>
+                                            <th className="text-center py-3 px-4 font-bold border-r border-blue-500">Today's Purchase</th>
+                                            <th className="text-center py-3 px-4 font-bold border-r border-blue-500">Last Order</th>
+                                            <th className="text-center py-3 px-4 font-bold border-r border-blue-500">Status</th>
+                                            <th className="text-center py-3 px-4 font-bold">Outstanding</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {filteredCustomers.map((customer) => (
-                                            <tr key={customer.id} className="border-b border-gray-100 hover:bg-gray-50">
-                                                <td className="py-4 px-4">
+                                        {filteredCustomers.map((customer, index) => (
+                                            <tr key={customer.id} className={`border-b border-gray-300 ${
+                                                index % 2 === 0 ? "bg-blue-50 hover:bg-blue-100" : "bg-white hover:bg-gray-50"
+                                            } transition-colors`}>
+                                                <td className="py-3 px-4 border-r border-gray-300">
                                                     <div>
-                                                        <div className="font-medium text-gray-900">{customer.name}</div>
-                                                        <div className="text-sm text-gray-500">{customer.location}</div>
+                                                        <div className="font-semibold text-gray-900">{customer.name}</div>
+                                                        <div className="text-xs text-gray-600">{customer.location}</div>
                                                     </div>
                                                 </td>
-                                                <td className="py-4 px-4">
-                                                    <div>
-                                                        <div className="text-sm text-gray-900">{customer.email}</div>
-                                                        <div className="text-sm text-gray-500">{customer.phone}</div>
-                                                    </div>
+                                                <td className="py-3 px-4 text-gray-900 font-medium border-r border-gray-300">
+                                                    {customer.phone}
                                                 </td>
-                                                <td className="py-4 px-4">
-                                                    <div className="font-medium text-gray-900">{customer.totalOrders}</div>
+                                                <td className="py-3 px-4 text-center font-semibold text-gray-900 border-r border-gray-300">
+                                                    {customer.totalOrders}
                                                 </td>
-                                                <td className="py-4 px-4">
-                                                    <div className={`font-medium ${customer.todayPurchase > 0 ? 'text-green-600' : 'text-gray-500'}`}>
+                                                <td className="py-3 px-4 text-center border-r border-gray-300">
+                                                    <div className={`font-semibold ${customer.todayPurchase > 0 ? 'text-green-600' : 'text-gray-500'}`}>
                                                         {formatCurrency(customer.todayPurchase)}
                                                     </div>
                                                     {customer.todayPurchase > 0 && (
-                                                        <div className="text-xs text-green-500">Today</div>
+                                                        <div className="text-xs text-green-600 font-medium">Today</div>
                                                     )}
                                                 </td>
-                                                <td className="py-4 px-4">
-                                                    <div className="text-sm text-gray-900">{formatDate(customer.lastOrder)}</div>
+                                                <td className="py-3 px-4 text-center font-medium text-gray-900 border-r border-gray-300">
+                                                    {customer.lastOrder ? formatDate(customer.lastOrder) : '-'}
                                                 </td>
-                                                <td className="py-4 px-4">
-                                                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(customer.status)}`}>
+                                                <td className="py-3 px-4 text-center border-r border-gray-300">
+                                                    <span className={`inline-block px-2 py-1 rounded text-xs font-bold border ${
+                                                        customer.status === 'Active' ? 'bg-green-50 text-green-700 border-green-200' :
+                                                        customer.status === 'New' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                                        'bg-red-50 text-red-700 border-red-200'
+                                                    }`}>
                                                         {customer.status}
                                                     </span>
                                                 </td>
-                                                <td className="py-4 px-4">
-                                                    <div className={`font-medium ${customer.outstanding > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                                <td className="py-3 px-4 text-center">
+                                                    <div className={`font-bold ${customer.outstanding > 0 ? 'text-red-600' : 'text-green-600'}`}>
                                                         {formatCurrency(customer.outstanding)}
                                                     </div>
                                                     {customer.outstanding > 0 && (
-                                                        <div className="text-xs text-red-500">Pending</div>
+                                                        <div className="text-xs text-red-600 font-medium">Pending</div>
                                                     )}
                                                     {customer.outstanding === 0 && (
-                                                        <div className="text-xs text-green-500">Paid</div>
+                                                        <div className="text-xs text-green-600 font-medium">Paid</div>
                                                     )}
                                                 </td>
                                             </tr>

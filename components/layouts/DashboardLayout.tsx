@@ -28,7 +28,7 @@ const salespersonNavItems = [
     { href: "/salesperson/orders", label: "Orders", icon: "orders" },
     { href: "/salesperson/products", label: "Products", icon: "products" },
     { href: "/salesperson/customers", label: "Customers", icon: "customers" },
-    { href: "/salesperson/account", label: "My Account", icon: "account" },
+    { href: "/salesperson/outstanding", label: "Outstanding", icon: "outstanding" },
 ];
 
 const icons: Record<string, React.ReactNode> = {
@@ -76,6 +76,11 @@ const icons: Record<string, React.ReactNode> = {
     customers: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+        </svg>
+    ),
+    outstanding: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
     ),
     account: (
@@ -237,36 +242,12 @@ export default function DashboardLayout({
                             </div>
                         </Link>
 
-                        {/* Search bar - hidden on mobile */}
-                        <div className="hidden lg:flex flex-1 max-w-md">
-                            <div className="relative w-full">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                    </svg>
-                                </div>
-                                <input
-                                    type="text"
-                                    placeholder="Search..."
-                                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-                                />
-                            </div>
-                        </div>
-
                         {/* Right side items */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-3 ml-auto">
                             {/* Cart Button - Only for salesperson */}
                             {resolvedRole === "salesperson" && (
                                 <CartButton />
                             )}
-
-                            {/* Notifications */}
-                            <button className="p-2 rounded-full hover:bg-gray-100 relative">
-                                <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                                </svg>
-                                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                            </button>
 
                             {/* User menu */}
                             <div className="relative">
@@ -282,7 +263,7 @@ export default function DashboardLayout({
                                     <span className="hidden sm:block text-sm font-medium text-gray-700">
                                         {resolvedName}
                                     </span>
-                                    <svg className="w-4 h-4 text-gray-400 hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                     </svg>
                                 </button>
@@ -296,8 +277,8 @@ export default function DashboardLayout({
                                         />
                                         <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
                                             <div className="px-4 py-2 border-b border-gray-100">
-                                                <p className="text-sm font-medium text-gray-900">{userName}</p>
-                                                <p className="text-xs text-gray-500 capitalize">{userRole}</p>
+                                                <p className="text-sm font-medium text-gray-900">{resolvedName}</p>
+                                                <p className="text-xs text-gray-500 capitalize">{resolvedRole}</p>
                                             </div>
                                             <Link
                                                 href="/profile"

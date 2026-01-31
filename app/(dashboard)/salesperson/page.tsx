@@ -291,7 +291,7 @@ export default function SalespersonPage() {
                                     id="year-filter"
                                     value={selectedYear}
                                     onChange={(e) => setSelectedYear(e.target.value)}
-                                    className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                    className="px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
                                 >
                                     <option value="2024">2024</option>
                                     <option value="2025">2025</option>
@@ -306,7 +306,7 @@ export default function SalespersonPage() {
                                     id="month-filter"
                                     value={selectedMonthNum}
                                     onChange={(e) => setSelectedMonthNum(e.target.value)}
-                                    className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                    className="px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
                                 >
                                     <option value="01">January</option>
                                     <option value="02">February</option>
@@ -359,42 +359,44 @@ export default function SalespersonPage() {
 
             {/* Orders */}
             <Card>
-                <CardHeader className="pb-4">
-                    <div className="flex flex-col space-y-4">
-                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <CardHeader className="pb-6">
+                    <div className="flex flex-col space-y-6">
+                        <div className="flex flex-col space-y-4">
                             <div>
-                                <CardTitle className="text-xl">Orders</CardTitle>
-                                <CardDescription>Your order activity for {formatDateRange(fromDate, toDate)}</CardDescription>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-6 text-sm">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-gray-600 font-medium">{filteredOrders.length} orders found</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
-                                    <span className="text-gray-600">Total:</span>
-                                    <span className="font-semibold text-gray-900">{rangeStats.totalOrders}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                                    <span className="text-gray-600">Completed:</span>
-                                    <span className="font-semibold text-green-600">{rangeStats.completedOrders}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                                    <span className="text-gray-600">Cancelled:</span>
-                                    <span className="font-semibold text-red-600">{rangeStats.cancelledOrders}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                                    <span className="text-gray-600">Sales:</span>
-                                    <span className="font-semibold text-blue-600">{formatCurrency(rangeStats.totalSales)}</span>
+                                <CardTitle className="text-xl mb-3">Orders</CardTitle>
+                                <CardDescription className="mb-4">Your order activity for {formatDateRange(fromDate, toDate)}</CardDescription>
+                                
+                                {/* Order Statistics - moved under title */}
+                                <div className="flex flex-wrap items-center gap-6 text-sm">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+                                        <span className="text-gray-600">Total:</span>
+                                        <span className="font-semibold text-gray-900">{rangeStats.totalOrders}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                                        <span className="text-gray-600">Completed:</span>
+                                        <span className="font-semibold text-green-600">{rangeStats.completedOrders}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                                        <span className="text-gray-600">Cancelled:</span>
+                                        <span className="font-semibold text-red-600">{rangeStats.cancelledOrders}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                                        <span className="text-gray-600">Sales:</span>
+                                        <span className="font-semibold text-blue-600">{formatCurrency(rangeStats.totalSales)}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-gray-600 font-medium">{filteredOrders.length} orders found</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                         
                         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 pt-2 border-t border-gray-100">
-                            <div className="flex flex-col sm:flex-row gap-6">
+                            <div className="flex flex-col lg:flex-row lg:items-end gap-6">
                                 <div className="flex flex-col">
                                     <label className="text-sm font-medium text-gray-700 mb-2">
                                         Date Range
@@ -410,7 +412,7 @@ export default function SalespersonPage() {
                                                 value={fromDate}
                                                 onChange={(e) => setFromDate(e.target.value)}
                                                 lang="en-US"
-                                                className="w-40 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                                className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
                                             />
                                         </div>
                                         <div className="flex flex-col">
@@ -423,56 +425,52 @@ export default function SalespersonPage() {
                                                 value={toDate}
                                                 onChange={(e) => setToDate(e.target.value)}
                                                 lang="en-US"
-                                                className="w-40 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                                className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
                                                 min={fromDate}
                                             />
                                         </div>
                                     </div>
                                 </div>
-                                
-                                <div className="flex flex-col">
-                                    <label className="text-sm font-medium text-gray-700 mb-2">
-                                        Quick Select
-                                    </label>
-                                    <div className="flex flex-wrap gap-2 pt-6">
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => setPresetRange('today')}
-                                            className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10"
-                                        >
-                                            Today
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => setPresetRange('last7days')}
-                                            className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10"
-                                        >
-                                            Last 7 Days
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => setPresetRange('thisMonth')}
-                                            className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10"
-                                        >
-                                            This Month
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => setPresetRange('last30days')}
-                                            className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10"
-                                        >
-                                            Last 30 Days
-                                        </Button>
-                                    </div>
-                                </div>
                             </div>
                             
-                            <div className="flex items-center justify-end">
-                                <Button variant="outline" size="sm" className="rounded-lg hover:bg-gray-50">
+                            <div className="grid grid-cols-5 gap-3 pt-6">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setPresetRange('today')}
+                                    className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10 w-full"
+                                >
+                                    Today
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setPresetRange('last7days')}
+                                    className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10 w-full"
+                                >
+                                    Last 7 Days
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setPresetRange('thisMonth')}
+                                    className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10 w-full"
+                                >
+                                    This Month
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setPresetRange('last30days')}
+                                    className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10 w-full"
+                                >
+                                    Last 30 Days
+                                </Button>
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="text-xs px-3 py-2 rounded-lg hover:bg-gray-50 h-10 w-full"
+                                >
                                     View All Orders
                                 </Button>
                             </div>
@@ -513,70 +511,79 @@ export default function SalespersonPage() {
                     </div>
 
                     {/* Desktop: Table layout */}
-                    <div className="hidden sm:block overflow-x-auto">
-                        <table className="w-full">
-                            <thead>
-                                <tr className="border-b border-gray-200">
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Order ID
-                                    </th>
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Customer
-                                    </th>
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Date
-                                    </th>
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Time
-                                    </th>
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Amount
-                                    </th>
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Status
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {recentOrdersForDisplay.length === 0 ? (
+                    <div className="hidden sm:block">
+                        <div className="border-2 border-gray-300 rounded-lg overflow-hidden shadow-sm">
+                            <table className="w-full border-collapse text-sm">
+                                <thead className="bg-blue-600 text-white">
                                     <tr>
-                                        <td colSpan={7} className="text-center py-8 text-gray-500">
-                                            No orders found for {formatDateRange(fromDate, toDate)}.
-                                        </td>
+                                        <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
+                                            Order ID
+                                        </th>
+                                        <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
+                                            Customer
+                                        </th>
+                                        <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
+                                            Date
+                                        </th>
+                                        <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
+                                            Time
+                                        </th>
+                                        <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
+                                            Amount
+                                        </th>
+                                        <th className="text-center py-3 px-4 font-bold">
+                                            Status
+                                        </th>
                                     </tr>
-                                ) : (
-                                    recentOrdersForDisplay.map((order) => (
-                                    <tr
-                                        key={order.id}
-                                        className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                                    >
-                                        <td className="py-3 px-4 text-sm font-medium text-gray-900">
-                                            {order.id}
-                                        </td>
-                                        <td className="py-3 px-4 text-sm text-gray-600">
-                                            {order.customer}
-                                        </td>
-                                        <td className="py-3 px-4 text-sm text-gray-500">
-                                            {order.date}
-                                        </td>
-                                        <td className="py-3 px-4 text-sm text-gray-500">
-                                            {order.time}
-                                        </td>
-                                        <td className="py-3 px-4 text-sm font-medium text-gray-900">
-                                            {formatCurrency(order.amount)}
-                                        </td>
-                                        <td className="py-3 px-4">
-                                            <span
-                                                className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[order.status]}`}
-                                            >
-                                                {order.status}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {recentOrdersForDisplay.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={6} className="text-center py-8 text-gray-500 border-r border-gray-300">
+                                                No orders found for {formatDateRange(fromDate, toDate)}.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        recentOrdersForDisplay.map((order, index) => (
+                                        <tr
+                                            key={order.id}
+                                            className={`border-b border-gray-300 ${
+                                                index % 2 === 0 ? "bg-blue-50 hover:bg-blue-100" : "bg-white hover:bg-gray-50"
+                                            } transition-colors`}
+                                        >
+                                            <td className="py-3 px-4 text-center font-semibold text-gray-900 border-r border-gray-300">
+                                                {order.id}
+                                            </td>
+                                            <td className="py-3 px-4 font-medium text-gray-900 border-r border-gray-300">
+                                                {order.customer}
+                                            </td>
+                                            <td className="py-3 px-4 text-center font-medium text-gray-900 border-r border-gray-300">
+                                                {order.date}
+                                            </td>
+                                            <td className="py-3 px-4 text-center font-medium text-gray-900 border-r border-gray-300">
+                                                {order.time}
+                                            </td>
+                                            <td className="py-3 px-4 text-center font-bold text-gray-900 border-r border-gray-300">
+                                                {formatCurrency(order.amount)}
+                                            </td>
+                                            <td className="py-3 px-4 text-center">
+                                                <span
+                                                    className={`px-2 py-1 text-xs font-bold rounded border ${
+                                                        order.status === 'completed' ? 'bg-green-50 text-green-700 border-green-200' :
+                                                        order.status === 'processing' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                                        order.status === 'pending' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                                        'bg-red-50 text-red-700 border-red-200'
+                                                    }`}
+                                                >
+                                                    {order.status}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </CardContent>
             </Card>
