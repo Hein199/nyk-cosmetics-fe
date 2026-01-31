@@ -11,6 +11,14 @@ import {
     CardDescription,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogClose,
+} from "@/components/ui/dialog";
 
 // Mock data for orders - same as dashboard
 const mockOrders = [
@@ -43,6 +51,115 @@ const mockOrders = [
     { id: "ORD-018", customer: "Cosmetic Hub Q", amount: 298000, status: "completed", date: "2024-10-15", time: "02:30 PM", items: 8, salesperson: "Thiri" },
 
 ];
+
+// Mock data for detailed order information (voucher details)
+const mockOrderDetails: Record<string, {
+    id: string;
+    customer: string;
+    customerPhone: string;
+    customerAddress: string;
+    amount: number;
+    status: string;
+    date: string;
+    time: string;
+    items: Array<{
+        id: string;
+        name: string;
+        category: string;
+        quantity: number;
+        unitPrice: number;
+        total: number;
+    }>;
+    salesperson: string;
+    paymentMethod: string;
+    discount: number;
+    tax: number;
+    notes?: string;
+}> = {
+    "ORD-001": {
+        id: "ORD-001",
+        customer: "Beauty Store A",
+        customerPhone: "+95 9 123 456 789",
+        customerAddress: "No. 123, Main Street, Yangon",
+        amount: 125000,
+        status: "completed",
+        date: "2025-12-05",
+        time: "10:30 AM",
+        salesperson: "Thiri",
+        paymentMethod: "Cash",
+        discount: 5000,
+        tax: 0,
+        items: [
+            { id: "P001", name: "NYK Lipstick - Red Passion", category: "Lipstick", quantity: 3, unitPrice: 15000, total: 45000 },
+            { id: "P002", name: "NYK Foundation - Natural Beige", category: "Foundation", quantity: 2, unitPrice: 25000, total: 50000 },
+            { id: "P003", name: "NYK Mascara - Volume Max", category: "Mascara", quantity: 1, unitPrice: 18000, total: 18000 },
+            { id: "P004", name: "NYK Eyeshadow Palette - Sunset", category: "Eyeshadow", quantity: 1, unitPrice: 35000, total: 35000 },
+            { id: "P005", name: "NYK Blush - Pink Glow", category: "Blush", quantity: 1, unitPrice: 12000, total: 12000 }
+        ],
+        notes: "Customer requested express delivery"
+    },
+    "ORD-003": {
+        id: "ORD-003",
+        customer: "Modern Salon",
+        customerPhone: "+95 9 987 654 321",
+        customerAddress: "No. 456, Beauty Lane, Mandalay",
+        amount: 156000,
+        status: "processing",
+        date: "2025-12-05",
+        time: "04:20 PM",
+        salesperson: "Thiri",
+        paymentMethod: "Bank Transfer",
+        discount: 10000,
+        tax: 0,
+        items: [
+            { id: "P006", name: "NYK Professional Concealer", category: "Concealer", quantity: 2, unitPrice: 20000, total: 40000 },
+            { id: "P007", name: "NYK Setting Powder - Translucent", category: "Powder", quantity: 3, unitPrice: 22000, total: 66000 },
+            { id: "P008", name: "NYK Eyeliner - Waterproof Black", category: "Eyeliner", quantity: 2, unitPrice: 14000, total: 28000 },
+            { id: "P009", name: "NYK Lip Gloss - Crystal Clear", category: "Lip Gloss", quantity: 2, unitPrice: 16000, total: 32000 }
+        ]
+    },
+    "ORD-004": {
+        id: "ORD-004",
+        customer: "Salon C",
+        customerPhone: "+95 9 555 666 777",
+        customerAddress: "No. 789, Beauty Plaza, Yangon",
+        amount: 234000,
+        status: "processing",
+        date: "2025-12-04",
+        time: "11:45 AM",
+        salesperson: "Thiri",
+        paymentMethod: "Credit Card",
+        discount: 15000,
+        tax: 0,
+        items: [
+            { id: "P010", name: "NYK BB Cream - Light", category: "Foundation", quantity: 3, unitPrice: 28000, total: 84000 },
+            { id: "P011", name: "NYK Highlighter - Golden Glow", category: "Highlighter", quantity: 2, unitPrice: 32000, total: 64000 },
+            { id: "P012", name: "NYK Bronzer - Sun Kissed", category: "Bronzer", quantity: 1, unitPrice: 26000, total: 26000 },
+            { id: "P013", name: "NYK Lip Liner - Nude Pink", category: "Lip Liner", quantity: 4, unitPrice: 13000, total: 52000 },
+            { id: "P014", name: "NYK Face Primer", category: "Primer", quantity: 1, unitPrice: 23000, total: 23000 }
+        ],
+        notes: "Bulk order for salon opening"
+    },
+    "ORD-005": {
+        id: "ORD-005",
+        customer: "Retail Store D",
+        customerPhone: "+95 9 111 222 333",
+        customerAddress: "No. 321, Shopping Center, Naypyidaw",
+        amount: 156000,
+        status: "completed",
+        date: "2025-12-04",
+        time: "04:20 PM",
+        salesperson: "Thiri",
+        paymentMethod: "Cash",
+        discount: 0,
+        tax: 0,
+        items: [
+            { id: "P015", name: "NYK Nail Polish - Ruby Red", category: "Nail Polish", quantity: 6, unitPrice: 8000, total: 48000 },
+            { id: "P016", name: "NYK Makeup Remover", category: "Skincare", quantity: 4, unitPrice: 15000, total: 60000 },
+            { id: "P017", name: "NYK Face Mist - Hydrating", category: "Skincare", quantity: 3, unitPrice: 16000, total: 48000 }
+        ]
+    }
+};
 
 const statusColors: Record<string, string> = {
     completed: "bg-green-100 text-green-800",
@@ -85,19 +202,28 @@ export default function OrdersPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
     
-    // Date selection state
-    const [selectedDateYear, setSelectedDateYear] = useState("2025");
-    const [selectedDateMonth, setSelectedDateMonth] = useState("12");
-    const [selectedDateDay, setSelectedDateDay] = useState("05");
+    // Date range selection state
+    const [fromDate, setFromDate] = useState("2025-12-01");
+    const [toDate, setToDate] = useState("2025-12-05");
     
-    // Combine date parts for filtering
-    const selectedDate = `${selectedDateYear}-${selectedDateMonth.padStart(2, '0')}-${selectedDateDay.padStart(2, '0')}`;
+    // Dialog state for order details
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [selectedOrder, setSelectedOrder] = useState<string | null>(null);
+    
+    // Handle view details click
+    const handleViewDetails = (orderId: string) => {
+        setSelectedOrder(orderId);
+        setIsDialogOpen(true);
+    };
+    
+    // Get selected order details
+    const orderDetails = selectedOrder ? mockOrderDetails[selectedOrder] : null;
 
     // Filter and search orders
     const filteredOrders = useMemo(() => {
         return mockOrders.filter((order) => {
-            // Date filter
-            const matchesDate = order.date === selectedDate;
+            // Date range filter
+            const matchesDateRange = order.date >= fromDate && order.date <= toDate;
             
             // Status filter
             const matchesStatus = statusFilter === "all" || order.status === statusFilter;
@@ -107,9 +233,9 @@ export default function OrdersPage() {
                 order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 order.customer.toLowerCase().includes(searchQuery.toLowerCase());
             
-            return matchesDate && matchesStatus && matchesSearch;
+            return matchesDateRange && matchesStatus && matchesSearch;
         });
-    }, [selectedDate, searchQuery, statusFilter]);
+    }, [fromDate, toDate, searchQuery, statusFilter]);
 
     // Calculate summary stats
     const orderStats = useMemo(() => {
@@ -120,6 +246,14 @@ export default function OrdersPage() {
         return { total, completed, processing };
     }, []);
 
+    // Format date range for display
+    const formatDateRange = (from: string, to: string) => {
+        if (from === to) {
+            return formatDate(from);
+        }
+        return `${formatDate(from)} - ${formatDate(to)}`;
+    };
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -127,7 +261,7 @@ export default function OrdersPage() {
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">My Orders</h1>
                     <p className="text-gray-500 mt-1">
-                        Viewing orders for {formatDate(selectedDate)}
+                        Viewing orders for {formatDateRange(fromDate, toDate)}
                     </p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">
@@ -144,65 +278,6 @@ export default function OrdersPage() {
                 </div>
             </div>
 
-            {/* Stats Summary */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-gray-500">Total Orders</p>
-                                <p className="text-3xl font-bold text-gray-900 mt-1">
-                                    {orderStats.total}
-                                </p>
-                            </div>
-                            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
-                                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                                </svg>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-gray-500">Completed</p>
-                                <p className="text-3xl font-bold text-green-600 mt-1">
-                                    {orderStats.completed}
-                                </p>
-                            </div>
-                            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-
-
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-gray-500">Processing</p>
-                                <p className="text-3xl font-bold text-blue-600 mt-1">
-                                    {orderStats.processing}
-                                </p>
-                            </div>
-                            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                </svg>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
             {/* Filters and Search */}
             <Card>
                 <CardHeader>
@@ -210,89 +285,56 @@ export default function OrdersPage() {
                     <CardDescription>Filter and search through your orders</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {/* Date Filter */}
+                    {/* Date Range Filter */}
                     <div className="mb-6">
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Select Date
+                            Date Range
                         </label>
-                        <div className="grid grid-cols-3 gap-2 max-w-md">
-                            <div>
-                                <label htmlFor="orders-date-day-filter" className="block text-xs text-gray-500 mb-1">
-                                    Day
+                        <div className="flex items-center gap-3">
+                            <div className="flex flex-col">
+                                <label htmlFor="from-date" className="text-xs text-gray-500 mb-1">
+                                    From
                                 </label>
-                                <select
-                                    id="orders-date-day-filter"
-                                    value={selectedDateDay}
-                                    onChange={(e) => setSelectedDateDay(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-                                >
-                                    {Array.from({ length: getDaysInMonth(selectedDateYear, selectedDateMonth) }, (_, i) => {
-                                        const day = (i + 1).toString().padStart(2, '0');
-                                        return (
-                                            <option key={day} value={day}>
-                                                {day}
-                                            </option>
-                                        );
-                                    })}
-                                </select>
+                                <input
+                                    id="from-date"
+                                    type="date"
+                                    value={fromDate}
+                                    onChange={(e) => setFromDate(e.target.value)}
+                                    className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                />
                             </div>
-                            <div>
-                                <label htmlFor="orders-date-month-filter" className="block text-xs text-gray-500 mb-1">
-                                    Month
+                            <div className="flex flex-col">
+                                <label htmlFor="to-date" className="text-xs text-gray-500 mb-1">
+                                    To
                                 </label>
-                                <select
-                                    id="orders-date-month-filter"
-                                    value={selectedDateMonth}
-                                    onChange={(e) => setSelectedDateMonth(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-                                >
-                                    <option value="01">Jan</option>
-                                    <option value="02">Feb</option>
-                                    <option value="03">Mar</option>
-                                    <option value="04">Apr</option>
-                                    <option value="05">May</option>
-                                    <option value="06">Jun</option>
-                                    <option value="07">Jul</option>
-                                    <option value="08">Aug</option>
-                                    <option value="09">Sep</option>
-                                    <option value="10">Oct</option>
-                                    <option value="11">Nov</option>
-                                    <option value="12">Dec</option>
-                                </select>
+                                <input
+                                    id="to-date"
+                                    type="date"
+                                    value={toDate}
+                                    onChange={(e) => setToDate(e.target.value)}
+                                    className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                    min={fromDate}
+                                />
                             </div>
-                            <div>
-                                <label htmlFor="orders-date-year-filter" className="block text-xs text-gray-500 mb-1">
-                                    Year
-                                </label>
-                                <select
-                                    id="orders-date-year-filter"
-                                    value={selectedDateYear}
-                                    onChange={(e) => setSelectedDateYear(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                            <div className="flex flex-col">
+                                <label className="text-xs text-transparent mb-1">.</label>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                        const today = new Date().toISOString().split('T')[0];
+                                        setFromDate(today);
+                                        setToDate(today);
+                                    }}
+                                    className="text-xs h-10"
                                 >
-                                    <option value="2024">2024</option>
-                                    <option value="2025">2025</option>
-                                    <option value="2026">2026</option>
-                                </select>
+                                    Today
+                                </Button>
                             </div>
                         </div>
                         <p className="text-xs text-gray-500 mt-1">
-                            Found {filteredOrders.length} orders for {formatDate(selectedDate)}
+                            Found {filteredOrders.length} orders for {formatDateRange(fromDate, toDate)}
                         </p>
-                        <div className="mt-2">
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                    setSelectedDateYear("2025");
-                                    setSelectedDateMonth("12");
-                                    setSelectedDateDay("05");
-                                }}
-                                className="text-xs"
-                            >
-                                Today
-                            </Button>
-                        </div>
                     </div>
                     
                     <div className="flex flex-col sm:flex-row gap-4 mb-6">
@@ -302,7 +344,7 @@ export default function OrdersPage() {
                                 placeholder="Search by Order ID or Customer name..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full"
+                                className="w-full h-10"
                             />
                         </div>
                         
@@ -311,7 +353,7 @@ export default function OrdersPage() {
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                                className="w-full h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
                             >
                                 {statusOptions.map((option) => (
                                     <option key={option.value} value={option.value}>
@@ -355,93 +397,361 @@ export default function OrdersPage() {
                                             {formatCurrency(order.amount)}
                                         </span>
                                     </div>
+                                    <div className="pt-3">
+                                        <Button 
+                                            variant="outline" 
+                                            size="sm" 
+                                            className="w-full"
+                                            onClick={() => handleViewDetails(order.id)}
+                                        >
+                                            View Details
+                                        </Button>
+                                    </div>
                                 </div>
                             ))
                         )}
                     </div>
 
                     {/* Desktop: Table layout */}
-                    <div className="hidden sm:block overflow-x-auto">
-                        <table className="w-full">
-                            <thead>
-                                <tr className="border-b border-gray-200">
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Order ID
-                                    </th>
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Customer
-                                    </th>
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Date
-                                    </th>
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Time
-                                    </th>
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Amount
-                                    </th>
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Items
-                                    </th>
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Status
-                                    </th>
-                                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">
-                                        Actions
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filteredOrders.length === 0 ? (
+                    <div className="hidden sm:block">
+                        <div className="border-2 border-gray-300 rounded-lg overflow-hidden shadow-sm">
+                            <table className="w-full border-collapse text-sm">
+                                <thead className="bg-blue-600 text-white">
                                     <tr>
-                                        <td colSpan={8} className="text-center py-8 text-gray-500">
-                                            No orders found matching your criteria.
-                                        </td>
+                                        <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
+                                            Order ID
+                                        </th>
+                                        <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
+                                            Customer
+                                        </th>
+                                        <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
+                                            Date
+                                        </th>
+                                        <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
+                                            Time
+                                        </th>
+                                        <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
+                                            Amount
+                                        </th>
+                                        <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
+                                            Items
+                                        </th>
+                                        <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
+                                            Status
+                                        </th>
+                                        <th className="text-center py-3 px-4 font-bold">
+                                            Actions
+                                        </th>
                                     </tr>
-                                ) : (
-                                    filteredOrders.map((order) => (
-                                        <tr
-                                            key={order.id}
-                                            className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                                        >
-                                            <td className="py-3 px-4 text-sm font-medium text-gray-900">
-                                                {order.id}
-                                            </td>
-                                            <td className="py-3 px-4 text-sm text-gray-600">
-                                                {order.customer}
-                                            </td>
-                                            <td className="py-3 px-4 text-sm text-gray-500">
-                                                {order.date}
-                                            </td>
-                                            <td className="py-3 px-4 text-sm text-gray-500">
-                                                {order.time}
-                                            </td>
-                                            <td className="py-3 px-4 text-sm font-medium text-gray-900">
-                                                {formatCurrency(order.amount)}
-                                            </td>
-                                            <td className="py-3 px-4 text-sm text-gray-500">
-                                                {order.items}
-                                            </td>
-                                            <td className="py-3 px-4">
-                                                <span
-                                                    className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[order.status]}`}
-                                                >
-                                                    {order.status}
-                                                </span>
-                                            </td>
-                                            <td className="py-3 px-4">
-                                                <Button variant="outline" size="sm">
-                                                    View Details
-                                                </Button>
+                                </thead>
+                                <tbody>
+                                    {filteredOrders.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={8} className="text-center py-8 text-gray-500">
+                                                No orders found matching your criteria.
                                             </td>
                                         </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
+                                    ) : (
+                                        filteredOrders.map((order, index) => (
+                                            <tr
+                                                key={order.id}
+                                                className={`border-b border-gray-300 ${
+                                                    index % 2 === 0 ? "bg-blue-50 hover:bg-blue-100" : "bg-white hover:bg-gray-50"
+                                                } transition-colors`}
+                                            >
+                                                <td className="py-3 px-4 text-center font-semibold text-gray-900 border-r border-gray-300">
+                                                    {order.id}
+                                                </td>
+                                                <td className="py-3 px-4 text-center font-medium text-gray-900 border-r border-gray-300">
+                                                    {order.customer}
+                                                </td>
+                                                <td className="py-3 px-4 text-center font-medium text-gray-900 border-r border-gray-300">
+                                                    {order.date}
+                                                </td>
+                                                <td className="py-3 px-4 text-center font-medium text-gray-900 border-r border-gray-300">
+                                                    {order.time}
+                                                </td>
+                                                <td className="py-3 px-4 text-center font-bold text-gray-900 border-r border-gray-300">
+                                                    {formatCurrency(order.amount)}
+                                                </td>
+                                                <td className="py-3 px-4 text-center font-medium text-gray-900 border-r border-gray-300">
+                                                    {order.items}
+                                                </td>
+                                                <td className="py-3 px-4 text-center border-r border-gray-300">
+                                                    <span
+                                                        className={`px-2 py-1 text-xs font-bold rounded border ${
+                                                            order.status === 'completed' ? 'bg-green-50 text-green-700 border-green-200' :
+                                                            order.status === 'processing' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                                            order.status === 'pending' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                                            'bg-red-50 text-red-700 border-red-200'
+                                                        }`}
+                                                    >
+                                                        {order.status}
+                                                    </span>
+                                                </td>
+                                                <td className="py-3 px-4 text-center">
+                                                    <Button 
+                                                        variant="outline" 
+                                                        size="sm"
+                                                        onClick={() => handleViewDetails(order.id)}
+                                                        className="text-xs"
+                                                    >
+                                                        View Details
+                                                    </Button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </CardContent>
             </Card>
+            
+            {/* Order Details Dialog */}
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-4">
+                                {/* NYK Cosmetics Logo */}
+                                <div className="flex items-center space-x-3">
+                                    <div className="w-16 h-16 bg-gradient-to-br from-pink-500 to-rose-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">
+                                        NYK
+                                    </div>
+                                    <div>
+                                        <h2 className="text-2xl font-bold text-gray-900">NYK Cosmetics</h2>
+                                        <p className="text-base text-gray-600">Beauty & Cosmetics</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <DialogClose onClick={() => setIsDialogOpen(false)}>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </DialogClose>
+                        </div>
+                    </DialogHeader>
+                    
+                    {orderDetails && (
+                        <div className="p-6 space-y-6">
+                            {/* Order Header */}
+                            <div className="border border-gray-200 rounded p-4 bg-white">
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div>
+                                        <h3 className="text-xl font-bold text-gray-900 mb-3">
+                                            Order #{orderDetails.id}
+                                        </h3>
+                                        <div className="space-y-2 text-sm">
+                                            <div className="flex">
+                                                <span className="w-24 text-gray-600">Date:</span>
+                                                <span className="text-gray-900">{formatDate(orderDetails.date)}</span>
+                                            </div>
+                                            <div className="flex">
+                                                <span className="w-24 text-gray-600">Time:</span>
+                                                <span className="text-gray-900">{orderDetails.time}</span>
+                                            </div>
+                                            <div className="flex">
+                                                <span className="w-24 text-gray-600">Staff:</span>
+                                                <span className="text-gray-900">{orderDetails.salesperson}</span>
+                                            </div>
+                                            <div className="flex">
+                                                <span className="w-24 text-gray-600">Payment:</span>
+                                                <span className="text-gray-900">{orderDetails.paymentMethod}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="mb-3">
+                                            <span className={`px-3 py-1 text-sm font-medium rounded border ${
+                                                orderDetails.status === 'completed' ? 'bg-green-50 text-green-700 border-green-200' :
+                                                orderDetails.status === 'processing' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                                'bg-red-50 text-red-700 border-red-200'
+                                            }`}>
+                                                {orderDetails.status.charAt(0).toUpperCase() + orderDetails.status.slice(1)}
+                                            </span>
+                                        </div>
+                                        <div className="text-2xl font-bold text-gray-900">
+                                            {formatCurrency(orderDetails.amount)}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* Customer Information */}
+                            <div>
+                                <h4 className="text-lg font-semibold text-gray-900 mb-3 border-b border-gray-200 pb-2">
+                                    Customer Details
+                                </h4>
+                                <div className="grid grid-cols-1 gap-4">
+                                    <div className="space-y-2 text-sm">
+                                        <div className="flex">
+                                            <span className="w-16 text-gray-600">Name:</span>
+                                            <span className="text-gray-900 font-medium">{orderDetails.customer}</span>
+                                        </div>
+                                        <div className="flex">
+                                            <span className="w-16 text-gray-600">Phone:</span>
+                                            <span className="text-gray-900">{orderDetails.customerPhone}</span>
+                                        </div>
+                                        <div className="flex">
+                                            <span className="w-16 text-gray-600">Address:</span>
+                                            <span className="text-gray-900">{orderDetails.customerAddress}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* Order Items */}
+                            <div>
+                                <h4 className="text-lg font-semibold text-gray-900 mb-3 border-b border-gray-200 pb-2">
+                                    Items Ordered
+                                </h4>
+                                <div className="border-2 border-gray-300 rounded-lg overflow-hidden shadow-sm">
+                                    <table className="w-full text-sm border-collapse">
+                                        <thead className="bg-blue-600 text-white">
+                                            <tr>
+                                                <th className="text-center py-3 px-4 font-bold border-r border-blue-500 w-12">
+                                                    NO.
+                                                </th>
+                                                <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
+                                                    Product
+                                                </th>
+                                                <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
+                                                    Category
+                                                </th>
+                                                <th className="text-center py-3 px-4 font-bold border-r border-blue-500 w-16">
+                                                    Qty
+                                                </th>
+                                                <th className="text-center py-3 px-4 font-bold border-r border-blue-500 w-24">
+                                                    Unit Price
+                                                </th>
+                                                <th className="text-center py-3 px-4 font-bold w-28">
+                                                    Total
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {orderDetails.items.map((item, index) => (
+                                                <tr key={item.id} className={`border-b border-gray-300 ${
+                                                    index % 2 === 0 
+                                                        ? "bg-blue-50 hover:bg-blue-100" 
+                                                        : "bg-white hover:bg-gray-50"
+                                                }`}>
+                                                    <td className="py-3 px-4 text-center text-gray-800 font-semibold border-r border-gray-300">
+                                                        {index + 1}
+                                                    </td>
+                                                    <td className="py-3 px-4 border-r border-gray-300">
+                                                        <div>
+                                                            <p className="font-semibold text-gray-900">{item.name}</p>
+                                                            <p className="text-xs text-gray-600 font-medium">{item.id}</p>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3 px-4 text-gray-700 font-medium border-r border-gray-300">
+                                                        {item.category}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-center text-gray-900 font-semibold border-r border-gray-300">
+                                                        {item.quantity}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right text-gray-900 font-medium border-r border-gray-300">
+                                                        {formatCurrency(item.unitPrice)}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right font-bold text-gray-900">
+                                                        {formatCurrency(item.total)}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                            {/* Order Summary */}
+                            <div>
+                                <h4 className="text-lg font-semibold text-gray-900 mb-3 border-b border-gray-200 pb-2">
+                                    Payment Summary
+                                </h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* Payment Details */}
+                                    <div className="border border-gray-200 rounded p-4 bg-white">
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-gray-600">Subtotal:</span>
+                                                <span className="text-gray-900 font-medium">
+                                                    {formatCurrency(orderDetails.items.reduce((sum, item) => sum + item.total, 0))}
+                                                </span>
+                                            </div>
+                                            {orderDetails.discount > 0 && (
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-gray-600">Discount:</span>
+                                                    <span className="text-red-600">-{formatCurrency(orderDetails.discount)}</span>
+                                                </div>
+                                            )}
+                                            {orderDetails.tax > 0 && (
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-gray-600">Tax:</span>
+                                                    <span className="text-gray-900">{formatCurrency(orderDetails.tax)}</span>
+                                                </div>
+                                            )}
+                                            <div className="border-t border-gray-300 pt-2 mt-3">
+                                                <div className="flex justify-between text-base font-bold">
+                                                    <span className="text-gray-900">Total Amount:</span>
+                                                    <span className="text-gray-900">{formatCurrency(orderDetails.amount)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Customer Signature */}
+                                    <div className="border border-gray-200 rounded p-4 bg-white">
+                                        <div className="h-full flex flex-col">
+                                            <h5 className="text-sm font-medium text-gray-700 mb-2">Customer Signature</h5>
+                                            <div className="flex-1 min-h-[80px] border border-gray-300 rounded bg-gray-50 mb-3">
+                                                {/* Signature area */}
+                                            </div>
+                                            <div className="text-xs text-gray-500 text-center">
+                                                Signature confirms receipt of goods
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* Notes */}
+                            {orderDetails.notes && (
+                                <div>
+                                    <h4 className="text-lg font-semibold text-gray-900 mb-3 border-b border-gray-200 pb-2">
+                                        Special Instructions
+                                    </h4>
+                                    <div className="border border-gray-200 rounded p-4 bg-gray-50">
+                                        <p className="text-sm text-gray-700">{orderDetails.notes}</p>
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {/* Action Buttons */}
+                            <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-gray-200">
+                                <Button 
+                                    className="bg-blue-600 hover:bg-blue-700 text-white flex-1"
+                                    onClick={() => window.print()}
+                                >
+                                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                    </svg>
+                                    Print Receipt
+                                </Button>
+                                <Button 
+                                    variant="outline" 
+                                    className="flex-1"
+                                    onClick={() => setIsDialogOpen(false)}
+                                >
+                                    Close
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
