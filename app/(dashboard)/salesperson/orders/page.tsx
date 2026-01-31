@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -85,16 +85,51 @@ function getDaysInMonth(year: string, month: string) {
 
 export default function OrdersPage() {
     const router = useRouter();
-    const { token } = useAuth();
+    const { token, user } = useAuth();
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
     const [orders, setOrders] = useState<OrderListItem[]>([]);
     const [ordersLoading, setOrdersLoading] = useState(true);
     const [ordersError, setOrdersError] = useState<string | null>(null);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+    const dateRangeKey = `nyk-orders-date-range:${user?.id ?? "anon"}`;
+
+    const loadDateRange = () => {
+        if (typeof window === "undefined") {
+            return null;
+        }
+        const raw = sessionStorage.getItem(dateRangeKey);
+        if (!raw) {
+            return null;
+        }
+        try {
+            const parsed = JSON.parse(raw) as { fromDate: string; toDate: string };
+            if (!parsed.fromDate || !parsed.toDate) {
+                return null;
+            }
+            return parsed;
+        } catch {
+            return null;
+        }
+    };
+
+    const saveDateRange = (from: string, to: string) => {
+        if (typeof window === "undefined") {
+            return;
+        }
+        sessionStorage.setItem(dateRangeKey, JSON.stringify({ fromDate: from, toDate: to }));
+    };
 
     // Date range selection state
-    const [fromDate, setFromDate] = useState("2025-12-01");
-    const [toDate, setToDate] = useState("2025-12-05");
+    const [fromDate, setFromDate] = useState(() => {
+        const stored = loadDateRange();
+        return stored?.fromDate ?? "2025-12-01";
+    });
+    const [toDate, setToDate] = useState(() => {
+        const stored = loadDateRange();
+        return stored?.toDate ?? "2025-12-05";
+    });
 
     // Dialog state for order details
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -103,49 +138,85 @@ export default function OrdersPage() {
     const [detailsLoading, setDetailsLoading] = useState(false);
     const [detailsError, setDetailsError] = useState<string | null>(null);
 
-    useEffect(() => {
+    const cacheKey = `nyk-orders-cache:${user?.id ?? "anon"}`;
+
+    const loadCachedOrders = () => {
+        if (typeof window === "undefined") {
+            return null;
+        }
+        const raw = sessionStorage.getItem(cacheKey);
+        if (!raw) {
+            return null;
+        }
+        try {
+            const parsed = JSON.parse(raw) as { data: OrderListItem[]; updatedAt: string };
+            if (!Array.isArray(parsed.data)) {
+                return null;
+            }
+            return parsed;
+        } catch {
+            return null;
+        }
+    };
+
+    const saveCachedOrders = (data: OrderListItem[]) => {
+        if (typeof window === "undefined") {
+            return;
+        }
+        sessionStorage.setItem(
+            cacheKey,
+            JSON.stringify({ data, updatedAt: new Date().toISOString() })
+        );
+    };
+
+    const fetchOrders = useCallback(async (force = false) => {
         if (!token) {
             return;
         }
 
-        let isMounted = true;
-        const fetchOrders = async () => {
-            setOrdersLoading(true);
-            setOrdersError(null);
-            try {
-                const response = await fetch(`${API_BASE_URL}/_api/orders`, {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                });
-
-                if (!response.ok) {
-                    const message = await response.text();
-                    throw new Error(message || "Failed to load orders");
-                }
-
-                const data = (await response.json()) as OrderListItem[];
-                if (isMounted) {
-                    setOrders(data);
-                }
-            } catch (error) {
-                if (isMounted) {
-                    const message = error instanceof Error ? error.message : "Failed to load orders";
-                    setOrdersError(message);
-                }
-            } finally {
-                if (isMounted) {
-                    setOrdersLoading(false);
-                }
+        if (!force) {
+            const cached = loadCachedOrders();
+            if (cached) {
+                setOrders(cached.data);
+                setLastUpdated(new Date(cached.updatedAt));
+                setOrdersLoading(false);
+                return;
             }
-        };
+        }
 
+        setOrdersLoading(true);
+        setOrdersError(null);
+        try {
+            const response = await fetch(`${API_BASE_URL}/_api/orders`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            if (!response.ok) {
+                const message = await response.text();
+                throw new Error(message || "Failed to load orders");
+            }
+
+            const data = (await response.json()) as OrderListItem[];
+            setOrders(data);
+            saveCachedOrders(data);
+            setLastUpdated(new Date());
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Failed to load orders";
+            setOrdersError(message);
+        } finally {
+            setOrdersLoading(false);
+        }
+    }, [token, cacheKey]);
+
+    useEffect(() => {
         fetchOrders();
+    }, [fetchOrders]);
 
-        return () => {
-            isMounted = false;
-        };
-    }, [token]);
+    useEffect(() => {
+        saveDateRange(fromDate, toDate);
+    }, [fromDate, toDate]);
 
     // Handle view details click
     const handleViewDetails = async (orderId: string) => {
@@ -225,8 +296,20 @@ export default function OrdersPage() {
                     <p className="text-gray-500 mt-1">
                         Viewing orders for {formatDateRange(fromDate, toDate)}
                     </p>
+                    {lastUpdated && (
+                        <p className="text-xs text-gray-400 mt-2">
+                            Last updated {lastUpdated.toLocaleTimeString()}
+                        </p>
+                    )}
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">
+                    <Button
+                        size="lg"
+                        variant="outline"
+                        onClick={() => fetchOrders(true)}
+                    >
+                        Refresh
+                    </Button>
                     <Button
                         size="lg"
                         className="bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700"
