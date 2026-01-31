@@ -8,7 +8,7 @@ export default function DashboardLayout({
 }) {
     return (
         <CartProvider>
-            <DashboardLayoutComponent userRole="salesperson" userName="Thiri">
+            <DashboardLayoutComponent>
                 {children}
             </DashboardLayoutComponent>
         </CartProvider>
