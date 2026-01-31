@@ -122,6 +122,9 @@ export default function ProductsPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("all");
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+    const [orderDate, setOrderDate] = useState(() => new Date().toISOString().split("T")[0]);
+    const [paymentType, setPaymentType] = useState("cash");
+    const [remark, setRemark] = useState("");
     
     const customerDropdownRef = useRef<HTMLDivElement>(null);
     
@@ -214,58 +217,120 @@ export default function ProductsPage() {
                 </div>
 
                 {/* Customer Selection Card */}
-                <Card className="bg-white p-6">
+                <Card className="p-6">
                     <h2 className="text-lg font-semibold text-gray-900 mb-4">Select Customer</h2>
-                    <div className="max-w-md">
-                        <label className="block text-sm font-medium text-gray-900 mb-2">
-                            Customer
-                        </label>
-                        <div className="relative" ref={customerDropdownRef}>
-                            <Input
-                                placeholder="Search customers..."
-                                value={customerSearch}
-                                onChange={(e) => {
-                                    setCustomerSearch(e.target.value);
-                                    setShowCustomerDropdown(true);
-                                }}
-                                onFocus={() => setShowCustomerDropdown(true)}
-                                className="w-full text-black font-medium"
+                    <div className="grid grid-cols-1 md:grid-cols-[160px_1fr] gap-4 items-start">
+                        <div>
+                            <label htmlFor="order-date" className="block text-sm font-medium text-gray-900 mb-2">
+                                Order Date
+                            </label>
+                            <input
+                                id="order-date"
+                                type="date"
+                                value={orderDate}
+                                onChange={(e) => setOrderDate(e.target.value)}
+                                lang="en-US"
+                                className="w-full h-9 px-3 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
                             />
-                            
-                            {/* Customer Dropdown */}
-                            {showCustomerDropdown && (
-                                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                                    {filteredCustomers.length === 0 ? (
-                                        <div className="p-3 text-sm text-gray-800">No customers found</div>
-                                    ) : (
-                                        filteredCustomers.map((customer) => (
-                                            <button
-                                                key={customer.id}
-                                                onClick={() => {
-                                                    setSelectedCustomer(customer.id);
-                                                    setCustomerSearch(customer.name);
-                                                    setShowCustomerDropdown(false);
-                                                }}
-                                                className="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
-                                            >
-                                                <div className="font-medium text-sm text-gray-900">{customer.name}</div>
-                                                <div className="text-xs text-gray-700">{customer.phone}</div>
-                                                <div className="text-xs text-gray-600 truncate">{customer.address}</div>
-                                            </button>
-                                        ))
+                        </div>
+                        <div className="w-full">
+                            <label className="block text-sm font-medium text-gray-900 mb-2">
+                                Customer
+                            </label>
+                            <div className="flex items-center gap-2" ref={customerDropdownRef}>
+                                <div className="relative flex-1">
+                                    <Input
+                                        placeholder="Search customers..."
+                                        value={customerSearch}
+                                        onChange={(e) => {
+                                            setCustomerSearch(e.target.value);
+                                            setShowCustomerDropdown(true);
+                                        }}
+                                        onFocus={() => setShowCustomerDropdown(true)}
+                                        className="w-full h-9 text-black font-medium"
+                                    />
+                                
+                                {/* Customer Dropdown */}
+                                    {showCustomerDropdown && (
+                                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                        {filteredCustomers.length === 0 ? (
+                                            <div className="p-3 text-sm text-gray-800">No customers found</div>
+                                        ) : (
+                                            filteredCustomers.map((customer) => (
+                                                <button
+                                                    key={customer.id}
+                                                    onClick={() => {
+                                                        setSelectedCustomer(customer.id);
+                                                        setCustomerSearch(customer.name);
+                                                        setShowCustomerDropdown(false);
+                                                    }}
+                                                    className="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                                                >
+                                                    <div className="font-medium text-sm text-gray-900">{customer.name}</div>
+                                                    <div className="text-sm text-gray-700">{customer.phone}</div>
+                                                    <div className="text-sm text-gray-600 truncate">{customer.address}</div>
+                                                </button>
+                                            ))
+                                        )}
+                                        </div>
                                     )}
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-9 px-3 text-xs"
+                                    onClick={() => {
+                                        setCustomerSearch("");
+                                        setSelectedCustomer(null);
+                                        setShowCustomerDropdown(false);
+                                    }}
+                                >
+                                    Clear
+                                </Button>
+                            </div>
+                            
+                            {/* Selected Customer Display */}
+                            {selectedCustomerDetails && (
+                                <div className="mt-2 p-3 bg-pink-50 border border-pink-200 rounded-md">
+                                    <div className="text-sm font-medium text-gray-900">{selectedCustomerDetails.name}</div>
+                                    <div className="text-sm text-gray-800">{selectedCustomerDetails.phone}</div>
+                                    <div className="text-sm text-gray-700 truncate">{selectedCustomerDetails.address}</div>
                                 </div>
                             )}
                         </div>
-                        
-                        {/* Selected Customer Display */}
-                        {selectedCustomerDetails && (
-                            <div className="mt-2 p-3 bg-pink-50 border border-pink-200 rounded-md">
-                                <div className="text-sm font-medium text-gray-900">{selectedCustomerDetails.name}</div>
-                                <div className="text-xs text-gray-800">{selectedCustomerDetails.phone}</div>
-                                <div className="text-xs text-gray-700 truncate">{selectedCustomerDetails.address}</div>
-                            </div>
-                        )}
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-[160px_1fr] gap-4">
+                        <div>
+                            <label htmlFor="payment-type" className="block text-sm font-medium text-gray-900 mb-2">
+                                Payment Type
+                            </label>
+                            <select
+                                id="payment-type"
+                                value={paymentType}
+                                onChange={(e) => setPaymentType(e.target.value)}
+                                className="w-full h-9 px-3 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                            >
+                                <option value="cash">Cash</option>
+                                <option value="bank">Bank Transfer</option>
+                                <option value="credit">Credit</option>
+                                <option value="mobile">Mobile Payment</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label htmlFor="remark" className="block text-sm font-medium text-gray-900 mb-2">
+                                Remark
+                            </label>
+                            <textarea
+                                id="remark"
+                                value={remark}
+                                onChange={(e) => setRemark(e.target.value)}
+                                rows={2}
+                                placeholder="Add remark..."
+                                className="w-full px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm resize-none"
+                            />
+                        </div>
                     </div>
                 </Card>
 

@@ -395,7 +395,7 @@ export default function SalespersonPage() {
                             </div>
                         </div>
                         
-                        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 pt-2 border-t border-gray-100">
+                        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-start gap-6 pt-2 border-t border-gray-100">
                             <div className="flex flex-col lg:flex-row lg:items-end gap-6">
                                 <div className="flex flex-col">
                                     <label className="text-sm font-medium text-gray-700 mb-2">
@@ -412,7 +412,7 @@ export default function SalespersonPage() {
                                                 value={fromDate}
                                                 onChange={(e) => setFromDate(e.target.value)}
                                                 lang="en-US"
-                                                className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                                className="w-36 h-9 px-3 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
                                             />
                                         </div>
                                         <div className="flex flex-col">
@@ -425,7 +425,7 @@ export default function SalespersonPage() {
                                                 value={toDate}
                                                 onChange={(e) => setToDate(e.target.value)}
                                                 lang="en-US"
-                                                className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                                className="w-36 h-9 px-3 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
                                                 min={fromDate}
                                             />
                                         </div>
@@ -433,12 +433,12 @@ export default function SalespersonPage() {
                                 </div>
                             </div>
                             
-                            <div className="grid grid-cols-5 gap-3 pt-6">
+                            <div className="flex flex-nowrap gap-3 pt-6">
                                 <Button
                                     size="sm"
                                     variant="outline"
                                     onClick={() => setPresetRange('today')}
-                                    className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10 w-full"
+                                    className="text-xs px-3 py-1.5 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-9 w-36"
                                 >
                                     Today
                                 </Button>
@@ -446,7 +446,7 @@ export default function SalespersonPage() {
                                     size="sm"
                                     variant="outline"
                                     onClick={() => setPresetRange('last7days')}
-                                    className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10 w-full"
+                                    className="text-xs px-3 py-1.5 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-9 w-36"
                                 >
                                     Last 7 Days
                                 </Button>
@@ -454,7 +454,7 @@ export default function SalespersonPage() {
                                     size="sm"
                                     variant="outline"
                                     onClick={() => setPresetRange('thisMonth')}
-                                    className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10 w-full"
+                                    className="text-xs px-3 py-1.5 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-9 w-36"
                                 >
                                     This Month
                                 </Button>
@@ -462,14 +462,14 @@ export default function SalespersonPage() {
                                     size="sm"
                                     variant="outline"
                                     onClick={() => setPresetRange('last30days')}
-                                    className="text-xs px-3 py-2 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-10 w-full"
+                                    className="text-xs px-3 py-1.5 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-9 w-36"
                                 >
                                     Last 30 Days
                                 </Button>
                                 <Button 
                                     variant="outline" 
                                     size="sm" 
-                                    className="text-xs px-3 py-2 rounded-lg hover:bg-gray-50 h-10 w-full"
+                                    className="text-xs px-3 py-1.5 rounded-lg hover:bg-gray-50 h-9 w-36"
                                 >
                                     View All Orders
                                 </Button>
