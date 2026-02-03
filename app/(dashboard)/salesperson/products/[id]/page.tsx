@@ -1,87 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { INVENTORY_UNITS } from "@/lib/constants";
 import { useCart } from "@/lib/cart-context";
-
-const mockProducts = [
-    {
-        id: "PRD-001",
-        name: "NYK Matte Lipstick Red",
-        category: "Lipstick",
-        price: 15000,
-        image: "/mock/product-1.svg",
-        description: "Long-lasting matte finish lipstick",
-        stock: 50
-    },
-    {
-        id: "PRD-002",
-        name: "NYK Foundation Light",
-        category: "Foundation",
-        price: 25000,
-        image: "/mock/product-2.svg",
-        description: "Full coverage liquid foundation",
-        stock: 30
-    },
-    {
-        id: "PRD-003",
-        name: "NYK Eyeshadow Palette",
-        category: "Eyeshadow",
-        price: 35000,
-        image: "/mock/product-3.svg",
-        description: "12-color eyeshadow palette",
-        stock: 20
-    },
-    {
-        id: "PRD-004",
-        name: "NYK Mascara Black",
-        category: "Mascara",
-        price: 18000,
-        image: "/mock/product-4.svg",
-        description: "Volumizing mascara",
-        stock: 45
-    },
-    {
-        id: "PRD-005",
-        name: "NYK Blush Pink",
-        category: "Blush",
-        price: 12000,
-        image: "/mock/product-1.svg",
-        description: "Natural pink blush",
-        stock: 35
-    },
-    {
-        id: "PRD-006",
-        name: "NYK Concealer Medium",
-        category: "Concealer",
-        price: 20000,
-        image: "/mock/product-2.svg",
-        description: "High coverage concealer",
-        stock: 40
-    },
-    {
-        id: "PRD-007",
-        name: "NYK Highlighter Gold",
-        category: "Highlighter",
-        price: 22000,
-        image: "/mock/product-3.svg",
-        description: "Shimmery gold highlighter",
-        stock: 25
-    },
-    {
-        id: "PRD-008",
-        name: "NYK Lip Gloss Clear",
-        category: "Lip Gloss",
-        price: 10000,
-        image: "/mock/product-4.svg",
-        description: "Glossy clear lip gloss",
-        stock: 60
-    }
-];
+import { useAuth } from "@/lib/auth-context";
+import { API_BASE_URL } from "@/lib/constants";
+type Product = {
+    id: string;
+    name: string;
+    category: string;
+    unit_price: string | number;
+    photo_url: string;
+    inventory?: { quantity: number } | null;
+    is_active: boolean;
+};
 
 function formatCurrency(amount: number) {
     return new Intl.NumberFormat("en-MM", {
@@ -91,14 +27,18 @@ function formatCurrency(amount: number) {
     }).format(amount);
 }
 
+function formatCategory(category: string) {
+    return category.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export default function ProductDetailPage() {
     const params = useParams<{ id: string }>();
     const router = useRouter();
     const { addToCart } = useCart();
-
-    const product = useMemo(() => {
-        return mockProducts.find((p) => p.id === params.id);
-    }, [params.id]);
+    const { token } = useAuth();
+    const [product, setProduct] = useState<Product | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     const [quantity, setQuantity] = useState(1);
     const [unit, setUnit] = useState<string>(INVENTORY_UNITS.PIECES);
@@ -131,18 +71,75 @@ export default function ProductDetailPage() {
                 return parsed;
             }
         }
-        return (product?.price ?? 0) * unitMultiplier;
-    }, [customPrice, product?.price, unitMultiplier, useCustomPrice]);
+        return Number(product?.unit_price ?? 0) * unitMultiplier;
+    }, [customPrice, product?.unit_price, unitMultiplier, useCustomPrice]);
 
     const handleDecrease = () => {
         setQuantity((prev) => Math.max(1, prev - 1));
     };
 
     const handleIncrease = () => {
-        setQuantity((prev) => Math.min(product?.stock ?? prev + 1, prev + 1));
+        const stock = product?.inventory?.quantity ?? Number.MAX_SAFE_INTEGER;
+        setQuantity((prev) => Math.min(stock, prev + 1));
     };
 
-    if (!product) {
+    useEffect(() => {
+        if (!token || !params.id) {
+            return;
+        }
+
+        let isMounted = true;
+        const fetchProduct = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const response = await fetch(`${API_BASE_URL}/_api/products/${params.id}`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+
+                if (!response.ok) {
+                    const message = await response.text();
+                    throw new Error(message || "Failed to load product");
+                }
+
+                const data = (await response.json()) as Product;
+                if (isMounted) {
+                    setProduct(data);
+                }
+            } catch (err) {
+                if (isMounted) {
+                    const message = err instanceof Error ? err.message : "Failed to load product";
+                    setError(message);
+                }
+            } finally {
+                if (isMounted) {
+                    setLoading(false);
+                }
+            }
+        };
+
+        fetchProduct();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [token, params.id]);
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-[#FFCDC9] p-6">
+                <div className="max-w-3xl mx-auto">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Loading product...</CardTitle>
+                        </CardHeader>
+                    </Card>
+                </div>
+            </div>
+        );
+    }
+
+    if (!product || !product.is_active) {
         return (
             <div className="min-h-screen bg-[#FFCDC9] p-6">
                 <div className="max-w-3xl mx-auto">
@@ -151,6 +148,9 @@ export default function ProductDetailPage() {
                             <CardTitle>Product not found</CardTitle>
                         </CardHeader>
                         <CardContent>
+                            {error && (
+                                <p className="text-sm text-red-600 mb-4">{error}</p>
+                            )}
                             <Button variant="outline" onClick={() => router.back()}>
                                 Back
                             </Button>
@@ -170,7 +170,7 @@ export default function ProductDetailPage() {
                             <div className="relative w-full max-w-md">
                                 <div className="aspect-square rounded-xl bg-white/40 flex items-center justify-center">
                                     <img
-                                        src={product.image}
+                                        src={product.photo_url || "/mock/product-1.svg"}
                                         alt={product.name}
                                         className="w-3/4 h-3/4 object-contain"
                                     />
@@ -180,7 +180,7 @@ export default function ProductDetailPage() {
                         <div className="space-y-6">
                             <div className="space-y-2">
                                 <p className="text-xs font-semibold tracking-widest text-gray-500 uppercase">
-                                    {product.category}
+                                    {formatCategory(product.category)}
                                 </p>
                                 <h1 className="text-3xl font-semibold text-gray-900">
                                     {product.name}
@@ -195,15 +195,15 @@ export default function ProductDetailPage() {
                                     {unit === INVENTORY_UNITS.DOZEN
                                         ? "Price per Dozen"
                                         : unit === INVENTORY_UNITS.PACKAGE
-                                        ? "Price per Package"
-                                        : unit === INVENTORY_UNITS.BOX
-                                        ? "Price per Box"
-                                        : "Price per Unit"}
+                                            ? "Price per Package"
+                                            : unit === INVENTORY_UNITS.BOX
+                                                ? "Price per Box"
+                                                : "Price per Unit"}
                                 </p>
                             </div>
 
                             <p className="text-sm text-gray-600 leading-relaxed">
-                                {product.description}
+                                {product.name}
                             </p>
 
                             <div className="space-y-2">
@@ -214,11 +214,10 @@ export default function ProductDetailPage() {
                                             key={option.value}
                                             type="button"
                                             onClick={() => setUnit(option.value)}
-                                            className={`h-10 rounded-full border text-sm font-medium transition-colors ${
-                                                unit === option.value
-                                                    ? "bg-pink-100 border-pink-300 text-pink-700"
-                                                    : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
-                                            }`}
+                                            className={`h-10 rounded-full border text-sm font-medium transition-colors ${unit === option.value
+                                                ? "bg-pink-100 border-pink-300 text-pink-700"
+                                                : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
+                                                }`}
                                         >
                                             {option.label}
                                         </button>
@@ -239,10 +238,10 @@ export default function ProductDetailPage() {
                                         {unit === INVENTORY_UNITS.DOZEN
                                             ? "Custom price per Dozen"
                                             : unit === INVENTORY_UNITS.PACKAGE
-                                            ? "Custom price per Package"
-                                            : unit === INVENTORY_UNITS.BOX
-                                            ? "Custom price per Box"
-                                            : "Custom price per Unit"}
+                                                ? "Custom price per Package"
+                                                : unit === INVENTORY_UNITS.BOX
+                                                    ? "Custom price per Box"
+                                                    : "Custom price per Unit"}
                                     </label>
                                 </div>
                                 {useCustomPrice && (
@@ -252,7 +251,7 @@ export default function ProductDetailPage() {
                                         step="100"
                                         value={customPrice}
                                         onChange={(e) => setCustomPrice(e.target.value)}
-                                        placeholder={`Default: ${formatCurrency((product.price ?? 0) * unitMultiplier)}`}
+                                        placeholder={`Default: ${formatCurrency(Number(product.unit_price ?? 0) * unitMultiplier)}`}
                                         className="h-9 text-sm text-black font-medium"
                                     />
                                 )}
@@ -271,7 +270,7 @@ export default function ProductDetailPage() {
                                         <Input
                                             type="number"
                                             min="1"
-                                            max={product.stock}
+                                            max={product.inventory?.quantity}
                                             value={quantity}
                                             onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
                                             className="h-10 w-16 border-0 text-center text-sm font-medium text-gray-900 focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -293,7 +292,7 @@ export default function ProductDetailPage() {
                                             unit,
                                             useCustomPrice && customPrice ? Number(customPrice) : undefined,
                                             product.name,
-                                            product.price
+                                            Number(product.unit_price)
                                         )
                                     }
                                     className="flex-1 min-w-[180px] h-10 rounded-full text-sm bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700"

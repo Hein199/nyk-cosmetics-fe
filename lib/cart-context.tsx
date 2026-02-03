@@ -108,19 +108,36 @@ export function CartProvider({ children }: { children: ReactNode }) {
         if (!productName || !productPrice) return;
 
         const finalPrice = customPrice !== undefined ? customPrice : productPrice;
-        const total = quantity * finalPrice;
 
-        const newItem: CartItem = {
-            id: productId,
-            name: productName,
-            price: productPrice,
-            customPrice,
-            quantity,
-            unit,
-            total
-        };
+        setCart(prevCart => {
+            const existingIndex = prevCart.findIndex(
+                (item) => item.id === productId
+            );
 
-        setCart(prevCart => [...prevCart, newItem]);
+            if (existingIndex === -1) {
+                const newItem: CartItem = {
+                    id: productId,
+                    name: productName,
+                    price: productPrice,
+                    customPrice,
+                    quantity,
+                    unit,
+                    total: quantity * finalPrice,
+                };
+                return [...prevCart, newItem];
+            }
+
+            return prevCart.map((item, index) => {
+                if (index !== existingIndex) return item;
+                const nextQuantity = item.quantity + quantity;
+                const nextTotal = nextQuantity * (item.customPrice ?? item.price);
+                return {
+                    ...item,
+                    quantity: nextQuantity,
+                    total: nextTotal,
+                };
+            });
+        });
     };
 
     const removeFromCart = (index: number) => {
