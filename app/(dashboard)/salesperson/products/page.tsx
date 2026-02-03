@@ -12,104 +12,25 @@ import {
 } from "@/components/ui/card";
 import { INVENTORY_UNITS } from "@/lib/constants";
 import { useCart } from "@/lib/cart-context";
+import { API_BASE_URL } from "@/lib/constants";
+import { useAuth } from "@/lib/auth-context";
 
-// Mock customer data
-const mockCustomers = [
-    { id: "CUST-001", name: "Beauty Store A", address: "123 Main Street, Yangon", phone: "09-123-456-789" },
-    { id: "CUST-002", name: "Cosmetics Shop B", address: "456 Market Road, Mandalay", phone: "09-987-654-321" },
-    { id: "CUST-003", name: "Salon C", address: "789 Beauty Lane, Yangon", phone: "09-111-222-333" },
-    { id: "CUST-004", name: "Retail Store D", address: "321 Shopping Center, Naypyidaw", phone: "09-444-555-666" },
-    { id: "CUST-005", name: "Beauty Outlet E", address: "555 Fashion Street, Yangon", phone: "09-777-888-999" },
-    { id: "CUST-006", name: "Makeup Corner F", address: "666 Style Avenue, Mandalay", phone: "09-222-333-444" },
-    { id: "CUST-007", name: "Glam Studio G", address: "777 Glamour Road, Yangon", phone: "09-555-666-777" },
-    { id: "CUST-008", name: "Style Shop H", address: "888 Fashion Plaza, Naypyidaw", phone: "09-888-999-000" }
-];
-
-// Mock product data
-const mockProducts = [
-    {
-        id: "PRD-001",
-        name: "NYK Matte Lipstick Red",
-        category: "Lipstick",
-        price: 15000,
-        image: "/mock/product-1.svg",
-        description: "Long-lasting matte finish lipstick",
-        stock: 50
-    },
-    {
-        id: "PRD-002", 
-        name: "NYK Foundation Light",
-        category: "Foundation",
-        price: 25000,
-        image: "/mock/product-2.svg",
-        description: "Full coverage liquid foundation",
-        stock: 30
-    },
-    {
-        id: "PRD-003",
-        name: "NYK Eyeshadow Palette",
-        category: "Eyeshadow",
-        price: 35000,
-        image: "/mock/product-3.svg",
-        description: "12-color eyeshadow palette",
-        stock: 20
-    },
-    {
-        id: "PRD-004",
-        name: "NYK Mascara Black",
-        category: "Mascara",
-        price: 18000,
-        image: "/mock/product-4.svg",
-        description: "Volumizing mascara",
-        stock: 45
-    },
-    {
-        id: "PRD-005",
-        name: "NYK Blush Pink",
-        category: "Blush",
-        price: 12000,
-        image: "/mock/product-1.svg",
-        description: "Natural pink blush",
-        stock: 35
-    },
-    {
-        id: "PRD-006",
-        name: "NYK Concealer Medium",
-        category: "Concealer",
-        price: 20000,
-        image: "/mock/product-2.svg",
-        description: "High coverage concealer",
-        stock: 40
-    },
-    {
-        id: "PRD-007",
-        name: "NYK Highlighter Gold",
-        category: "Highlighter",
-        price: 22000,
-        image: "/mock/product-3.svg",
-        description: "Shimmery gold highlighter",
-        stock: 25
-    },
-    {
-        id: "PRD-008",
-        name: "NYK Lip Gloss Clear",
-        category: "Lip Gloss",
-        price: 10000,
-        image: "/mock/product-4.svg",
-        description: "Glossy clear lip gloss",
-        stock: 60
-    }
-];
-
-interface CartItem {
+type Customer = {
     id: string;
     name: string;
-    price: number;
-    customPrice?: number;
-    quantity: number;
-    unit: string;
-    total: number;
-}
+    address: string;
+    phone_number: string;
+};
+
+type Product = {
+    id: string;
+    name: string;
+    category: string;
+    unit_price: string | number;
+    photo_url: string;
+    inventory?: { quantity: number } | null;
+    is_active: boolean;
+};
 
 function formatCurrency(amount: number) {
     return new Intl.NumberFormat("en-MM", {
@@ -119,27 +40,37 @@ function formatCurrency(amount: number) {
     }).format(amount);
 }
 
+function formatCategory(category: string) {
+    return category.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export default function ProductsPage() {
+    const { token } = useAuth();
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("all");
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-    const [paymentType, setPaymentType] = useState("cash");
-    const [remark, setRemark] = useState("");
-    
+    const [products, setProducts] = useState<Product[]>([]);
+    const [customers, setCustomers] = useState<Customer[]>([]);
+    const [loadingProducts, setLoadingProducts] = useState(true);
+    const [loadingCustomers, setLoadingCustomers] = useState(true);
+    const [productError, setProductError] = useState<string | null>(null);
+    const [customerError, setCustomerError] = useState<string | null>(null);
     const customerDropdownRef = useRef<HTMLDivElement>(null);
-    
+
     // Use global cart context
     const {
         cart,
         selectedCustomer,
         customerSearch,
         orderDate,
+        paymentType,
+        remark,
         addToCart,
-        removeFromCart,
-        clearCart,
         setSelectedCustomer,
         setCustomerSearch,
         setOrderDate,
+        setPaymentType,
+        setRemark,
         cartSummary
     } = useCart();
 
@@ -155,46 +86,124 @@ export default function ProductsPage() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    useEffect(() => {
+        if (!token) {
+            return;
+        }
+
+        let isMounted = true;
+        const fetchProducts = async () => {
+            setLoadingProducts(true);
+            setProductError(null);
+            try {
+                const response = await fetch(`${API_BASE_URL}/_api/products`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!response.ok) {
+                    const message = await response.text();
+                    throw new Error(message || "Failed to load products");
+                }
+                const data = (await response.json()) as Product[];
+                if (isMounted) {
+                    setProducts(data.filter((product) => product.is_active));
+                }
+            } catch (err) {
+                if (isMounted) {
+                    const message = err instanceof Error ? err.message : "Failed to load products";
+                    setProductError(message);
+                }
+            } finally {
+                if (isMounted) {
+                    setLoadingProducts(false);
+                }
+            }
+        };
+
+        fetchProducts();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [token]);
+
+    useEffect(() => {
+        if (!token) {
+            return;
+        }
+
+        let isMounted = true;
+        const fetchCustomers = async () => {
+            setLoadingCustomers(true);
+            setCustomerError(null);
+            try {
+                const response = await fetch(`${API_BASE_URL}/_api/customers`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!response.ok) {
+                    const message = await response.text();
+                    throw new Error(message || "Failed to load customers");
+                }
+                const data = (await response.json()) as Customer[];
+                if (isMounted) {
+                    setCustomers(data);
+                }
+            } catch (err) {
+                if (isMounted) {
+                    const message = err instanceof Error ? err.message : "Failed to load customers";
+                    setCustomerError(message);
+                }
+            } finally {
+                if (isMounted) {
+                    setLoadingCustomers(false);
+                }
+            }
+        };
+
+        fetchCustomers();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [token]);
+
     // Product filtering
     const filteredProducts = useMemo(() => {
-        return mockProducts.filter((product) => {
-            const matchesSearch = searchQuery === "" || 
-                product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                product.category.toLowerCase().includes(searchQuery.toLowerCase());
-            
-            const matchesCategory = selectedCategory === "all" || 
+        return products.filter((product) => {
+            const matchesSearch = searchQuery === "" ||
+                product.name.toLowerCase().includes(searchQuery.toLowerCase());
+
+            const matchesCategory = selectedCategory === "all" ||
                 product.category === selectedCategory;
-            
+
             return matchesSearch && matchesCategory;
         });
-    }, [searchQuery, selectedCategory]);
+    }, [searchQuery, selectedCategory, products]);
 
     // Get unique categories
     const categories = useMemo(() => {
-        const cats = Array.from(new Set(mockProducts.map(p => p.category)));
+        const cats = Array.from(new Set(products.map(p => p.category)));
         return ["all", ...cats];
-    }, []);
+    }, [products]);
 
     // Filter customers based on search
     const filteredCustomers = useMemo(() => {
-        if (!customerSearch) return mockCustomers;
-        return mockCustomers.filter(customer =>
-            customer.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
-            customer.phone.includes(customerSearch)
+        if (!customerSearch) return customers;
+        return customers.filter(customer =>
+            customer.name.toLowerCase().includes(customerSearch.toLowerCase())
         );
-    }, [customerSearch]);
+    }, [customerSearch, customers]);
 
     // Get selected customer details
     const selectedCustomerDetails = useMemo(() => {
-        return mockCustomers.find(c => c.id === selectedCustomer);
+        return customers.find(c => c.id === selectedCustomer);
     }, [selectedCustomer]);
 
     // Local add to cart function that uses global context
     const localAddToCart = (productId: string) => {
-        const product = mockProducts.find(p => p.id === productId);
+        const product = products.find(p => p.id === productId);
         if (!product) return;
-
-        addToCart(productId, 1, INVENTORY_UNITS.PIECES, undefined, product.name, product.price);
+        const price = Number(product.unit_price);
+        addToCart(productId, 1, INVENTORY_UNITS.PIECES, undefined, product.name, price);
     };
 
     return (
@@ -250,29 +259,31 @@ export default function ProductsPage() {
                                         onFocus={() => setShowCustomerDropdown(true)}
                                         className="w-full h-9 text-black font-medium"
                                     />
-                                
-                                {/* Customer Dropdown */}
+
+                                    {/* Customer Dropdown */}
                                     {showCustomerDropdown && (
                                         <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                                        {filteredCustomers.length === 0 ? (
-                                            <div className="p-3 text-sm text-gray-800">No customers found</div>
-                                        ) : (
-                                            filteredCustomers.map((customer) => (
-                                                <button
-                                                    key={customer.id}
-                                                    onClick={() => {
-                                                        setSelectedCustomer(customer.id);
-                                                        setCustomerSearch(customer.name);
-                                                        setShowCustomerDropdown(false);
-                                                    }}
-                                                    className="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
-                                                >
-                                                    <div className="font-medium text-sm text-gray-900">{customer.name}</div>
-                                                    <div className="text-sm text-gray-700">{customer.phone}</div>
-                                                    <div className="text-sm text-gray-600 truncate">{customer.address}</div>
-                                                </button>
-                                            ))
-                                        )}
+                                            {loadingCustomers ? (
+                                                <div className="p-3 text-sm text-gray-800">Loading customers...</div>
+                                            ) : filteredCustomers.length === 0 ? (
+                                                <div className="p-3 text-sm text-gray-800">No customers found</div>
+                                            ) : (
+                                                filteredCustomers.map((customer) => (
+                                                    <button
+                                                        key={customer.id}
+                                                        onClick={() => {
+                                                            setSelectedCustomer(customer.id);
+                                                            setCustomerSearch(customer.name);
+                                                            setShowCustomerDropdown(false);
+                                                        }}
+                                                        className="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                                                    >
+                                                        <div className="font-medium text-sm text-gray-900">{customer.name}</div>
+                                                        <div className="text-sm text-gray-700">{customer.phone_number}</div>
+                                                        <div className="text-sm text-gray-600 truncate">{customer.address}</div>
+                                                    </button>
+                                                ))
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -290,13 +301,18 @@ export default function ProductsPage() {
                                     Clear
                                 </Button>
                             </div>
-                            
+
                             {/* Selected Customer Display */}
                             {selectedCustomerDetails && (
                                 <div className="mt-2 p-3 bg-pink-50 border border-pink-200 rounded-md">
                                     <div className="text-sm font-medium text-gray-900">{selectedCustomerDetails.name}</div>
-                                    <div className="text-sm text-gray-800">{selectedCustomerDetails.phone}</div>
+                                    <div className="text-sm text-gray-800">{selectedCustomerDetails.phone_number}</div>
                                     <div className="text-sm text-gray-700 truncate">{selectedCustomerDetails.address}</div>
+                                </div>
+                            )}
+                            {customerError && (
+                                <div className="mt-2 text-sm text-red-600">
+                                    {customerError}
                                 </div>
                             )}
                         </div>
@@ -313,10 +329,8 @@ export default function ProductsPage() {
                                 onChange={(e) => setPaymentType(e.target.value)}
                                 className="w-full h-9 px-3 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
                             >
-                                <option value="cash">Cash</option>
-                                <option value="bank">Bank Transfer</option>
-                                <option value="credit">Credit</option>
-                                <option value="mobile">Mobile Payment</option>
+                                <option value="CASH">Cash</option>
+                                <option value="BANK">Bank Transfer</option>
                             </select>
                         </div>
                         <div>
@@ -347,7 +361,7 @@ export default function ProductsPage() {
                             >
                                 {categories.map((category) => (
                                     <option key={category} value={category}>
-                                        {category === "all" ? "All Categories" : category}
+                                        {category === "all" ? "All Categories" : formatCategory(category)}
                                     </option>
                                 ))}
                             </select>
@@ -366,18 +380,28 @@ export default function ProductsPage() {
                     </div>
                 </Card>
 
+                {productError && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+                        {productError}
+                    </div>
+                )}
+
                 {/* Products Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {filteredProducts.map((product) => (
-                        <ProductCard
-                            key={product.id}
-                            product={product}
-                            onAddToCart={localAddToCart}
-                        />
-                    ))}
+                    {loadingProducts ? (
+                        <div className="col-span-full text-center text-gray-500">Loading products...</div>
+                    ) : (
+                        filteredProducts.map((product) => (
+                            <ProductCard
+                                key={product.id}
+                                product={product}
+                                onAddToCart={localAddToCart}
+                            />
+                        ))
+                    )}
                 </div>
 
-                {filteredProducts.length === 0 && (
+                {!loadingProducts && filteredProducts.length === 0 && (
                     <div className="text-center py-12">
                         <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
                             <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -395,7 +419,7 @@ export default function ProductsPage() {
 
 // Product Card Component
 interface ProductCardProps {
-    product: typeof mockProducts[0];
+    product: Product;
     onAddToCart: (productId: string) => void;
 }
 
@@ -404,8 +428,8 @@ function ProductCard({ product, onAddToCart }: ProductCardProps) {
         <Card className="overflow-hidden hover:shadow-lg transition-shadow">
             <Link href={`/salesperson/products/${product.id}`} className="block">
                 <div className="aspect-square bg-gray-100 relative">
-                    <img 
-                        src={product.image} 
+                    <img
+                        src={product.photo_url || "/mock/product-1.svg"}
                         alt={product.name}
                         className="w-full h-full object-cover"
                     />
@@ -413,9 +437,9 @@ function ProductCard({ product, onAddToCart }: ProductCardProps) {
                 <CardHeader className="pb-2 border-b-0">
                     <CardTitle className="text-sm line-clamp-2">{product.name}</CardTitle>
                     <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-700">{product.category}</span>
+                        <span className="text-sm text-gray-700">{formatCategory(product.category)}</span>
                         <span className="text-sm font-normal text-black">
-                            {formatCurrency(product.price)}
+                            {formatCurrency(Number(product.unit_price))}
                         </span>
                     </div>
                 </CardHeader>

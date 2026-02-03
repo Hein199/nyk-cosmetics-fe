@@ -17,12 +17,16 @@ interface CartContextType {
     selectedCustomer: string;
     customerSearch: string;
     orderDate: string;
+    paymentType: string;
+    remark: string;
     addToCart: (productId: string, quantity: number, unit: string, customPrice?: number, productName?: string, productPrice?: number) => void;
     removeFromCart: (index: number) => void;
     clearCart: () => void;
     setSelectedCustomer: (customerId: string) => void;
     setCustomerSearch: (search: string) => void;
     setOrderDate: (date: string) => void;
+    setPaymentType: (type: string) => void;
+    setRemark: (remark: string) => void;
     cartSummary: {
         subtotal: number;
         total: number;
@@ -37,6 +41,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const [selectedCustomer, setSelectedCustomer] = useState("");
     const [customerSearch, setCustomerSearch] = useState("");
     const [orderDate, setOrderDate] = useState(() => new Date().toISOString().split("T")[0]);
+    const [paymentType, setPaymentType] = useState("CASH");
+    const [remark, setRemark] = useState("");
 
     // Load cart from localStorage on mount
     useEffect(() => {
@@ -44,7 +50,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const savedCustomer = localStorage.getItem('salesperson-selected-customer');
         const savedCustomerSearch = localStorage.getItem('salesperson-customer-search');
         const savedOrderDate = localStorage.getItem('salesperson-order-date');
-        
+        const savedPaymentType = localStorage.getItem('salesperson-payment-type');
+        const savedRemark = localStorage.getItem('salesperson-remark');
         if (savedCart) {
             try {
                 setCart(JSON.parse(savedCart));
@@ -52,17 +59,24 @@ export function CartProvider({ children }: { children: ReactNode }) {
                 console.error('Error loading cart from localStorage:', error);
             }
         }
-        
+
         if (savedCustomer) {
             setSelectedCustomer(savedCustomer);
         }
-        
+
         if (savedCustomerSearch) {
             setCustomerSearch(savedCustomerSearch);
         }
 
         if (savedOrderDate) {
             setOrderDate(savedOrderDate);
+        }
+        if (savedPaymentType) {
+            setPaymentType(savedPaymentType);
+        }
+
+        if (savedRemark) {
+            setRemark(savedRemark);
         }
     }, []);
 
@@ -83,6 +97,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('salesperson-order-date', orderDate);
     }, [orderDate]);
 
+    useEffect(() => {
+        localStorage.setItem('salesperson-payment-type', paymentType);
+    }, [paymentType]);
+
+    useEffect(() => {
+        localStorage.setItem('salesperson-remark', remark);
+    }, [remark]);
     const addToCart = (productId: string, quantity: number, unit: string, customPrice?: number, productName?: string, productPrice?: number) => {
         if (!productName || !productPrice) return;
 
@@ -110,6 +131,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setCart([]);
         setSelectedCustomer("");
         setCustomerSearch("");
+        setRemark("");
     };
 
     const cartSummary = {
@@ -119,18 +141,22 @@ export function CartProvider({ children }: { children: ReactNode }) {
     };
 
     return (
-        <CartContext.Provider 
+        <CartContext.Provider
             value={{
                 cart,
                 selectedCustomer,
                 customerSearch,
                 orderDate,
+                paymentType,
+                remark,
                 addToCart,
                 removeFromCart,
                 clearCart,
                 setSelectedCustomer,
                 setCustomerSearch,
                 setOrderDate,
+                setPaymentType,
+                setRemark,
                 cartSummary
             }}
         >
