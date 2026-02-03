@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,7 +45,7 @@ function formatCategory(category: string) {
 }
 
 export default function ProductsPage() {
-    const { token } = useAuth();
+    const { token, user } = useAuth();
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("all");
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
@@ -56,6 +56,31 @@ export default function ProductsPage() {
     const [productError, setProductError] = useState<string | null>(null);
     const [customerError, setCustomerError] = useState<string | null>(null);
     const customerDropdownRef = useRef<HTMLDivElement>(null);
+
+    const productsCacheKey = `nyk-products-cache:${user?.id ?? "anon"}`;
+    const customersCacheKey = `nyk-products-customers-cache:${user?.id ?? "anon"}`;
+
+    const loadCache = <T,>(key: string) => {
+        if (typeof window === "undefined") {
+            return null;
+        }
+        const raw = sessionStorage.getItem(key);
+        if (!raw) return null;
+        try {
+            const parsed = JSON.parse(raw) as { data: T[] };
+            if (!Array.isArray(parsed.data)) return null;
+            return parsed.data;
+        } catch {
+            return null;
+        }
+    };
+
+    const saveCache = <T,>(key: string, data: T[]) => {
+        if (typeof window === "undefined") {
+            return;
+        }
+        sessionStorage.setItem(key, JSON.stringify({ data }));
+    };
 
     // Use global cart context
     const {
@@ -86,85 +111,84 @@ export default function ProductsPage() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    useEffect(() => {
+    const fetchProducts = useCallback(async (force = false) => {
         if (!token) {
             return;
         }
 
-        let isMounted = true;
-        const fetchProducts = async () => {
-            setLoadingProducts(true);
-            setProductError(null);
-            try {
-                const response = await fetch(`${API_BASE_URL}/_api/products`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                if (!response.ok) {
-                    const message = await response.text();
-                    throw new Error(message || "Failed to load products");
-                }
-                const data = (await response.json()) as Product[];
-                if (isMounted) {
-                    setProducts(data.filter((product) => product.is_active));
-                }
-            } catch (err) {
-                if (isMounted) {
-                    const message = err instanceof Error ? err.message : "Failed to load products";
-                    setProductError(message);
-                }
-            } finally {
-                if (isMounted) {
-                    setLoadingProducts(false);
-                }
+        if (!force) {
+            const cached = loadCache<Product>(productsCacheKey);
+            if (cached) {
+                setProducts(cached.filter((product) => product.is_active));
+                setLoadingProducts(false);
+                return;
             }
-        };
+        }
 
+        setLoadingProducts(true);
+        setProductError(null);
+        try {
+            const response = await fetch(`${API_BASE_URL}/_api/products`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) {
+                const message = await response.text();
+                throw new Error(message || "Failed to load products");
+            }
+            const data = (await response.json()) as Product[];
+            const activeProducts = data.filter((product) => product.is_active);
+            setProducts(activeProducts);
+            saveCache(productsCacheKey, activeProducts);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Failed to load products";
+            setProductError(message);
+        } finally {
+            setLoadingProducts(false);
+        }
+    }, [token, productsCacheKey]);
+
+    useEffect(() => {
         fetchProducts();
+    }, [fetchProducts]);
 
-        return () => {
-            isMounted = false;
-        };
-    }, [token]);
-
-    useEffect(() => {
+    const fetchCustomers = useCallback(async (force = false) => {
         if (!token) {
             return;
         }
 
-        let isMounted = true;
-        const fetchCustomers = async () => {
-            setLoadingCustomers(true);
-            setCustomerError(null);
-            try {
-                const response = await fetch(`${API_BASE_URL}/_api/customers`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                if (!response.ok) {
-                    const message = await response.text();
-                    throw new Error(message || "Failed to load customers");
-                }
-                const data = (await response.json()) as Customer[];
-                if (isMounted) {
-                    setCustomers(data);
-                }
-            } catch (err) {
-                if (isMounted) {
-                    const message = err instanceof Error ? err.message : "Failed to load customers";
-                    setCustomerError(message);
-                }
-            } finally {
-                if (isMounted) {
-                    setLoadingCustomers(false);
-                }
+        if (!force) {
+            const cached = loadCache<Customer>(customersCacheKey);
+            if (cached) {
+                setCustomers(cached);
+                setLoadingCustomers(false);
+                return;
             }
-        };
+        }
 
+        setLoadingCustomers(true);
+        setCustomerError(null);
+        try {
+            const response = await fetch(`${API_BASE_URL}/_api/customers`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) {
+                const message = await response.text();
+                throw new Error(message || "Failed to load customers");
+            }
+            const data = (await response.json()) as Customer[];
+            setCustomers(data);
+            saveCache(customersCacheKey, data);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Failed to load customers";
+            setCustomerError(message);
+        } finally {
+            setLoadingCustomers(false);
+        }
+    }, [token, customersCacheKey]);
+
+    useEffect(() => {
         fetchCustomers();
-
-        return () => {
-            isMounted = false;
-        };
-    }, [token]);
+    }, [fetchCustomers]);
 
     // Product filtering
     const filteredProducts = useMemo(() => {
@@ -215,16 +239,43 @@ export default function ProductsPage() {
                         <h1 className="text-3xl font-bold text-gray-900">Products</h1>
                         <p className="text-gray-600 mt-1">Select products and customer to add to cart</p>
                     </div>
-                    {cart.length > 0 && (
-                        <div className="text-right">
-                            <div className="text-sm text-gray-600">
-                                {cartSummary.itemCount} items in cart
+                    <div className="flex items-center gap-4">
+                        <Button
+                            size="lg"
+                            variant="outline"
+                            onClick={() => {
+                                fetchProducts(true);
+                                fetchCustomers(true);
+                            }}
+                            aria-label="Refresh"
+                            title="Refresh"
+                            className="h-11 w-11 p-0"
+                        >
+                            <svg
+                                aria-hidden="true"
+                                viewBox="0 0 24 24"
+                                className="h-5 w-5"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                            >
+                                <path d="M21 12a9 9 0 1 1-3-6.7" />
+                                <path d="M21 3v6h-6" />
+                            </svg>
+                        </Button>
+                        {cart.length > 0 && (
+                            <div className="text-right">
+                                <div className="text-sm text-gray-600">
+                                    {cartSummary.itemCount} items in cart
+                                </div>
+                                <div className="text-lg font-semibold text-gray-900">
+                                    Total: {formatCurrency(cartSummary.total)}
+                                </div>
                             </div>
-                            <div className="text-lg font-semibold text-gray-900">
-                                Total: {formatCurrency(cartSummary.total)}
-                            </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
 
                 {/* Customer Selection Card */}

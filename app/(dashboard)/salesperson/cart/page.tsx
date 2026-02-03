@@ -143,6 +143,10 @@ export default function CartPage() {
                 throw new Error(message || "Failed to create order");
             }
 
+            if (typeof window !== "undefined") {
+                sessionStorage.setItem("nyk-orders-refresh", "true");
+            }
+
             clearCart();
             setRemark("");
             router.push('/salesperson/products');

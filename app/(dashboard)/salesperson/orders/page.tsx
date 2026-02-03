@@ -113,19 +113,19 @@ export default function OrdersPage() {
             return null;
         }
     };
-        const getStatusBadgeClass = (status: string) => {
-            const key = status.toLowerCase();
-            if (key === "delivered") {
-                return "bg-green-50 text-green-700 border-green-200";
-            }
-            if (key === "confirmed") {
-                return "bg-blue-50 text-blue-700 border-blue-200";
-            }
-            if (key === "pending_admin") {
-                return "bg-yellow-50 text-yellow-700 border-yellow-200";
-            }
-            return "bg-red-50 text-red-700 border-red-200";
-        };
+    const getStatusBadgeClass = (status: string) => {
+        const key = status.toLowerCase();
+        if (key === "delivered") {
+            return "bg-green-50 text-green-700 border-green-200";
+        }
+        if (key === "confirmed") {
+            return "bg-blue-50 text-blue-700 border-blue-200";
+        }
+        if (key === "pending_admin") {
+            return "bg-yellow-50 text-yellow-700 border-yellow-200";
+        }
+        return "bg-red-50 text-red-700 border-red-200";
+    };
 
     const saveDateRange = (from: string, to: string) => {
         if (typeof window === "undefined") {
@@ -224,6 +224,15 @@ export default function OrdersPage() {
     }, [token, cacheKey]);
 
     useEffect(() => {
+        if (typeof window !== "undefined") {
+            const shouldRefresh = sessionStorage.getItem("nyk-orders-refresh") === "true";
+            if (shouldRefresh) {
+                sessionStorage.removeItem("nyk-orders-refresh");
+                fetchOrders(true);
+                return;
+            }
+        }
+
         fetchOrders();
     }, [fetchOrders]);
 
