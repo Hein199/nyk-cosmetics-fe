@@ -55,7 +55,6 @@ export default function ProductsPage() {
     const [loadingCustomers, setLoadingCustomers] = useState(true);
     const [productError, setProductError] = useState<string | null>(null);
     const [customerError, setCustomerError] = useState<string | null>(null);
-
     const customerDropdownRef = useRef<HTMLDivElement>(null);
 
     // Use global cart context

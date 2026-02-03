@@ -39,8 +39,6 @@ export default function CartPage() {
         orderDate,
         paymentType,
         remark,
-        setOrderDate,
-        setPaymentType,
         setRemark
     } = useCart();
 
@@ -243,15 +241,15 @@ export default function CartPage() {
                                     )}
                                 </div>
 
-                                {/* Voucher Date Selection */}
+                                {/* Order Date */}
                                 <div className="mb-4">
                                     <label className="block text-sm font-medium text-gray-900 mb-2">
-                                        Voucher Date
+                                        Order Date
                                     </label>
                                     <Input
                                         type="date"
                                         value={orderDate}
-                                        onChange={(e) => setOrderDate(e.target.value)}
+                                        readOnly
                                         className="w-full h-10 text-black font-medium"
                                     />
                                 </div>
