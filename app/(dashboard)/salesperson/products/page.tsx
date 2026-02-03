@@ -123,7 +123,6 @@ export default function ProductsPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("all");
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-    const [orderDate, setOrderDate] = useState(() => new Date().toISOString().split("T")[0]);
     const [paymentType, setPaymentType] = useState("cash");
     const [remark, setRemark] = useState("");
     
@@ -134,11 +133,13 @@ export default function ProductsPage() {
         cart,
         selectedCustomer,
         customerSearch,
+        orderDate,
         addToCart,
         removeFromCart,
         clearCart,
         setSelectedCustomer,
         setCustomerSearch,
+        setOrderDate,
         cartSummary
     } = useCart();
 

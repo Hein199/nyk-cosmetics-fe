@@ -37,14 +37,11 @@ export default function CartPage() {
         selectedCustomer, 
         customerSearch, 
         setSelectedCustomer, 
-        setCustomerSearch 
+        setCustomerSearch,
+        orderDate
     } = useCart();
     
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-    const [voucherDate, setVoucherDate] = useState(() => {
-        const today = new Date();
-        return today.toISOString().split('T')[0];
-    });
     const customerDropdownRef = useRef<HTMLDivElement>(null);
 
     // Close dropdown when clicking outside
@@ -77,7 +74,7 @@ export default function CartPage() {
         if (!selectedCustomer || cart.length === 0) return;
         
         // Here you would normally send the order to your backend
-        alert(`Order created for ${selectedCustomerDetails?.name} with ${cart.length} items totaling ${formatCurrency(cartSummary.total)} on ${voucherDate}`);
+        alert(`Order created for ${selectedCustomerDetails?.name} with ${cart.length} items totaling ${formatCurrency(cartSummary.total)} on ${orderDate}`);
         
         // Clear cart after creating order
         clearCart();
@@ -168,15 +165,15 @@ export default function CartPage() {
                                     )}
                                 </div>
 
-                                {/* Voucher Date Selection */}
+                                {/* Order Date */}
                                 <div className="mb-4">
                                     <label className="block text-sm font-medium text-gray-900 mb-2">
-                                        Voucher Date
+                                        Order Date
                                     </label>
                                     <Input
                                         type="date"
-                                        value={voucherDate}
-                                        onChange={(e) => setVoucherDate(e.target.value)}
+                                        value={orderDate}
+                                        readOnly
                                         className="w-full h-10 text-black font-medium"
                                     />
                                 </div>

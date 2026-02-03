@@ -16,11 +16,13 @@ interface CartContextType {
     cart: CartItem[];
     selectedCustomer: string;
     customerSearch: string;
+    orderDate: string;
     addToCart: (productId: string, quantity: number, unit: string, customPrice?: number, productName?: string, productPrice?: number) => void;
     removeFromCart: (index: number) => void;
     clearCart: () => void;
     setSelectedCustomer: (customerId: string) => void;
     setCustomerSearch: (search: string) => void;
+    setOrderDate: (date: string) => void;
     cartSummary: {
         subtotal: number;
         total: number;
@@ -34,12 +36,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const [cart, setCart] = useState<CartItem[]>([]);
     const [selectedCustomer, setSelectedCustomer] = useState("");
     const [customerSearch, setCustomerSearch] = useState("");
+    const [orderDate, setOrderDate] = useState(() => new Date().toISOString().split("T")[0]);
 
     // Load cart from localStorage on mount
     useEffect(() => {
         const savedCart = localStorage.getItem('salesperson-cart');
         const savedCustomer = localStorage.getItem('salesperson-selected-customer');
         const savedCustomerSearch = localStorage.getItem('salesperson-customer-search');
+        const savedOrderDate = localStorage.getItem('salesperson-order-date');
         
         if (savedCart) {
             try {
@@ -56,6 +60,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
         if (savedCustomerSearch) {
             setCustomerSearch(savedCustomerSearch);
         }
+
+        if (savedOrderDate) {
+            setOrderDate(savedOrderDate);
+        }
     }, []);
 
     // Save cart to localStorage whenever it changes
@@ -70,6 +78,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         localStorage.setItem('salesperson-customer-search', customerSearch);
     }, [customerSearch]);
+
+    useEffect(() => {
+        localStorage.setItem('salesperson-order-date', orderDate);
+    }, [orderDate]);
 
     const addToCart = (productId: string, quantity: number, unit: string, customPrice?: number, productName?: string, productPrice?: number) => {
         if (!productName || !productPrice) return;
@@ -112,11 +124,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
                 cart,
                 selectedCustomer,
                 customerSearch,
+                orderDate,
                 addToCart,
                 removeFromCart,
                 clearCart,
                 setSelectedCustomer,
                 setCustomerSearch,
+                setOrderDate,
                 cartSummary
             }}
         >

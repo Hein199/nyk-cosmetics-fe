@@ -210,8 +210,23 @@ export default function CustomersPage() {
                             size="md"
                             variant="outline"
                             onClick={() => fetchCustomers(true)}
+                            aria-label="Refresh"
+                            title="Refresh"
+                            className="h-10 w-10 p-0"
                         >
-                            Refresh
+                            <svg
+                                aria-hidden="true"
+                                viewBox="0 0 24 24"
+                                className="h-4 w-4"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                            >
+                                <path d="M21 12a9 9 0 1 1-3-6.7" />
+                                <path d="M21 3v6h-6" />
+                            </svg>
                         </Button>
                         <Button
                             size="md"
@@ -321,12 +336,6 @@ export default function CustomersPage() {
                                                     <div className={`font-bold ${customer.outstanding_amount > 0 ? 'text-red-600' : 'text-green-600'}`}>
                                                         {formatCurrency(customer.outstanding_amount)}
                                                     </div>
-                                                    {customer.outstanding_amount > 0 && (
-                                                        <div className="text-xs text-red-600 font-medium">Pending</div>
-                                                    )}
-                                                    {customer.outstanding_amount === 0 && (
-                                                        <div className="text-xs text-green-600 font-medium">Paid</div>
-                                                    )}
                                                 </td>
                                             </tr>
                                         ))}

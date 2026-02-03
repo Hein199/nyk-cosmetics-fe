@@ -249,11 +249,33 @@ export default function SalespersonPage() {
                 <div className="flex flex-col sm:flex-row gap-2">
                     <Button
                         size="lg"
-                        className="bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700"
+                        variant="outline"
+                        onClick={() => setPresetRange("default")}
+                        aria-label="Refresh"
+                        title="Refresh"
+                        className="h-11 w-11 p-0"
+                    >
+                        <svg
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
+                            className="h-5 w-5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        >
+                            <path d="M21 12a9 9 0 1 1-3-6.7" />
+                            <path d="M21 3v6h-6" />
+                        </svg>
+                    </Button>
+                    <Button
+                        size="sm"
+                        className="bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-sm"
                         onClick={() => router.push("/salesperson/products")}
                     >
                         <svg
-                            className="w-5 h-5 mr-2"
+                            className="w-4 h-4 mr-2"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
