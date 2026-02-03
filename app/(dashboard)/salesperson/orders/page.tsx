@@ -46,9 +46,9 @@ type OrderDetail = {
 };
 
 const statusColors: Record<string, string> = {
-    pending_admin: "bg-yellow-100 text-yellow-800",
-    confirmed: "bg-blue-100 text-blue-800",
     delivered: "bg-green-100 text-green-800",
+    confirmed: "bg-blue-100 text-blue-800",
+    pending_admin: "bg-yellow-100 text-yellow-800",
     cancelled: "bg-red-100 text-red-800",
 };
 
@@ -113,6 +113,19 @@ export default function OrdersPage() {
             return null;
         }
     };
+        const getStatusBadgeClass = (status: string) => {
+            const key = status.toLowerCase();
+            if (key === "delivered") {
+                return "bg-green-50 text-green-700 border-green-200";
+            }
+            if (key === "confirmed") {
+                return "bg-blue-50 text-blue-700 border-blue-200";
+            }
+            if (key === "pending_admin") {
+                return "bg-yellow-50 text-yellow-700 border-yellow-200";
+            }
+            return "bg-red-50 text-red-700 border-red-200";
+        };
 
     const saveDateRange = (from: string, to: string) => {
         if (typeof window === "undefined") {
@@ -446,7 +459,7 @@ export default function OrdersPage() {
                                     <div className="flex items-center justify-between">
                                         <span className="font-medium text-gray-900">{order.id}</span>
                                         <span
-                                            className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[order.status]}`}
+                                            className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[order.status.toLowerCase()] ?? "bg-gray-100 text-gray-800"}`}
                                         >
                                             {order.status}
                                         </span>
@@ -553,11 +566,7 @@ export default function OrdersPage() {
                                                 </td>
                                                 <td className="py-3 px-4 text-center border-r border-gray-300">
                                                     <span
-                                                        className={`px-2 py-1 text-xs font-bold rounded border ${order.status === 'delivered' ? 'bg-green-50 text-green-700 border-green-200' :
-                                                            order.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                                                order.status === 'pending_admin' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                                                                    'bg-red-50 text-red-700 border-red-200'
-                                                            }`}
+                                                        className={`px-2 py-1 text-xs font-bold rounded border ${getStatusBadgeClass(order.status)}`}
                                                     >
                                                         {order.status.replace("_", " ")}
                                                     </span>
@@ -584,7 +593,7 @@ export default function OrdersPage() {
 
             {/* Order Details Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="relative max-w-4xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-4">
@@ -599,8 +608,12 @@ export default function OrdersPage() {
                                     </div>
                                 </div>
                             </div>
-                            <DialogClose onClick={() => setIsDialogOpen(false)}>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <DialogClose
+                                onClick={() => setIsDialogOpen(false)}
+                                className="absolute right-4 top-4 rounded-md p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                                aria-label="Close"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                 </svg>
                             </DialogClose>
@@ -644,16 +657,11 @@ export default function OrdersPage() {
                                         </div>
                                         <div className="text-right">
                                             <div className="mb-3">
-                                                <span className={`px-3 py-1 text-sm font-medium rounded border ${orderDetails.status === 'delivered' ? 'bg-green-50 text-green-700 border-green-200' :
-                                                    orderDetails.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                                        orderDetails.status === 'pending_admin' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                                                            'bg-red-50 text-red-700 border-red-200'
-                                                    }`}>
+                                                <span
+                                                    className={`px-3 py-1 text-sm font-medium rounded border ${getStatusBadgeClass(orderDetails.status)}`}
+                                                >
                                                     {orderDetails.status.replace("_", " ")}
                                                 </span>
-                                            </div>
-                                            <div className="text-2xl font-bold text-gray-900">
-                                                {formatCurrency(Number(orderDetails.total_amount))}
                                             </div>
                                         </div>
                                     </div>
@@ -800,25 +808,6 @@ export default function OrdersPage() {
                                 </div>
                             )}
 
-                            {/* Action Buttons */}
-                            <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-gray-200">
-                                <Button
-                                    className="bg-blue-600 hover:bg-blue-700 text-white flex-1"
-                                    onClick={() => window.print()}
-                                >
-                                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                                    </svg>
-                                    Print Receipt
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    className="flex-1"
-                                    onClick={() => setIsDialogOpen(false)}
-                                >
-                                    Close
-                                </Button>
-                            </div>
                         </div>
                     )}
                 </DialogContent>
