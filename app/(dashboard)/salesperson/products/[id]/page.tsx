@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,6 +44,7 @@ export default function ProductDetailPage() {
     const [unit, setUnit] = useState<string>(INVENTORY_UNITS.PIECES);
     const [useCustomPrice, setUseCustomPrice] = useState(false);
     const [customPrice, setCustomPrice] = useState("");
+    const productImageRef = useRef<HTMLImageElement | null>(null);
     const unitOptions = [
         { value: INVENTORY_UNITS.PIECES, label: "Pcs" },
         { value: INVENTORY_UNITS.DOZEN, label: "Dozen" },
@@ -81,6 +82,50 @@ export default function ProductDetailPage() {
     const handleIncrease = () => {
         const stock = product?.inventory?.quantity ?? Number.MAX_SAFE_INTEGER;
         setQuantity((prev) => Math.min(stock, prev + 1));
+    };
+
+    const animateToCart = () => {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            return;
+        }
+
+        const imageEl = productImageRef.current;
+        const cartButton = document.getElementById("salesperson-cart-button");
+        if (!imageEl || !cartButton) {
+            return;
+        }
+
+        const imageRect = imageEl.getBoundingClientRect();
+        const cartRect = cartButton.getBoundingClientRect();
+
+        const clone = imageEl.cloneNode(true) as HTMLImageElement;
+        clone.style.position = "fixed";
+        clone.style.left = `${imageRect.left}px`;
+        clone.style.top = `${imageRect.top}px`;
+        clone.style.width = `${imageRect.width}px`;
+        clone.style.height = `${imageRect.height}px`;
+        clone.style.objectFit = "contain";
+        clone.style.transition = "transform 600ms ease, opacity 600ms ease";
+        clone.style.zIndex = "9999";
+        clone.style.pointerEvents = "none";
+
+        document.body.appendChild(clone);
+
+        const deltaX = cartRect.left + cartRect.width / 2 - (imageRect.left + imageRect.width / 2);
+        const deltaY = cartRect.top + cartRect.height / 2 - (imageRect.top + imageRect.height / 2);
+
+        requestAnimationFrame(() => {
+            clone.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(0.2)`;
+            clone.style.opacity = "0.2";
+        });
+
+        window.setTimeout(() => {
+            clone.remove();
+        }, 650);
     };
 
     useEffect(() => {
@@ -172,6 +217,7 @@ export default function ProductDetailPage() {
                                     <img
                                         src={product.photo_url || "/mock/product-1.svg"}
                                         alt={product.name}
+                                        ref={productImageRef}
                                         className="w-3/4 h-3/4 object-contain"
                                     />
                                 </div>
@@ -286,14 +332,17 @@ export default function ProductDetailPage() {
                                 </div>
                                 <Button
                                     onClick={() =>
-                                        addToCart(
-                                            product.id,
-                                            quantity,
-                                            unit,
-                                            useCustomPrice && customPrice ? Number(customPrice) : undefined,
-                                            product.name,
-                                            Number(product.unit_price)
-                                        )
+                                        {
+                                            animateToCart();
+                                            addToCart(
+                                                product.id,
+                                                quantity,
+                                                unit,
+                                                useCustomPrice && customPrice ? Number(customPrice) : undefined,
+                                                product.name,
+                                                Number(product.unit_price)
+                                            );
+                                        }
                                     }
                                     className="flex-1 min-w-[180px] h-10 rounded-full text-sm bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700"
                                 >

@@ -54,7 +54,7 @@ const statusColors: Record<string, string> = {
 
 const statusOptions = [
     { value: "all", label: "All Orders" },
-    { value: "pending_admin", label: "Pending Admin" },
+    { value: "pending_admin", label: "Pending" },
     { value: "confirmed", label: "Confirmed" },
     { value: "delivered", label: "Delivered" },
     { value: "cancelled", label: "Cancelled" },
@@ -76,6 +76,14 @@ function formatDate(dateString: string) {
         month: 'short',
         day: 'numeric'
     });
+}
+
+function formatStatusLabel(status: string) {
+    const normalized = status.toLowerCase();
+    if (normalized === "pending_admin") {
+        return "pending";
+    }
+    return normalized.replace("_", " ");
 }
 
 // Get number of days in a month
@@ -281,7 +289,7 @@ export default function OrdersPage() {
             const matchesDateRange = orderDate >= fromDate && orderDate <= toDate;
 
             // Status filter
-            const matchesStatus = statusFilter === "all" || order.status === statusFilter;
+            const matchesStatus = statusFilter === "all" || order.status.toLowerCase() === statusFilter;
 
             // Search filter
             const matchesSearch = searchQuery === "" ||
@@ -470,7 +478,7 @@ export default function OrdersPage() {
                                         <span
                                             className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[order.status.toLowerCase()] ?? "bg-gray-100 text-gray-800"}`}
                                         >
-                                            {order.status}
+                                            {formatStatusLabel(order.status)}
                                         </span>
                                     </div>
                                     <div>
@@ -577,7 +585,7 @@ export default function OrdersPage() {
                                                     <span
                                                         className={`px-2 py-1 text-xs font-bold rounded border ${getStatusBadgeClass(order.status)}`}
                                                     >
-                                                        {order.status.replace("_", " ")}
+                                                        {formatStatusLabel(order.status)}
                                                     </span>
                                                 </td>
                                                 <td className="py-3 px-4 text-center">
@@ -669,7 +677,7 @@ export default function OrdersPage() {
                                                 <span
                                                     className={`px-3 py-1 text-sm font-medium rounded border ${getStatusBadgeClass(orderDetails.status)}`}
                                                 >
-                                                    {orderDetails.status.replace("_", " ")}
+                                                    {formatStatusLabel(orderDetails.status)}
                                                 </span>
                                             </div>
                                         </div>
