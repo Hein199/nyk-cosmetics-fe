@@ -495,16 +495,6 @@ function ProductCard({ product, onAddToCart }: ProductCardProps) {
                     </div>
                 </CardHeader>
             </Link>
-            <CardContent className="pt-0">
-                <Button
-                    type="button"
-                    onClick={() => onAddToCart(product.id)}
-                    className="w-full text-sm bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700"
-                    aria-label="Add to cart"
-                >
-                    Add to Cart
-                </Button>
-            </CardContent>
         </Card>
     );
 }

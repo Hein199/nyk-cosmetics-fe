@@ -338,6 +338,7 @@ function CartButton() {
     return (
         <Link href="/salesperson/cart">
             <button
+                id="salesperson-cart-button"
                 className="p-2 rounded-full hover:bg-gray-100 relative"
             >
                 <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
