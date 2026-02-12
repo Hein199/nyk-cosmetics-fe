@@ -1,0 +1,376 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { INVENTORY_UNITS } from "@/lib/constants";
+import { useCart } from "@/lib/cart-context";
+import { useAuth } from "@/lib/auth-context";
+import { API_BASE_URL } from "@/lib/constants";
+type Product = {
+    id: string;
+    name: string;
+    category: string;
+    unit_price: string | number;
+    photo_url: string;
+    inventory?: { quantity: number } | null;
+    is_active: boolean;
+};
+
+function formatCurrency(amount: number) {
+    return new Intl.NumberFormat("en-MM", {
+        style: "currency",
+        currency: "MMK",
+        minimumFractionDigits: 0,
+    }).format(amount);
+}
+
+function formatCategory(category: string) {
+    return category.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export default function ProductDetailPage() {
+    const params = useParams<{ id: string }>();
+    const router = useRouter();
+    const { addToCart } = useCart();
+    const { token } = useAuth();
+    const [product, setProduct] = useState<Product | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const [quantity, setQuantity] = useState(1);
+    const [unit, setUnit] = useState<string>(INVENTORY_UNITS.PIECES);
+    const [useCustomPrice, setUseCustomPrice] = useState(false);
+    const [customPrice, setCustomPrice] = useState("");
+    const productImageRef = useRef<HTMLImageElement | null>(null);
+    const unitOptions = [
+        { value: INVENTORY_UNITS.PIECES, label: "Pcs" },
+        { value: INVENTORY_UNITS.DOZEN, label: "Dozen" },
+        { value: INVENTORY_UNITS.PACKAGE, label: "Package" },
+        { value: INVENTORY_UNITS.BOX, label: "Box" },
+    ];
+
+    const unitMultiplier = useMemo(() => {
+        switch (unit) {
+            case INVENTORY_UNITS.DOZEN:
+                return 12;
+            case INVENTORY_UNITS.PACKAGE:
+                return 6;
+            case INVENTORY_UNITS.BOX:
+                return 24;
+            default:
+                return 1;
+        }
+    }, [unit]);
+
+    const pricePerSelectedUnit = useMemo(() => {
+        if (useCustomPrice && customPrice) {
+            const parsed = Number(customPrice);
+            if (!Number.isNaN(parsed) && parsed >= 0) {
+                return parsed;
+            }
+        }
+        return Number(product?.unit_price ?? 0) * unitMultiplier;
+    }, [customPrice, product?.unit_price, unitMultiplier, useCustomPrice]);
+
+    const handleDecrease = () => {
+        setQuantity((prev) => Math.max(1, prev - 1));
+    };
+
+    const handleIncrease = () => {
+        const stock = product?.inventory?.quantity ?? Number.MAX_SAFE_INTEGER;
+        setQuantity((prev) => Math.min(stock, prev + 1));
+    };
+
+    const animateToCart = () => {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            return;
+        }
+
+        const imageEl = productImageRef.current;
+        const cartButton = document.getElementById("salesperson-cart-button");
+        if (!imageEl || !cartButton) {
+            return;
+        }
+
+        const imageRect = imageEl.getBoundingClientRect();
+        const cartRect = cartButton.getBoundingClientRect();
+
+        const clone = imageEl.cloneNode(true) as HTMLImageElement;
+        clone.style.position = "fixed";
+        clone.style.left = `${imageRect.left}px`;
+        clone.style.top = `${imageRect.top}px`;
+        clone.style.width = `${imageRect.width}px`;
+        clone.style.height = `${imageRect.height}px`;
+        clone.style.objectFit = "contain";
+        clone.style.transition = "transform 600ms ease, opacity 600ms ease";
+        clone.style.zIndex = "9999";
+        clone.style.pointerEvents = "none";
+
+        document.body.appendChild(clone);
+
+        const deltaX = cartRect.left + cartRect.width / 2 - (imageRect.left + imageRect.width / 2);
+        const deltaY = cartRect.top + cartRect.height / 2 - (imageRect.top + imageRect.height / 2);
+
+        requestAnimationFrame(() => {
+            clone.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(0.2)`;
+            clone.style.opacity = "0.2";
+        });
+
+        window.setTimeout(() => {
+            clone.remove();
+        }, 650);
+    };
+
+    useEffect(() => {
+        if (!token || !params.id) {
+            return;
+        }
+
+        let isMounted = true;
+        const fetchProduct = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const response = await fetch(`${API_BASE_URL}/_api/products/${params.id}`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+
+                if (!response.ok) {
+                    const message = await response.text();
+                    throw new Error(message || "Failed to load product");
+                }
+
+                const data = (await response.json()) as Product;
+                if (isMounted) {
+                    setProduct(data);
+                }
+            } catch (err) {
+                if (isMounted) {
+                    const message = err instanceof Error ? err.message : "Failed to load product";
+                    setError(message);
+                }
+            } finally {
+                if (isMounted) {
+                    setLoading(false);
+                }
+            }
+        };
+
+        fetchProduct();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [token, params.id]);
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-[#FFCDC9] p-6">
+                <div className="max-w-3xl mx-auto">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Loading product...</CardTitle>
+                        </CardHeader>
+                    </Card>
+                </div>
+            </div>
+        );
+    }
+
+    if (!product || !product.is_active) {
+        return (
+            <div className="min-h-screen bg-[#FFCDC9] p-6">
+                <div className="max-w-3xl mx-auto">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Product not found</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {error && (
+                                <p className="text-sm text-red-600 mb-4">{error}</p>
+                            )}
+                            <Button variant="outline" onClick={() => router.back()}>
+                                Back
+                            </Button>
+                        </CardContent>
+                    </Card>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-h-screen bg-[#FFCDC9] p-6">
+            <div className="max-w-6xl mx-auto">
+                <Card className="overflow-hidden bg-white/80 backdrop-blur">
+                    <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-10 p-6 lg:p-10">
+                        <div className="bg-[#F7F7F3] rounded-2xl p-6 flex items-center justify-center">
+                            <div className="relative w-full max-w-md">
+                                <div className="aspect-square rounded-xl bg-white/40 flex items-center justify-center">
+                                    <img
+                                        src={product.photo_url || "/mock/product-1.svg"}
+                                        alt={product.name}
+                                        ref={productImageRef}
+                                        className="w-3/4 h-3/4 object-contain"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="space-y-6">
+                            <div className="space-y-2">
+                                <p className="text-xs font-semibold tracking-widest text-gray-500 uppercase">
+                                    {formatCategory(product.category)}
+                                </p>
+                                <h1 className="text-3xl font-semibold text-gray-900">
+                                    {product.name}
+                                </h1>
+                            </div>
+
+                            <div className="space-y-1">
+                                <p className="text-2xl font-semibold text-gray-900">
+                                    {formatCurrency(pricePerSelectedUnit)}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                    {unit === INVENTORY_UNITS.DOZEN
+                                        ? "Price per Dozen"
+                                        : unit === INVENTORY_UNITS.PACKAGE
+                                            ? "Price per Package"
+                                            : unit === INVENTORY_UNITS.BOX
+                                                ? "Price per Box"
+                                                : "Price per Unit"}
+                                </p>
+                            </div>
+
+                            <p className="text-sm text-gray-600 leading-relaxed">
+                                {product.name}
+                            </p>
+
+                            <div className="space-y-2">
+                                <p className="text-sm font-medium text-gray-700">Unit Type</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {unitOptions.map((option) => (
+                                        <button
+                                            key={option.value}
+                                            type="button"
+                                            onClick={() => setUnit(option.value)}
+                                            className={`h-10 rounded-full border text-sm font-medium transition-colors ${unit === option.value
+                                                ? "bg-pink-100 border-pink-300 text-pink-700"
+                                                : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
+                                                }`}
+                                        >
+                                            {option.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="use-custom-price"
+                                        checked={useCustomPrice}
+                                        onChange={(e) => setUseCustomPrice(e.target.checked)}
+                                        className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                                    />
+                                    <label htmlFor="use-custom-price" className="text-sm text-gray-700">
+                                        {unit === INVENTORY_UNITS.DOZEN
+                                            ? "Custom price per Dozen"
+                                            : unit === INVENTORY_UNITS.PACKAGE
+                                                ? "Custom price per Package"
+                                                : unit === INVENTORY_UNITS.BOX
+                                                    ? "Custom price per Box"
+                                                    : "Custom price per Unit"}
+                                    </label>
+                                </div>
+                                {useCustomPrice && (
+                                    <Input
+                                        type="number"
+                                        min="0"
+                                        step="100"
+                                        value={customPrice}
+                                        onChange={(e) => setCustomPrice(e.target.value)}
+                                        placeholder={`Default: ${formatCurrency(Number(product.unit_price ?? 0) * unitMultiplier)}`}
+                                        className="h-9 text-sm text-black font-medium"
+                                    />
+                                )}
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-3">
+                                <div className="flex items-center border border-gray-300 rounded-full h-10 overflow-hidden bg-white">
+                                    <button
+                                        type="button"
+                                        onClick={handleDecrease}
+                                        className="w-10 h-10 flex items-center justify-center text-gray-600 hover:bg-gray-50"
+                                    >
+                                        −
+                                    </button>
+                                    <div className="w-16">
+                                        <Input
+                                            type="number"
+                                            min="1"
+                                            max={product.inventory?.quantity}
+                                            value={quantity}
+                                            onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                                            className="h-10 w-16 border-0 text-center text-sm font-medium text-gray-900 focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        />
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleIncrease}
+                                        className="w-10 h-10 flex items-center justify-center text-gray-600 hover:bg-gray-50"
+                                    >
+                                        +
+                                    </button>
+                                </div>
+                                <Button
+                                    onClick={() =>
+                                        {
+                                            animateToCart();
+                                            addToCart(
+                                                product.id,
+                                                quantity,
+                                                unit,
+                                                useCustomPrice && customPrice ? Number(customPrice) : undefined,
+                                                product.name,
+                                                Number(product.unit_price)
+                                            );
+                                        }
+                                    }
+                                    className="flex-1 min-w-[180px] h-10 rounded-full text-sm bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700"
+                                >
+                                    Add to Cart
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => router.back()}
+                                    className="h-10 rounded-full"
+                                >
+                                    Back
+                                </Button>
+                            </div>
+
+                            <div className="pt-6 border-t border-gray-200">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-sm font-semibold text-gray-800">Detail</p>
+                                    <span className="text-gray-300">—</span>
+                                </div>
+                                <p className="text-sm text-gray-600 mt-2 leading-relaxed">
+                                    A reliable bodyguard for your skin, with secret uses. This lightweight, long lasting
+                                    product provides dependable protection and a comfortable finish for everyday wear.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </Card>
+            </div>
+        </div>
+    );
+}
