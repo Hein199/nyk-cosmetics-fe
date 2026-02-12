@@ -306,7 +306,7 @@ export default function OutstandingPage() {
     };
 
     const handlePaymentChange = (paymentId: string, originalAmount: number, value: string) => {
-        const raw = value.replace(/[^ -\u007F]/g, "");
+        const raw = value.replace(/[^\x00-\x7F]/g, "");
         const parsed = Number(raw);
         if (Number.isNaN(parsed) || parsed < 0) {
             setPaymentInputs((prev) => ({ ...prev, [paymentId]: value }));
