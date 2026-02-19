@@ -25,6 +25,7 @@ interface Expense {
     amount: string | number;
     category: string;
     payment_method: string;
+    remark?: string | null;
     created_at: string;
 }
 
@@ -49,6 +50,7 @@ export default function ExpensesPage() {
     const [description, setDescription] = useState("");
     const [amount, setAmount] = useState("");
     const [category, setCategory] = useState("");
+    const [remark, setRemark] = useState("");
     const [paymentMethod, setPaymentMethod] = useState<"CASH" | "BANK">(
         "CASH"
     );
@@ -102,12 +104,14 @@ export default function ExpensesPage() {
                     amount,
                     category,
                     payment_method: paymentMethod,
+                    remark: remark || undefined,
                 },
             });
             setIsCreateOpen(false);
             setDescription("");
             setAmount("");
             setCategory("");
+            setRemark("");
             setPaymentMethod("CASH");
             await fetchExpenses();
         } catch (err) {
@@ -187,13 +191,16 @@ export default function ExpensesPage() {
                                         <th className="text-center py-3 px-4 text-sm font-medium text-white bg-blue-600">
                                             Payment
                                         </th>
+                                        <th className="text-left py-3 px-4 text-sm font-medium text-white bg-blue-600">
+                                            Remark
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {filtered.length === 0 ? (
                                         <tr>
                                             <td
-                                                colSpan={5}
+                                                colSpan={6}
                                                 className="text-center py-8 text-gray-500"
                                             >
                                                 No expenses found.
@@ -226,6 +233,9 @@ export default function ExpensesPage() {
                                                 <td className="py-3 px-4 text-center text-sm text-gray-700">
                                                     {e.payment_method}
                                                 </td>
+                                                <td className="py-3 px-4 text-sm text-gray-500">
+                                                    {e.remark ?? "-"}
+                                                </td>
                                             </tr>
                                         ))
                                     )}
@@ -238,7 +248,7 @@ export default function ExpensesPage() {
 
             {/* Create Expense Dialog */}
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-                <DialogContent className="sm:max-w-md">
+                <DialogContent className="sm:max-w-xl">
                     <DialogHeader>
                         <DialogTitle>Add New Expense</DialogTitle>
                     </DialogHeader>
@@ -253,26 +263,28 @@ export default function ExpensesPage() {
                                 placeholder="What was this expense for?"
                             />
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Amount (MMK)
-                            </label>
-                            <Input
-                                type="number"
-                                value={amount}
-                                onChange={(e) => setAmount(e.target.value)}
-                                placeholder="e.g. 50000"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Category
-                            </label>
-                            <Input
-                                value={category}
-                                onChange={(e) => setCategory(e.target.value)}
-                                placeholder="e.g. Rent, Utilities, Transport"
-                            />
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Amount (MMK)
+                                </label>
+                                <Input
+                                    type="number"
+                                    value={amount}
+                                    onChange={(e) => setAmount(e.target.value)}
+                                    placeholder="e.g. 50000"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Category
+                                </label>
+                                <Input
+                                    value={category}
+                                    onChange={(e) => setCategory(e.target.value)}
+                                    placeholder="e.g. Rent, Utilities"
+                                />
+                            </div>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -291,7 +303,19 @@ export default function ExpensesPage() {
                                 <option value="BANK">BANK</option>
                             </select>
                         </div>
-                        <div className="flex justify-end gap-2 pt-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Remark
+                            </label>
+                            <textarea
+                                value={remark}
+                                onChange={(e) => setRemark(e.target.value)}
+                                placeholder="Optional notes..."
+                                rows={3}
+                                className="w-full px-3 py-2 text-sm text-black border border-gray-300 rounded-lg bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 resize-none"
+                            />
+                        </div>
+                        <div className="flex justify-end gap-2 pt-2">
                             <Button
                                 variant="outline"
                                 onClick={() => setIsCreateOpen(false)}

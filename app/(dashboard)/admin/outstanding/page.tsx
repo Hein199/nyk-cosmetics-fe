@@ -64,6 +64,7 @@ export default function OutstandingPage() {
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
+    const [employeeFilter, setEmployeeFilter] = useState("all");
     const [fromDate, setFromDate] = useState("");
     const [toDate, setToDate] = useState("");
     const [paymentDate, setPaymentDate] = useState("");
@@ -123,15 +124,28 @@ export default function OutstandingPage() {
             const orderDate = order.created_at.split("T")[0];
             const matchesFrom = !fromDate || orderDate >= fromDate;
             const matchesTo = !toDate || orderDate <= toDate;
+            const matchesEmployee =
+                employeeFilter === "all" ||
+                order.salesperson?.id === employeeFilter;
             const q = searchQuery.toLowerCase();
             const matchesSearch =
                 !q ||
                 order.customer.name.toLowerCase().includes(q) ||
                 order.id.toLowerCase().includes(q) ||
                 (order.customer.phone_number ?? "").includes(q);
-            return matchesStatus && matchesFrom && matchesTo && matchesSearch;
+            return matchesStatus && matchesFrom && matchesTo && matchesSearch && matchesEmployee;
         });
-    }, [orders, searchQuery, statusFilter, fromDate, toDate]);
+    }, [orders, searchQuery, statusFilter, employeeFilter, fromDate, toDate]);
+
+    const employeeOptions = useMemo(() => {
+        const unique = new Map<string, string>();
+        orders.forEach((order) => {
+            if (order.salesperson?.id && order.salesperson?.username) {
+                unique.set(order.salesperson.id, order.salesperson.username);
+            }
+        });
+        return Array.from(unique.entries()).map(([id, username]) => ({ id, username }));
+    }, [orders]);
 
     const handlePaymentChange = (
         orderId: string,
@@ -523,6 +537,22 @@ export default function OutstandingPage() {
                                         }
                                         className="w-full h-10"
                                     />
+                                </div>
+                                <div className="sm:w-48">
+                                    <select
+                                        value={employeeFilter}
+                                        onChange={(e) =>
+                                            setEmployeeFilter(e.target.value)
+                                        }
+                                        className="w-full h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                    >
+                                        <option value="all">All Employees</option>
+                                        {employeeOptions.map((o) => (
+                                            <option key={o.id} value={o.id}>
+                                                {o.username}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
                                 <div className="sm:w-48">
                                     <select
