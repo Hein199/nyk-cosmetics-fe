@@ -266,13 +266,26 @@ export default function ProductsPage() {
                             </svg>
                         </Button>
                         {cart.length > 0 && (
-                            <div className="text-right">
-                                <div className="text-sm text-gray-600">
-                                    {cartSummary.itemCount} items in cart
+                            <div className="flex items-center gap-3">
+                                <div className="text-right">
+                                    <div className="text-sm text-gray-600">
+                                        {cartSummary.itemCount} items in cart
+                                    </div>
+                                    <div className="text-lg font-semibold text-gray-900">
+                                        Total: {formatCurrency(cartSummary.total)}
+                                    </div>
                                 </div>
-                                <div className="text-lg font-semibold text-gray-900">
-                                    Total: {formatCurrency(cartSummary.total)}
-                                </div>
+                                <Link href="/admin/cart">
+                                    <Button className="bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 relative">
+                                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-1.5 6H19" />
+                                        </svg>
+                                        View Cart
+                                        <span className="ml-2 bg-white text-pink-600 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                                            {cartSummary.itemCount}
+                                        </span>
+                                    </Button>
+                                </Link>
                             </div>
                         )}
                     </div>
@@ -475,8 +488,16 @@ interface ProductCardProps {
 }
 
 function ProductCard({ product, onAddToCart }: ProductCardProps) {
+    const [added, setAdded] = useState(false);
+
+    const handleAdd = () => {
+        onAddToCart(product.id);
+        setAdded(true);
+        setTimeout(() => setAdded(false), 1200);
+    };
+
     return (
-        <Card className="overflow-hidden hover:shadow-lg transition-shadow">
+        <Card className="overflow-hidden hover:shadow-lg transition-shadow flex flex-col">
             <Link href={`/admin/products/${product.id}`} className="block">
                 <div className="aspect-square bg-gray-100 relative">
                     <img
@@ -495,6 +516,33 @@ function ProductCard({ product, onAddToCart }: ProductCardProps) {
                     </div>
                 </CardHeader>
             </Link>
+            <CardContent className="pt-0 pb-3 px-4">
+                <Button
+                    size="sm"
+                    className={`w-full text-xs transition-colors ${
+                        added
+                            ? "bg-green-500 hover:bg-green-600 text-white"
+                            : "bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white"
+                    }`}
+                    onClick={handleAdd}
+                >
+                    {added ? (
+                        <>
+                            <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Added!
+                        </>
+                    ) : (
+                        <>
+                            <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-1.5 6H19" />
+                            </svg>
+                            Add to Cart
+                        </>
+                    )}
+                </Button>
+            </CardContent>
         </Card>
     );
 }

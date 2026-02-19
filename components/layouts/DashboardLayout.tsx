@@ -16,19 +16,23 @@ interface DashboardLayoutProps {
 const adminNavItems = [
     { href: "/admin", label: "Dashboard", icon: "home" },
     { href: "/admin/orders", label: "Orders", icon: "orders" },
-    { href: "/admin/products", label: "Products", icon: "products" },
-    { href: "/admin/customers", label: "Customers", icon: "customers" },
+    { href: "/admin/products", label: "Create Order", icon: "products" },
     { href: "/admin/outstanding", label: "Payment", icon: "outstanding" },
     { href: "/admin/payment-history", label: "Payment History", icon: "history" },
-    { href: "/admin/users", label: "Users", icon: "users" },
-    { href: "/admin/employees", label: "Employees", icon: "employees" },
     { href: "/admin/expenses", label: "Expenses", icon: "expenses" },
+];
+
+const adminSetupItems = [
+    { href: "/admin/inventory", label: "Products", icon: "products" },
+    { href: "/admin/employees", label: "Employees", icon: "employees" },
+    { href: "/admin/users", label: "Users", icon: "users" },
+    { href: "/admin/customers", label: "Customers", icon: "customers" },
 ];
 
 const salespersonNavItems = [
     { href: "/salesperson", label: "Dashboard", icon: "home" },
     { href: "/salesperson/orders", label: "Orders", icon: "orders" },
-    { href: "/salesperson/products", label: "Products", icon: "products" },
+    { href: "/salesperson/products", label: "Create Order", icon: "products" },
     { href: "/salesperson/customers", label: "Customers", icon: "customers" },
     { href: "/salesperson/outstanding", label: "Payment", icon: "outstanding" },
     { href: "/salesperson/payment-history", label: "Payment History", icon: "history" },
@@ -222,6 +226,36 @@ export default function DashboardLayout({
                             </Link>
                         );
                     })}
+
+                    {resolvedRole === "admin" && (
+                        <>
+                            <div className="pt-4 pb-1">
+                                <div className="border-t border-gray-200 mb-3" />
+                                <p className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                    Set Up
+                                </p>
+                            </div>
+                            {adminSetupItems.map((item) => {
+                                const isActive = pathname === item.href;
+                                return (
+                                    <Link
+                                        key={item.href}
+                                        href={item.href}
+                                        className={cn(
+                                            "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors",
+                                            isActive
+                                                ? "bg-pink-50 text-pink-600"
+                                                : "text-gray-600 hover:bg-gray-100"
+                                        )}
+                                        onClick={() => setSidebarOpen(false)}
+                                    >
+                                        {icons[item.icon]}
+                                        <span className="font-medium">{item.label}</span>
+                                    </Link>
+                                );
+                            })}
+                        </>
+                    )}
                 </nav>
 
                 {/* Sidebar footer */}
@@ -262,10 +296,8 @@ export default function DashboardLayout({
 
                         {/* Right side items */}
                         <div className="flex items-center gap-3 ml-auto">
-                            {/* Cart Button - Only for salesperson */}
-                            {resolvedRole === "salesperson" && (
-                                <CartButton />
-                            )}
+                            {/* Cart Button - for both admin and salesperson */}
+                            <CartButton role={resolvedRole} />
 
                             {/* User menu */}
                             <div className="relative">
@@ -349,14 +381,15 @@ export default function DashboardLayout({
     );
 }
 
-// Cart Button Component for Salesperson
-function CartButton() {
+// Cart Button Component
+function CartButton({ role }: { role: string }) {
     const { cartSummary } = useCart();
+    const cartHref = role === "admin" ? "/admin/cart" : "/salesperson/cart";
 
     return (
-        <Link href="/salesperson/cart">
+        <Link href={cartHref}>
             <button
-                id="salesperson-cart-button"
+                id="cart-button"
                 className="p-2 rounded-full hover:bg-gray-100 relative"
             >
                 <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
