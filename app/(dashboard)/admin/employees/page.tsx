@@ -68,17 +68,18 @@ export default function EmployeesPage() {
     const [salDeduction, setSalDeduction] = useState("");
     const [savingSal, setSavingSal] = useState(false);
 
-    const fetchData = useCallback(async () => {
+    const fetchData = useCallback(async (signal?: AbortSignal) => {
         if (!token) return;
         setLoading(true);
         try {
             const [emps, sals] = await Promise.all([
-                apiFetch<Employee[]>("/employees", { token }),
-                apiFetch<SalaryRecord[]>("/salaries", { token }),
+                apiFetch<Employee[]>("/employees", { token, signal }),
+                apiFetch<SalaryRecord[]>("/salaries", { token, signal }),
             ]);
             setEmployees(emps);
             setSalaryRecords(sals);
         } catch (err) {
+            if (err instanceof Error && err.name === 'AbortError') return;
             setError(
                 err instanceof Error ? err.message : "Failed to load data"
             );
@@ -88,7 +89,9 @@ export default function EmployeesPage() {
     }, [token]);
 
     useEffect(() => {
-        fetchData();
+        const controller = new AbortController();
+        fetchData(controller.signal);
+        return () => controller.abort();
     }, [fetchData]);
 
     const handleCreateEmployee = async () => {
@@ -324,19 +327,19 @@ export default function EmployeesPage() {
                                             <td className="py-3 px-4 text-center text-green-600">
                                                 {Number(s.bonus_amount) > 0
                                                     ? formatCurrency(
-                                                          Number(
-                                                              s.bonus_amount
-                                                          )
-                                                      )
+                                                        Number(
+                                                            s.bonus_amount
+                                                        )
+                                                    )
                                                     : "-"}
                                             </td>
                                             <td className="py-3 px-4 text-center text-red-600">
                                                 {Number(s.deduction_amount) > 0
                                                     ? formatCurrency(
-                                                          Number(
-                                                              s.deduction_amount
-                                                          )
-                                                      )
+                                                        Number(
+                                                            s.deduction_amount
+                                                        )
+                                                    )
                                                     : "-"}
                                             </td>
                                             <td className="py-3 px-4 text-center font-semibold text-gray-900">

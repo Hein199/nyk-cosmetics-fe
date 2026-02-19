@@ -135,7 +135,7 @@ export default function SalespersonPage() {
     const [selectedYear, setSelectedYear] = useState("2025");
     const [selectedMonthNum, setSelectedMonthNum] = useState("12");
 
-    const cacheKey = `nyk-dashboard-orders-cache:${user?.id ?? "anon"}`;
+    const cacheKey = useMemo(() => `nyk-dashboard-orders-cache:${user?.id ?? "anon"}`, [user?.id]);
 
     const loadCachedOrders = () => {
         if (typeof window === "undefined") {
@@ -167,7 +167,7 @@ export default function SalespersonPage() {
     };
 
     const fetchOrders = useCallback(
-        async (force = false) => {
+        async (force = false, signal?: AbortSignal) => {
             if (!token) {
                 setOrdersLoading(false);
                 return;
@@ -190,6 +190,7 @@ export default function SalespersonPage() {
                     headers: {
                         Authorization: `Bearer ${token}`,
                     },
+                    signal,
                 });
 
                 if (!response.ok) {
@@ -202,6 +203,7 @@ export default function SalespersonPage() {
                 saveCachedOrders(data);
                 setLastUpdated(new Date());
             } catch (error) {
+                if (error instanceof Error && error.name === "AbortError") return;
                 const message = error instanceof Error ? error.message : "Failed to load orders";
                 setOrdersError(message);
             } finally {
@@ -212,7 +214,9 @@ export default function SalespersonPage() {
     );
 
     useEffect(() => {
-        fetchOrders();
+        const controller = new AbortController();
+        fetchOrders(false, controller.signal);
+        return () => controller.abort();
     }, [fetchOrders]);
 
     // Combine year and month for monthly targets

@@ -51,14 +51,15 @@ export default function AdminPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const fetchStats = useCallback(async () => {
+    const fetchStats = useCallback(async (signal?: AbortSignal) => {
         if (!token) return;
         setLoading(true);
         setError(null);
         try {
-            const data = await apiFetch<DashboardStats>("/dashboard/stats", { token });
+            const data = await apiFetch<DashboardStats>("/dashboard/stats", { token, signal });
             setStats(data);
         } catch (err) {
+            if (err instanceof Error && err.name === 'AbortError') return;
             setError(err instanceof Error ? err.message : "Failed to load dashboard");
         } finally {
             setLoading(false);
@@ -66,7 +67,9 @@ export default function AdminPage() {
     }, [token]);
 
     useEffect(() => {
-        fetchStats();
+        const controller = new AbortController();
+        fetchStats(controller.signal);
+        return () => controller.abort();
     }, [fetchStats]);
 
     const totalSales = stats ? Number(stats.totalSales) : 0;

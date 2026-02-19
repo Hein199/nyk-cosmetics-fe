@@ -80,30 +80,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
-    // Save cart to localStorage whenever it changes
+    // Save all cart state to localStorage whenever any of it changes
     useEffect(() => {
         localStorage.setItem('salesperson-cart', JSON.stringify(cart));
-    }, [cart]);
-
-    useEffect(() => {
         localStorage.setItem('salesperson-selected-customer', selectedCustomer);
-    }, [selectedCustomer]);
-
-    useEffect(() => {
         localStorage.setItem('salesperson-customer-search', customerSearch);
-    }, [customerSearch]);
-
-    useEffect(() => {
         localStorage.setItem('salesperson-order-date', orderDate);
-    }, [orderDate]);
-
-    useEffect(() => {
         localStorage.setItem('salesperson-payment-type', paymentType);
-    }, [paymentType]);
-
-    useEffect(() => {
         localStorage.setItem('salesperson-remark', remark);
-    }, [remark]);
+    }, [cart, selectedCustomer, customerSearch, orderDate, paymentType, remark]);
     const addToCart = (productId: string, quantity: number, unit: string, customPrice?: number, productName?: string, productPrice?: number) => {
         if (!productName || !productPrice) return;
 
