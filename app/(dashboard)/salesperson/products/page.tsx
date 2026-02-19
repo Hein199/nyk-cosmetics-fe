@@ -227,8 +227,8 @@ export default function ProductsPage() {
 
     // Get selected customer details
     const selectedCustomerDetails = useMemo(() => {
-        return customers.find(c => c.id === selectedCustomer);
-    }, [selectedCustomer]);
+        return customers.find(c => String(c.id) === selectedCustomer);
+    }, [selectedCustomer, customers]);
 
     // Local add to cart function that uses global context
     const localAddToCart = (productId: number) => {
