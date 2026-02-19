@@ -233,10 +233,22 @@ export default function OrdersPage() {
         }
     }, [token, cacheKey]);
 
-    const updateOrderStatus = useCallback(async (orderId: string, action: "accept" | "decline") => {
+    const updateOrderStatus = useCallback(async (orderId: string, action: "accept" | "decline", prevStatus: string) => {
         if (!token) {
             return;
         }
+
+        const newStatus = action === "accept" ? "confirmed" : "cancelled";
+
+        // Optimistic update — change UI instantly before API call
+        setOrders((prev) =>
+            prev.map((order) =>
+                order.id === orderId ? { ...order, status: newStatus } : order
+            )
+        );
+        setOrderDetails((prev) =>
+            prev?.id === orderId ? { ...prev, status: newStatus } : prev
+        );
 
         const endpoint = action === "accept" ? "confirm" : "cancel";
         try {
@@ -251,16 +263,54 @@ export default function OrdersPage() {
                 const message = await response.text();
                 throw new Error(message || "Failed to update order");
             }
-
+        } catch (error) {
+            // Revert optimistic update on failure using the actual previous status
             setOrders((prev) =>
                 prev.map((order) =>
-                    order.id === orderId
-                        ? { ...order, status: action === "accept" ? "confirmed" : "cancelled" }
-                        : order
+                    order.id === orderId ? { ...order, status: prevStatus } : order
                 )
             );
-        } catch (error) {
+            setOrderDetails((prev) =>
+                prev?.id === orderId ? { ...prev, status: prevStatus } : prev
+            );
             const message = error instanceof Error ? error.message : "Failed to update order";
+            setOrdersError(message);
+        }
+    }, [token]);
+
+    const deliverOrder = useCallback(async (orderId: string) => {
+        if (!token) return;
+
+        // Optimistic update
+        setOrders((prev) =>
+            prev.map((order) =>
+                order.id === orderId ? { ...order, status: "delivered" } : order
+            )
+        );
+        setOrderDetails((prev) =>
+            prev?.id === orderId ? { ...prev, status: "delivered" } : prev
+        );
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/_api/orders/${orderId}/deliver`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) {
+                const message = await response.text();
+                throw new Error(message || "Failed to mark order as delivered");
+            }
+        } catch (error) {
+            // Revert on failure
+            setOrders((prev) =>
+                prev.map((order) =>
+                    order.id === orderId ? { ...order, status: "confirmed" } : order
+                )
+            );
+            setOrderDetails((prev) =>
+                prev?.id === orderId ? { ...prev, status: "confirmed" } : prev
+            );
+            const message = error instanceof Error ? error.message : "Failed to mark order as delivered";
             setOrdersError(message);
         }
     }, [token]);
@@ -898,27 +948,40 @@ export default function OrdersPage() {
 
                                     {orderDetails.salesperson?.id && (
                                         <div className="mt-4 flex items-center justify-end gap-3">
-                                            <Button
-                                                variant="outline"
-                                                className="h-10 w-28"
-                                                onClick={() => updateOrderStatus(orderDetails.id, "accept")}
-                                            >
-                                                Accept
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                className="h-10 w-28"
-                                                onClick={() => handleEditOrder(orderDetails.id)}
-                                            >
-                                                Edit
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                className="h-10 w-28 text-red-600 border-red-200 hover:bg-red-50"
-                                                onClick={() => updateOrderStatus(orderDetails.id, "decline")}
-                                            >
-                                                Decline
-                                            </Button>
+                                            {orderDetails.status.toLowerCase() === "pending_admin" && (
+                                                <>
+                                                    <Button
+                                                        variant="outline"
+                                                        className="h-10 w-28"
+                                                        onClick={() => updateOrderStatus(orderDetails.id, "accept", orderDetails.status)}
+                                                    >
+                                                        Accept
+                                                    </Button>
+                                                    <Button
+                                                        variant="outline"
+                                                        className="h-10 w-28"
+                                                        onClick={() => handleEditOrder(orderDetails.id)}
+                                                    >
+                                                        Edit
+                                                    </Button>
+                                                    <Button
+                                                        variant="outline"
+                                                        className="h-10 w-28 text-red-600 border-red-200 hover:bg-red-50"
+                                                        onClick={() => updateOrderStatus(orderDetails.id, "decline", orderDetails.status)}
+                                                    >
+                                                        Decline
+                                                    </Button>
+                                                </>
+                                            )}
+                                            {orderDetails.status.toLowerCase() === "confirmed" && (
+                                                <Button
+                                                    variant="outline"
+                                                    className="h-10 w-28 text-green-700 border-green-400 hover:bg-green-50"
+                                                    onClick={() => deliverOrder(orderDetails.id)}
+                                                >
+                                                    Deliver
+                                                </Button>
+                                            )}
                                         </div>
                                     )}
                                 </div>
