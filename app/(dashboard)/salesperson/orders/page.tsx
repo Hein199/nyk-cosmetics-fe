@@ -19,30 +19,31 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
 import { API_BASE_URL } from "@/lib/constants";
+import { formatId } from "@/lib/utils";
 
 type OrderListItem = {
-    id: string;
+    id: number;
     created_at: string;
     status: string;
     total_amount: string | number;
     customer: { name: string };
-    items: Array<{ id: string }>;
-    salesperson?: { id: string; username: string } | null;
+    items: Array<{ id: number }>;
+    salesperson?: { id: number; username: string } | null;
 };
 
 type OrderDetail = {
-    id: string;
+    id: number;
     created_at: string;
     status: string;
     total_amount: string | number;
     customer: { name: string; phone_number: string; address: string };
     items: Array<{
-        id: string;
+        id: number;
         quantity: number;
         unit_price: string | number;
         product?: { name: string; category?: string | null } | null;
     }>;
-    salesperson?: { id: string; username: string } | null;
+    salesperson?: { id: number; username: string } | null;
 };
 
 const statusColors: Record<string, string> = {
@@ -154,7 +155,7 @@ export default function OrdersPage() {
 
     // Dialog state for order details
     const [isDialogOpen, setIsDialogOpen] = useState(false);
-    const [selectedOrder, setSelectedOrder] = useState<string | null>(null);
+    const [selectedOrder, setSelectedOrder] = useState<number | null>(null);
     const [orderDetails, setOrderDetails] = useState<OrderDetail | null>(null);
     const [detailsLoading, setDetailsLoading] = useState(false);
     const [detailsError, setDetailsError] = useState<string | null>(null);
@@ -253,7 +254,7 @@ export default function OrdersPage() {
     }, [fromDate, toDate]);
 
     // Handle view details click
-    const handleViewDetails = async (orderId: string) => {
+    const handleViewDetails = async (orderId: number) => {
         setSelectedOrder(orderId);
         setIsDialogOpen(true);
         if (!token) {
@@ -297,7 +298,7 @@ export default function OrdersPage() {
 
             // Search filter
             const matchesSearch = searchQuery === "" ||
-                order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                String(order.id).toLowerCase().includes(searchQuery.toLowerCase()) ||
                 order.customer.name.toLowerCase().includes(searchQuery.toLowerCase());
 
             return matchesDateRange && matchesStatus && matchesSearch;
@@ -478,7 +479,7 @@ export default function OrdersPage() {
                                     className="border border-gray-200 rounded-lg p-4 space-y-3 bg-white"
                                 >
                                     <div className="flex items-center justify-between">
-                                        <span className="font-medium text-gray-900">{order.id}</span>
+                                        <span className="font-medium text-gray-900">{formatId('ORD', order.id)}</span>
                                         <span
                                             className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[order.status.toLowerCase()] ?? "bg-gray-100 text-gray-800"}`}
                                         >
@@ -568,7 +569,7 @@ export default function OrdersPage() {
                                                     } transition-colors`}
                                             >
                                                 <td className="py-3 px-4 text-center font-semibold text-gray-900 border-r border-gray-300">
-                                                    {order.id}
+                                                    {formatId('ORD', order.id)}
                                                 </td>
                                                 <td className="py-3 px-4 text-center font-medium text-gray-900 border-r border-gray-300">
                                                     {order.customer.name}

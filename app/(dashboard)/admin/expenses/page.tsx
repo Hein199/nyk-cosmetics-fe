@@ -20,7 +20,7 @@ import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 
 interface Expense {
-    id: string;
+    id: number;
     description: string;
     amount: string | number;
     category: string;

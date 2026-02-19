@@ -6,22 +6,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
+import { formatId } from "@/lib/utils";
 
 interface OrderDetail {
-    id: string;
+    id: number;
     created_at: string;
     total_amount: string | number;
     status: string;
-    customer: { id: string; name: string; phone_number: string };
-    salesperson: { id: string; username: string } | null;
+    customer: { id: number; name: string; phone_number: string };
+    salesperson: { id: number; username: string } | null;
     loan: {
-        id: string;
+        id: number;
         original_amount: string | number;
         remaining_amount: string | number;
         status: string;
     } | null;
     items: {
-        id: string;
+        id: number;
         quantity: number;
         unit_price: string | number;
         product: { name: string; category: string };
@@ -124,7 +125,7 @@ export default function OutstandingDetailPage() {
                         &larr; Back
                     </Button>
                     <h1 className="text-xl font-semibold text-gray-900">
-                        Order #{order.id.slice(0, 8)}
+                        Order {formatId('ORD', order.id)}
                     </h1>
                 </div>
 
@@ -217,7 +218,7 @@ export default function OutstandingDetailPage() {
                                         <td className="py-3 px-4 text-right font-semibold text-gray-900">
                                             {formatCurrency(
                                                 item.quantity *
-                                                    Number(item.unit_price)
+                                                Number(item.unit_price)
                                             )}
                                         </td>
                                     </tr>

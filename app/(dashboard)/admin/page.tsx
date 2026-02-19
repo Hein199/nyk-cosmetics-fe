@@ -18,9 +18,9 @@ interface DashboardStats {
     ordersToday: number;
     pendingOrders: number;
     lowStockCount: number;
-    lowStockProducts: { id: string; name: string; stock: number }[];
+    lowStockProducts: { id: number; name: string; stock: number }[];
     recentOrders: {
-        id: string;
+        id: number;
         customer: string;
         salesperson: string;
         amount: string | number;

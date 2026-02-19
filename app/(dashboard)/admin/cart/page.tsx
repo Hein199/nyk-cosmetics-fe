@@ -10,7 +10,7 @@ import { useAuth } from "@/lib/auth-context";
 import { API_BASE_URL } from "@/lib/constants";
 
 type Customer = {
-    id: string;
+    id: number;
     name: string;
     address: string;
     phone_number: string;
@@ -96,7 +96,7 @@ export default function AdminCartPage() {
     }, [customerSearch, customers]);
 
     const selectedCustomerDetails = useMemo(
-        () => customers.find((c) => c.id === selectedCustomer),
+        () => customers.find((c) => String(c.id) === selectedCustomer),
         [selectedCustomer, customers]
     );
 
@@ -112,7 +112,7 @@ export default function AdminCartPage() {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    customer_id: selectedCustomer,
+                    customer_id: parseInt(selectedCustomer),
                     order_date: orderDate,
                     payment_type: paymentType,
                     remark,
@@ -193,7 +193,7 @@ export default function AdminCartPage() {
                                                         <button
                                                             key={customer.id}
                                                             onClick={() => {
-                                                                setSelectedCustomer(customer.id);
+                                                                setSelectedCustomer(String(customer.id));
                                                                 setCustomerSearch(customer.name);
                                                                 setShowCustomerDropdown(false);
                                                             }}

@@ -12,9 +12,10 @@ import {
 } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
 import { API_BASE_URL } from "@/lib/constants";
+import { formatId } from "@/lib/utils";
 
 type OrderListItem = {
-    id: string;
+    id: number;
     created_at: string;
     status: string;
     total_amount: string | number;
@@ -22,7 +23,7 @@ type OrderListItem = {
 };
 
 type DashboardOrder = {
-    id: string;
+    id: number;
     customer: string;
     amount: number;
     status: string;
@@ -662,7 +663,7 @@ export default function SalespersonPage() {
                                     className="border border-gray-200 rounded-lg p-4 space-y-2"
                                 >
                                     <div className="flex items-center justify-between">
-                                        <span className="font-medium text-gray-900">{order.id}</span>
+                                        <span className="font-medium text-gray-900">{formatId('ORD', order.id)}</span>
                                         <span
                                             className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[order.status] ?? "bg-gray-100 text-gray-800"}`}
                                         >
@@ -734,7 +735,7 @@ export default function SalespersonPage() {
                                                     } transition-colors`}
                                             >
                                                 <td className="py-3 px-4 text-center font-semibold text-gray-900 border-r border-gray-300">
-                                                    {order.id}
+                                                    {formatId('ORD', order.id)}
                                                 </td>
                                                 <td className="py-3 px-4 font-medium text-gray-900 border-r border-gray-300">
                                                     {order.customer}

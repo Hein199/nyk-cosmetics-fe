@@ -20,12 +20,12 @@ import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 
 interface User {
-    id: string;
+    id: number;
     username: string;
     role: string;
     created_at: string;
     salesperson?: {
-        id: string;
+        id: number;
         name: string;
         monthly_target: string | number;
     } | null;

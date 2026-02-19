@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
 export interface CartItem {
-    id: string;
+    id: number;
     name: string;
     price: number;
     customPrice?: number;
@@ -19,7 +19,7 @@ interface CartContextType {
     orderDate: string;
     paymentType: string;
     remark: string;
-    addToCart: (productId: string, quantity: number, unit: string, customPrice?: number, productName?: string, productPrice?: number) => void;
+    addToCart: (productId: number, quantity: number, unit: string, customPrice?: number, productName?: string, productPrice?: number) => void;
     removeFromCart: (index: number) => void;
     clearCart: () => void;
     setSelectedCustomer: (customerId: string) => void;
@@ -89,7 +89,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('salesperson-payment-type', paymentType);
         localStorage.setItem('salesperson-remark', remark);
     }, [cart, selectedCustomer, customerSearch, orderDate, paymentType, remark]);
-    const addToCart = (productId: string, quantity: number, unit: string, customPrice?: number, productName?: string, productPrice?: number) => {
+    const addToCart = (productId: number, quantity: number, unit: string, customPrice?: number, productName?: string, productPrice?: number) => {
         if (!productName || !productPrice) return;
 
         const finalPrice = customPrice !== undefined ? customPrice : productPrice;

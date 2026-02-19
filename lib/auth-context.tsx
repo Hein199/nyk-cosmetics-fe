@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { API_BASE_URL } from "@/lib/constants";
 
 export type AuthUser = {
-    id: string;
+    id: number;
     username: string;
     role: "admin" | "salesperson";
 };

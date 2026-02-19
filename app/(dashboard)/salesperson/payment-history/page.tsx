@@ -12,15 +12,16 @@ import {
 } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
+import { formatId } from "@/lib/utils";
 
 interface Payment {
-    id: string;
+    id: number;
     created_at: string;
     amount_paid: string | number;
     payment_type: string;
     status: string;
-    customer: { id: string; name: string; phone_number: string } | null;
-    order: { id: string; total_amount: string | number; created_at: string } | null;
+    customer: { id: number; name: string; phone_number: string } | null;
+    order: { id: number; total_amount: string | number; created_at: string } | null;
 }
 
 function formatCurrency(amount: number) {
@@ -85,8 +86,8 @@ export default function PaymentHistoryPage() {
             const matchesSearch =
                 !q ||
                 (p.customer?.name ?? "").toLowerCase().includes(q) ||
-                p.id.toLowerCase().includes(q) ||
-                (p.order?.id ?? "").toLowerCase().includes(q);
+                String(p.id).includes(q) ||
+                (p.order ? String(p.order.id) : "").includes(q);
             return matchesFrom && matchesTo && matchesStatus && matchesSearch;
         });
     }, [payments, searchQuery, fromDate, toDate, statusFilter]);
@@ -240,7 +241,7 @@ export default function PaymentHistoryPage() {
                                         >
                                             <div className="flex items-center justify-between">
                                                 <span className="font-medium text-gray-900">
-                                                    {p.id.slice(0, 8)}
+                                                    {formatId('PAY', p.id)}
                                                 </span>
                                                 <span
                                                     className={`px-2 py-1 text-xs font-bold rounded border ${p.status === "CONFIRMED" ? "bg-green-50 text-green-600 border-green-200" : "bg-yellow-50 text-yellow-600 border-yellow-200"}`}
@@ -263,7 +264,7 @@ export default function PaymentHistoryPage() {
                                             </div>
                                             <p className="text-xs text-gray-500">
                                                 {p.payment_type} — Order:{" "}
-                                                {p.order?.id.slice(0, 8) ?? "-"}
+                                                {p.order ? formatId('ORD', p.order.id) : "-"}
                                             </p>
                                         </div>
                                     ))
@@ -315,7 +316,7 @@ export default function PaymentHistoryPage() {
                                                     className="border-b border-gray-100 hover:bg-gray-50"
                                                 >
                                                     <td className="py-3 px-4 text-center text-sm font-medium text-gray-900 border-l border-gray-200">
-                                                        {p.id.slice(0, 8)}
+                                                        {formatId('PAY', p.id)}
                                                     </td>
                                                     <td className="py-3 px-4 text-center text-sm text-gray-900 border-l border-gray-200">
                                                         {formatDate(
@@ -327,10 +328,7 @@ export default function PaymentHistoryPage() {
                                                             "N/A"}
                                                     </td>
                                                     <td className="py-3 px-4 text-center text-sm text-gray-900 border-l border-gray-200">
-                                                        {p.order?.id.slice(
-                                                            0,
-                                                            8
-                                                        ) ?? "-"}
+                                                        {p.order ? formatId('ORD', p.order.id) : "-"}
                                                     </td>
                                                     <td className="py-3 px-4 text-center text-sm font-semibold text-gray-900 border-l border-gray-200">
                                                         {formatCurrency(
