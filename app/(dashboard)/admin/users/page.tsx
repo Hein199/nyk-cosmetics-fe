@@ -47,13 +47,14 @@ export default function UsersPage() {
     const [salespersonName, setSalespersonName] = useState("");
     const [monthlyTarget, setMonthlyTarget] = useState("");
 
-    const fetchUsers = useCallback(async () => {
+    const fetchUsers = useCallback(async (signal?: AbortSignal) => {
         if (!token) return;
         setLoading(true);
         try {
-            const data = await apiFetch<User[]>("/users", { token });
+            const data = await apiFetch<User[]>("/users", { token, signal });
             setUsers(data);
         } catch (err) {
+            if (err instanceof Error && err.name === "AbortError") return;
             setError(
                 err instanceof Error ? err.message : "Failed to load users"
             );
@@ -63,7 +64,9 @@ export default function UsersPage() {
     }, [token]);
 
     useEffect(() => {
-        fetchUsers();
+        const controller = new AbortController();
+        fetchUsers(controller.signal);
+        return () => controller.abort();
     }, [fetchUsers]);
 
     const resetForm = () => {
@@ -223,18 +226,18 @@ export default function UsersPage() {
                                             <td className="py-3 px-4 text-center text-gray-700">
                                                 {u.salesperson?.monthly_target
                                                     ? new Intl.NumberFormat(
-                                                          "en-MM",
-                                                          {
-                                                              style: "currency",
-                                                              currency: "MMK",
-                                                              minimumFractionDigits: 0,
-                                                          }
-                                                      ).format(
-                                                          Number(
-                                                              u.salesperson
-                                                                  .monthly_target
-                                                          )
-                                                      )
+                                                        "en-MM",
+                                                        {
+                                                            style: "currency",
+                                                            currency: "MMK",
+                                                            minimumFractionDigits: 0,
+                                                        }
+                                                    ).format(
+                                                        Number(
+                                                            u.salesperson
+                                                                .monthly_target
+                                                        )
+                                                    )
                                                     : "-"}
                                             </td>
                                             <td className="py-3 px-4 text-center text-sm text-gray-500">
@@ -362,8 +365,8 @@ export default function UsersPage() {
                                 {saving
                                     ? "Saving..."
                                     : editUser
-                                      ? "Update"
-                                      : "Create"}
+                                        ? "Update"
+                                        : "Create"}
                             </Button>
                         </div>
                     </div>

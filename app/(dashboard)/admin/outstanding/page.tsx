@@ -101,17 +101,18 @@ export default function OutstandingPage() {
     const [allPayments, setAllPayments] = useState<PaymentRecord[]>([]);
     const [loadingPayments, setLoadingPayments] = useState(false);
 
-    const fetchOrders = useCallback(async () => {
+    const fetchOrders = useCallback(async (signal?: AbortSignal) => {
         if (!token) return;
         setLoading(true);
         setError(null);
         try {
             const data = await apiFetch<OutstandingOrder[]>(
                 "/orders/outstanding",
-                { token }
+                { token, signal }
             );
             setOrders(data);
         } catch (err) {
+            if (err instanceof Error && err.name === 'AbortError') return;
             setError(
                 err instanceof Error
                     ? err.message
@@ -123,7 +124,9 @@ export default function OutstandingPage() {
     }, [token]);
 
     useEffect(() => {
-        fetchOrders();
+        const controller = new AbortController();
+        fetchOrders(controller.signal);
+        return () => controller.abort();
     }, [fetchOrders]);
 
     const fetchPayments = useCallback(async () => {
@@ -552,7 +555,7 @@ export default function OutstandingPage() {
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            onClick={fetchOrders}
+                                            onClick={() => fetchOrders()}
                                             className="h-10 w-10 p-0"
                                         >
                                             <svg

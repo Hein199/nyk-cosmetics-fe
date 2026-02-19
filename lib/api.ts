@@ -5,13 +5,14 @@ interface FetchOptions {
     body?: unknown;
     token?: string | null;
     params?: Record<string, string>;
+    signal?: AbortSignal;
 }
 
 export async function apiFetch<T = unknown>(
     path: string,
     options: FetchOptions = {},
 ): Promise<T> {
-    const { method = 'GET', body, token, params } = options;
+    const { method = 'GET', body, token, params, signal } = options;
 
     let url = `${API_BASE_URL}/_api${path}`;
     if (params) {
@@ -35,6 +36,7 @@ export async function apiFetch<T = unknown>(
         method,
         headers,
         body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal,
     });
 
     if (!response.ok) {

@@ -103,7 +103,8 @@ export default function OrdersPage() {
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
     const [isEditMode, setIsEditMode] = useState(false);
 
-    const dateRangeKey = `nyk-orders-date-range:${user?.id ?? "anon"}`;
+    const cacheKey = useMemo(() => `nyk-orders-cache:${user?.id ?? "anon"}`, [user?.id]);
+    const dateRangeKey = useMemo(() => `nyk-orders-date-range:${user?.id ?? "anon"}`, [user?.id]);
 
     const loadDateRange = () => {
         if (typeof window === "undefined") {
@@ -161,8 +162,6 @@ export default function OrdersPage() {
     const [detailsLoading, setDetailsLoading] = useState(false);
     const [detailsError, setDetailsError] = useState<string | null>(null);
 
-    const cacheKey = `nyk-orders-cache:${user?.id ?? "anon"}`;
-
     const loadCachedOrders = () => {
         if (typeof window === "undefined") {
             return null;
@@ -192,7 +191,7 @@ export default function OrdersPage() {
         );
     };
 
-    const fetchOrders = useCallback(async (force = false) => {
+    const fetchOrders = useCallback(async (force = false, signal?: AbortSignal) => {
         if (!token) {
             return;
         }
@@ -214,6 +213,7 @@ export default function OrdersPage() {
                 headers: {
                     Authorization: `Bearer ${token}`,
                 },
+                signal,
             });
 
             if (!response.ok) {
@@ -226,6 +226,7 @@ export default function OrdersPage() {
             saveCachedOrders(data);
             setLastUpdated(new Date());
         } catch (error) {
+            if (error instanceof Error && error.name === 'AbortError') return;
             const message = error instanceof Error ? error.message : "Failed to load orders";
             setOrdersError(message);
         } finally {
@@ -316,16 +317,18 @@ export default function OrdersPage() {
     }, [token]);
 
     useEffect(() => {
+        const controller = new AbortController();
         if (typeof window !== "undefined") {
             const shouldRefresh = sessionStorage.getItem("nyk-orders-refresh") === "true";
             if (shouldRefresh) {
                 sessionStorage.removeItem("nyk-orders-refresh");
-                fetchOrders(true);
-                return;
+                fetchOrders(true, controller.signal);
+                return () => controller.abort();
             }
         }
 
-        fetchOrders();
+        fetchOrders(false, controller.signal);
+        return () => controller.abort();
     }, [fetchOrders]);
 
     useEffect(() => {

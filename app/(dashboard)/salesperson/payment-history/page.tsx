@@ -50,14 +50,15 @@ export default function PaymentHistoryPage() {
     const [toDate, setToDate] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
 
-    const fetchPayments = useCallback(async () => {
+    const fetchPayments = useCallback(async (signal?: AbortSignal) => {
         if (!token) return;
         setLoading(true);
         setError(null);
         try {
-            const data = await apiFetch<Payment[]>("/payments", { token });
+            const data = await apiFetch<Payment[]>("/payments", { token, signal });
             setPayments(data);
         } catch (err) {
+            if (err instanceof Error && err.name === "AbortError") return;
             setError(
                 err instanceof Error ? err.message : "Failed to load payments"
             );
@@ -67,7 +68,9 @@ export default function PaymentHistoryPage() {
     }, [token]);
 
     useEffect(() => {
-        fetchPayments();
+        const controller = new AbortController();
+        fetchPayments(controller.signal);
+        return () => controller.abort();
     }, [fetchPayments]);
 
     const filteredPayments = useMemo(() => {

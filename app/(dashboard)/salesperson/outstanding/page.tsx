@@ -93,17 +93,18 @@ export default function OutstandingPage() {
         }[]
     >([]);
 
-    const fetchOrders = useCallback(async () => {
+    const fetchOrders = useCallback(async (signal?: AbortSignal) => {
         if (!token) return;
         setLoading(true);
         setError(null);
         try {
             const data = await apiFetch<OutstandingOrder[]>(
                 "/orders/outstanding",
-                { token }
+                { token, signal }
             );
             setOrders(data);
         } catch (err) {
+            if (err instanceof Error && err.name === 'AbortError') return;
             setError(
                 err instanceof Error
                     ? err.message
@@ -115,7 +116,9 @@ export default function OutstandingPage() {
     }, [token]);
 
     useEffect(() => {
-        fetchOrders();
+        const controller = new AbortController();
+        fetchOrders(controller.signal);
+        return () => controller.abort();
     }, [fetchOrders]);
 
     const filteredOrders = useMemo(() => {
@@ -493,7 +496,7 @@ export default function OutstandingPage() {
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            onClick={fetchOrders}
+                                            onClick={() => fetchOrders()}
                                             className="h-10 w-10 p-0"
                                         >
                                             <svg
@@ -591,8 +594,8 @@ export default function OutstandingPage() {
                                                         </span>
                                                         <span
                                                             className={`px-2 py-1 text-xs font-bold rounded border ${remaining === 0
-                                                                    ? "bg-yellow-50 text-yellow-600 border-yellow-200"
-                                                                    : "bg-red-50 text-red-600 border-red-200"
+                                                                ? "bg-yellow-50 text-yellow-600 border-yellow-200"
+                                                                : "bg-red-50 text-red-600 border-red-200"
                                                                 }`}
                                                         >
                                                             {remaining === 0
@@ -774,8 +777,8 @@ export default function OutstandingPage() {
                                                             <td className="py-3 px-4 text-center border-l border-gray-200">
                                                                 <span
                                                                     className={`inline-flex items-center justify-center h-9 w-24 px-2 text-xs font-bold rounded border ${remaining === 0
-                                                                            ? "bg-yellow-50 text-yellow-600 border-yellow-200"
-                                                                            : "bg-red-50 text-red-600 border-red-200"
+                                                                        ? "bg-yellow-50 text-yellow-600 border-yellow-200"
+                                                                        : "bg-red-50 text-red-600 border-red-200"
                                                                         }`}
                                                                 >
                                                                     {remaining ===

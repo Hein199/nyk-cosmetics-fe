@@ -61,7 +61,7 @@ export default function CustomersPage() {
         location: ""
     });
 
-    const cacheKey = `nyk-customers-cache:${user?.id ?? "anon"}`;
+    const cacheKey = useMemo(() => `nyk-customers-cache:${user?.id ?? "anon"}`, [user?.id]);
 
     const loadCachedCustomers = () => {
         if (typeof window === "undefined") {
@@ -92,7 +92,7 @@ export default function CustomersPage() {
         );
     };
 
-    const fetchCustomers = useCallback(async (force = false) => {
+    const fetchCustomers = useCallback(async (force = false, signal?: AbortSignal) => {
         if (!token) {
             return;
         }
@@ -114,6 +114,7 @@ export default function CustomersPage() {
                 headers: {
                     Authorization: `Bearer ${token}`,
                 },
+                signal,
             });
 
             if (!response.ok) {
@@ -126,6 +127,7 @@ export default function CustomersPage() {
             saveCachedCustomers(data);
             setLastUpdated(new Date());
         } catch (err) {
+            if (err instanceof Error && err.name === "AbortError") return;
             const message = err instanceof Error ? err.message : "Failed to load customers";
             setError(message);
         } finally {
@@ -134,7 +136,9 @@ export default function CustomersPage() {
     }, [token, cacheKey]);
 
     useEffect(() => {
-        fetchCustomers();
+        const controller = new AbortController();
+        fetchCustomers(false, controller.signal);
+        return () => controller.abort();
     }, [fetchCustomers]);
 
     const handleAddCustomer = async () => {

@@ -57,8 +57,8 @@ export default function ProductsPage() {
     const [customerError, setCustomerError] = useState<string | null>(null);
     const customerDropdownRef = useRef<HTMLDivElement>(null);
 
-    const productsCacheKey = `nyk-products-cache:${user?.id ?? "anon"}`;
-    const customersCacheKey = `nyk-products-customers-cache:${user?.id ?? "anon"}`;
+    const productsCacheKey = useMemo(() => `nyk-products-cache:${user?.id ?? "anon"}`, [user?.id]);
+    const customersCacheKey = useMemo(() => `nyk-products-customers-cache:${user?.id ?? "anon"}`, [user?.id]);
 
     const loadCache = <T,>(key: string) => {
         if (typeof window === "undefined") {
@@ -111,7 +111,7 @@ export default function ProductsPage() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const fetchProducts = useCallback(async (force = false) => {
+    const fetchProducts = useCallback(async (force = false, signal?: AbortSignal) => {
         if (!token) {
             return;
         }
@@ -130,6 +130,7 @@ export default function ProductsPage() {
         try {
             const response = await fetch(`${API_BASE_URL}/_api/products`, {
                 headers: { Authorization: `Bearer ${token}` },
+                signal,
             });
             if (!response.ok) {
                 const message = await response.text();
@@ -140,6 +141,7 @@ export default function ProductsPage() {
             setProducts(activeProducts);
             saveCache(productsCacheKey, activeProducts);
         } catch (err) {
+            if (err instanceof Error && err.name === "AbortError") return;
             const message = err instanceof Error ? err.message : "Failed to load products";
             setProductError(message);
         } finally {
@@ -148,10 +150,12 @@ export default function ProductsPage() {
     }, [token, productsCacheKey]);
 
     useEffect(() => {
-        fetchProducts();
+        const controller = new AbortController();
+        fetchProducts(false, controller.signal);
+        return () => controller.abort();
     }, [fetchProducts]);
 
-    const fetchCustomers = useCallback(async (force = false) => {
+    const fetchCustomers = useCallback(async (force = false, signal?: AbortSignal) => {
         if (!token) {
             return;
         }
@@ -170,6 +174,7 @@ export default function ProductsPage() {
         try {
             const response = await fetch(`${API_BASE_URL}/_api/customers`, {
                 headers: { Authorization: `Bearer ${token}` },
+                signal,
             });
             if (!response.ok) {
                 const message = await response.text();
@@ -179,6 +184,7 @@ export default function ProductsPage() {
             setCustomers(data);
             saveCache(customersCacheKey, data);
         } catch (err) {
+            if (err instanceof Error && err.name === "AbortError") return;
             const message = err instanceof Error ? err.message : "Failed to load customers";
             setCustomerError(message);
         } finally {
@@ -187,7 +193,9 @@ export default function ProductsPage() {
     }, [token, customersCacheKey]);
 
     useEffect(() => {
-        fetchCustomers();
+        const controller = new AbortController();
+        fetchCustomers(false, controller.signal);
+        return () => controller.abort();
     }, [fetchCustomers]);
 
     // Product filtering

@@ -55,13 +55,14 @@ export default function ExpensesPage() {
         "CASH"
     );
 
-    const fetchExpenses = useCallback(async () => {
+    const fetchExpenses = useCallback(async (signal?: AbortSignal) => {
         if (!token) return;
         setLoading(true);
         try {
-            const data = await apiFetch<Expense[]>("/expenses", { token });
+            const data = await apiFetch<Expense[]>("/expenses", { token, signal });
             setExpenses(data);
         } catch (err) {
+            if (err instanceof Error && err.name === 'AbortError') return;
             setError(
                 err instanceof Error
                     ? err.message
@@ -73,7 +74,9 @@ export default function ExpensesPage() {
     }, [token]);
 
     useEffect(() => {
-        fetchExpenses();
+        const controller = new AbortController();
+        fetchExpenses(controller.signal);
+        return () => controller.abort();
     }, [fetchExpenses]);
 
     const filtered = useMemo(() => {
