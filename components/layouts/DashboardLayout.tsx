@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -32,7 +32,7 @@ const adminSetupItems = [
 const salespersonNavItems = [
     { href: "/salesperson", label: "Dashboard", icon: "home" },
     { href: "/salesperson/orders", label: "Orders", icon: "orders" },
-    { href: "/salesperson/products", label: "Create Order", icon: "products" },
+    { href: "/salesperson/products", label: "Products", icon: "products" },
     { href: "/salesperson/customers", label: "Customers", icon: "customers" },
     { href: "/salesperson/outstanding", label: "Payment", icon: "outstanding" },
     { href: "/salesperson/payment-history", label: "Payment History", icon: "history" },
@@ -153,10 +153,10 @@ export default function DashboardLayout({
         [resolvedRole]
     );
 
-    const handleLogout = () => {
+    const handleLogout = useCallback(() => {
         logout();
         router.replace("/login");
-    };
+    }, [logout, router]);
 
     if (loading) {
         return (
@@ -389,7 +389,7 @@ function CartButton({ role }: { role: string }) {
     return (
         <Link href={cartHref}>
             <button
-                id="cart-button"
+                id="salesperson-cart-button"
                 className="p-2 rounded-full hover:bg-gray-100 relative"
             >
                 <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">

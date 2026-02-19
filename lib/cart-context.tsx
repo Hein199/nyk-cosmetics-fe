@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from "react";
 
 export interface CartItem {
     id: number;
@@ -89,7 +89,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('salesperson-payment-type', paymentType);
         localStorage.setItem('salesperson-remark', remark);
     }, [cart, selectedCustomer, customerSearch, orderDate, paymentType, remark]);
-    const addToCart = (productId: number, quantity: number, unit: string, customPrice?: number, productName?: string, productPrice?: number) => {
+    const addToCart = useCallback((productId: number, quantity: number, unit: string, customPrice?: number, productName?: string, productPrice?: number) => {
         if (!productName || !productPrice) return;
 
         const finalPrice = customPrice !== undefined ? customPrice : productPrice;
@@ -123,45 +123,45 @@ export function CartProvider({ children }: { children: ReactNode }) {
                 };
             });
         });
-    };
+    }, []);
 
-    const removeFromCart = (index: number) => {
+    const removeFromCart = useCallback((index: number) => {
         setCart(prevCart => prevCart.filter((_, i) => i !== index));
-    };
+    }, []);
 
-    const clearCart = () => {
+    const clearCart = useCallback(() => {
         setCart([]);
         setSelectedCustomer("");
         setCustomerSearch("");
         setRemark("");
-    };
+    }, []);
 
-    const cartSummary = {
+    const cartSummary = useMemo(() => ({
         subtotal: cart.reduce((sum, item) => sum + item.total, 0),
         total: cart.reduce((sum, item) => sum + item.total, 0),
         itemCount: cart.length
-    };
+    }), [cart]);
+
+    const value = useMemo(() => ({
+        cart,
+        selectedCustomer,
+        customerSearch,
+        orderDate,
+        paymentType,
+        remark,
+        addToCart,
+        removeFromCart,
+        clearCart,
+        setSelectedCustomer,
+        setCustomerSearch,
+        setOrderDate,
+        setPaymentType,
+        setRemark,
+        cartSummary
+    }), [cart, selectedCustomer, customerSearch, orderDate, paymentType, remark, addToCart, removeFromCart, clearCart, cartSummary]);
 
     return (
-        <CartContext.Provider
-            value={{
-                cart,
-                selectedCustomer,
-                customerSearch,
-                orderDate,
-                paymentType,
-                remark,
-                addToCart,
-                removeFromCart,
-                clearCart,
-                setSelectedCustomer,
-                setCustomerSearch,
-                setOrderDate,
-                setPaymentType,
-                setRemark,
-                cartSummary
-            }}
-        >
+        <CartContext.Provider value={value}>
             {children}
         </CartContext.Provider>
     );
