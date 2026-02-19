@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
     Card,
     CardContent,
@@ -11,79 +10,62 @@ import {
     CardTitle,
     CardDescription,
 } from "@/components/ui/card";
+import { useAuth } from "@/lib/auth-context";
+import { API_BASE_URL } from "@/lib/constants";
 
-// Mock data - replace with actual API calls
-const mockUser = {
-    name: "Thiri",
+type OrderListItem = {
+    id: string;
+    created_at: string;
+    status: string;
+    total_amount: string | number;
+    customer: { name: string } | null;
 };
 
-// Enhanced mock orders with more data for filtering
-const mockOrders = [
-    // Current date orders (December 2025)
-    { id: "ORD-001", customer: "Beauty Store A", amount: 125000, status: "completed", date: "2025-12-05", time: "10:30 AM" },
-    { id: "ORD-002", customer: "Cosmetics Shop B", amount: 89000, status: "pending", date: "2025-12-05", time: "02:15 PM" },
-    { id: "ORD-003", customer: "Modern Salon", amount: 156000, status: "processing", date: "2025-12-05", time: "04:20 PM" },
-    
-    // Recent past dates (December 2025)
-    { id: "ORD-004", customer: "Salon C", amount: 234000, status: "processing", date: "2025-12-04", time: "11:45 AM" },
-    { id: "ORD-005", customer: "Retail Store D", amount: 156000, status: "completed", date: "2025-12-04", time: "04:20 PM" },
-    { id: "ORD-006", customer: "Beauty Outlet E", amount: 78000, status: "cancelled", date: "2025-12-03", time: "09:00 AM" },
-    { id: "ORD-007", customer: "Makeup Corner F", amount: 189000, status: "completed", date: "2025-12-02", time: "03:30 PM" },
-    { id: "ORD-008", customer: "Glamour Shop G", amount: 245000, status: "completed", date: "2025-12-01", time: "11:00 AM" },
-    
-    // March 2025 orders (example for date filtering)
-    { id: "ORD-009", customer: "Glam Studio G", amount: 195000, status: "completed", date: "2025-03-08", time: "01:15 PM" },
-    { id: "ORD-010", customer: "Style Shop H", amount: 267000, status: "completed", date: "2025-03-08", time: "05:45 PM" },
-    { id: "ORD-011", customer: "Beauty Haven I", amount: 134000, status: "pending", date: "2025-03-07", time: "10:00 AM" },
-    { id: "ORD-012", customer: "Charm Boutique J", amount: 198000, status: "cancelled", date: "2025-03-06", time: "02:30 PM" },
-    { id: "ORD-013", customer: "Elite Beauty K", amount: 445000, status: "completed", date: "2025-03-05", time: "11:15 AM" },
-    { id: "ORD-014", customer: "Luxury Salon L", amount: 312000, status: "processing", date: "2025-03-04", time: "04:00 PM" },
-    
-    // November 2024 orders
-    { id: "ORD-015", customer: "Beauty Central M", amount: 178000, status: "completed", date: "2024-11-30", time: "09:30 AM" },
-    { id: "ORD-016", customer: "Glamour Point N", amount: 256000, status: "completed", date: "2024-11-29", time: "01:45 PM" },
-    { id: "ORD-017", customer: "Style Center O", amount: 89000, status: "pending", date: "2024-11-28", time: "03:20 PM" },
-    
-    // October 2024 orders (more test data)
-    { id: "ORD-018", customer: "Beauty World P", amount: 167000, status: "completed", date: "2024-10-15", time: "10:15 AM" },
-    { id: "ORD-019", customer: "Cosmetic Hub Q", amount: 298000, status: "completed", date: "2024-10-15", time: "02:30 PM" },
-    { id: "ORD-020", customer: "Style Palace R", amount: 123000, status: "pending", date: "2024-10-14", time: "11:45 AM" },
-];
+type DashboardOrder = {
+    id: string;
+    customer: string;
+    amount: number;
+    status: string;
+    date: string;
+    time: string;
+    createdAt: string;
+};
 
-// Monthly target data
-const monthlyTargets: Record<string, { target: number; achieved: number }> = {
+// Monthly target data (target only, achieved comes from API orders)
+const monthlyTargets: Record<string, number> = {
     // 2024 data
-    "2024-01": { target: 2800000, achieved: 2650000 },
-    "2024-02": { target: 2900000, achieved: 2750000 },
-    "2024-03": { target: 3100000, achieved: 2980000 },
-    "2024-04": { target: 3200000, achieved: 3050000 },
-    "2024-05": { target: 3300000, achieved: 3150000 },
-    "2024-06": { target: 3400000, achieved: 3200000 },
-    "2024-07": { target: 3500000, achieved: 3300000 },
-    "2024-08": { target: 3600000, achieved: 3400000 },
-    "2024-09": { target: 3700000, achieved: 3500000 },
-    "2024-10": { target: 3800000, achieved: 3600000 },
-    "2024-11": { target: 3900000, achieved: 3700000 },
-    "2024-12": { target: 4000000, achieved: 3800000 },
-    
+    "2024-01": 2800000,
+    "2024-02": 2900000,
+    "2024-03": 3100000,
+    "2024-04": 3200000,
+    "2024-05": 3300000,
+    "2024-06": 3400000,
+    "2024-07": 3500000,
+    "2024-08": 3600000,
+    "2024-09": 3700000,
+    "2024-10": 3800000,
+    "2024-11": 3900000,
+    "2024-12": 4000000,
+
     // 2025 data
-    "2025-01": { target: 4100000, achieved: 3900000 },
-    "2025-02": { target: 4200000, achieved: 4000000 },
-    "2025-03": { target: 4300000, achieved: 4100000 },
-    "2025-04": { target: 4400000, achieved: 4200000 },
-    "2025-05": { target: 4500000, achieved: 4300000 },
-    "2025-06": { target: 4600000, achieved: 4400000 },
-    "2025-07": { target: 4700000, achieved: 4500000 },
-    "2025-08": { target: 4800000, achieved: 4600000 },
-    "2025-09": { target: 4900000, achieved: 4700000 },
-    "2025-10": { target: 5000000, achieved: 4800000 },
-    "2025-11": { target: 5100000, achieved: 4900000 },
-    "2025-12": { target: 5200000, achieved: 1551000 }, // Current month - partial data
+    "2025-01": 4100000,
+    "2025-02": 4200000,
+    "2025-03": 4300000,
+    "2025-04": 4400000,
+    "2025-05": 4500000,
+    "2025-06": 4600000,
+    "2025-07": 4700000,
+    "2025-08": 4800000,
+    "2025-09": 4900000,
+    "2025-10": 5000000,
+    "2025-11": 5100000,
+    "2025-12": 5200000,
 };
 
 const statusColors: Record<string, string> = {
-    completed: "bg-green-100 text-green-800",
-    processing: "bg-blue-100 text-blue-800",
+    delivered: "bg-green-100 text-green-800",
+    confirmed: "bg-blue-100 text-blue-800",
+    pending_admin: "bg-yellow-100 text-yellow-800",
     cancelled: "bg-red-100 text-red-800",
 };
 
@@ -95,37 +77,179 @@ function formatCurrency(amount: number) {
     }).format(amount);
 }
 
+function normalizeStatus(status: string) {
+    return status.toLowerCase();
+}
+
+function formatStatusLabel(status: string) {
+    const normalized = normalizeStatus(status);
+    if (normalized === "pending_admin") {
+        return "pending";
+    }
+    return normalized.replace("_", " ");
+}
+
+function getStatusBadgeClass(status: string) {
+    const key = normalizeStatus(status);
+    if (key === "delivered") {
+        return "bg-green-50 text-green-700 border-green-200";
+    }
+    if (key === "confirmed") {
+        return "bg-blue-50 text-blue-700 border-blue-200";
+    }
+    if (key === "pending_admin") {
+        return "bg-yellow-50 text-yellow-700 border-yellow-200";
+    }
+    return "bg-red-50 text-red-700 border-red-200";
+}
+
+function parseAmount(amount: string | number) {
+    if (typeof amount === "number") {
+        return Number.isFinite(amount) ? amount : 0;
+    }
+    const parsed = Number.parseFloat(amount);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function toDateKey(dateString: string) {
+    const date = new Date(dateString);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
 export default function SalespersonPage() {
     const router = useRouter();
-    
+    const { token, user } = useAuth();
+    const [orders, setOrders] = useState<OrderListItem[]>([]);
+    const [ordersLoading, setOrdersLoading] = useState(true);
+    const [ordersError, setOrdersError] = useState<string | null>(null);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
     // Date range selection state
     const [fromDate, setFromDate] = useState("2025-12-01");
     const [toDate, setToDate] = useState("2025-12-05");
-    
+
     // Monthly target state
     const [selectedYear, setSelectedYear] = useState("2025");
     const [selectedMonthNum, setSelectedMonthNum] = useState("12");
-    
+
+    const cacheKey = `nyk-dashboard-orders-cache:${user?.id ?? "anon"}`;
+
+    const loadCachedOrders = () => {
+        if (typeof window === "undefined") {
+            return null;
+        }
+        const raw = sessionStorage.getItem(cacheKey);
+        if (!raw) {
+            return null;
+        }
+        try {
+            const parsed = JSON.parse(raw) as { data: OrderListItem[]; updatedAt: string };
+            if (!Array.isArray(parsed.data)) {
+                return null;
+            }
+            return parsed;
+        } catch {
+            return null;
+        }
+    };
+
+    const saveCachedOrders = (data: OrderListItem[]) => {
+        if (typeof window === "undefined") {
+            return;
+        }
+        sessionStorage.setItem(
+            cacheKey,
+            JSON.stringify({ data, updatedAt: new Date().toISOString() })
+        );
+    };
+
+    const fetchOrders = useCallback(
+        async (force = false) => {
+            if (!token) {
+                setOrdersLoading(false);
+                return;
+            }
+
+            if (!force) {
+                const cached = loadCachedOrders();
+                if (cached) {
+                    setOrders(cached.data);
+                    setLastUpdated(new Date(cached.updatedAt));
+                    setOrdersLoading(false);
+                    return;
+                }
+            }
+
+            setOrdersLoading(true);
+            setOrdersError(null);
+            try {
+                const response = await fetch(`${API_BASE_URL}/_api/orders`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+
+                if (!response.ok) {
+                    const message = await response.text();
+                    throw new Error(message || "Failed to load orders");
+                }
+
+                const data = (await response.json()) as OrderListItem[];
+                setOrders(data);
+                saveCachedOrders(data);
+                setLastUpdated(new Date());
+            } catch (error) {
+                const message = error instanceof Error ? error.message : "Failed to load orders";
+                setOrdersError(message);
+            } finally {
+                setOrdersLoading(false);
+            }
+        },
+        [token, cacheKey]
+    );
+
+    useEffect(() => {
+        fetchOrders();
+    }, [fetchOrders]);
+
     // Combine year and month for monthly targets
     const selectedMonth = `${selectedYear}-${selectedMonthNum.padStart(2, '0')}`;
-    
+
     // Filter orders by date range
     const filteredOrders = useMemo(() => {
-        return mockOrders.filter(order => {
-            const orderDate = order.date;
-            return orderDate >= fromDate && orderDate <= toDate;
-        });
-    }, [fromDate, toDate]);
-    
+        return orders
+            .map((order) => {
+                const dateKey = toDateKey(order.created_at);
+                const timeLabel = new Date(order.created_at).toLocaleTimeString("en-US", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                });
+                return {
+                    id: order.id,
+                    customer: order.customer?.name ?? "Unknown customer",
+                    amount: parseAmount(order.total_amount),
+                    status: normalizeStatus(order.status),
+                    date: dateKey,
+                    time: timeLabel,
+                    createdAt: order.created_at,
+                } as DashboardOrder;
+            })
+            .filter((order) => order.date >= fromDate && order.date <= toDate)
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }, [orders, fromDate, toDate]);
+
     // Calculate statistics for the date range
     const rangeStats = useMemo(() => {
         const totalOrders = filteredOrders.length;
-        const completedOrders = filteredOrders.filter(o => o.status === "completed").length;
+        const completedOrders = filteredOrders.filter(o => o.status === "delivered").length;
         const cancelledOrders = filteredOrders.filter(o => o.status === "cancelled").length;
         const totalSales = filteredOrders
-            .filter(o => o.status === "completed")
+            .filter(o => o.status === "delivered")
             .reduce((sum, order) => sum + order.amount, 0);
-        
+
         return {
             totalOrders,
             completedOrders,
@@ -133,30 +257,39 @@ export default function SalespersonPage() {
             totalSales
         };
     }, [filteredOrders]);
-    
+
     // Calculate monthly statistics
     const monthlyStats = useMemo(() => {
-        const monthlyData = monthlyTargets[selectedMonth] || { target: 0, achieved: 0 };
-        const progressPercentage = monthlyData.target > 0 
-            ? Math.round((monthlyData.achieved / monthlyData.target) * 100) 
+        const target = monthlyTargets[selectedMonth] ?? 0;
+        const achieved = orders
+            .map((order) => ({
+                status: normalizeStatus(order.status),
+                amount: parseAmount(order.total_amount),
+                dateKey: toDateKey(order.created_at),
+            }))
+            .filter((order) => order.dateKey.startsWith(selectedMonth) && order.status === "delivered")
+            .reduce((sum, order) => sum + order.amount, 0);
+        const progressPercentage = target > 0
+            ? Math.round((achieved / target) * 100)
             : 0;
-        
+
         return {
-            ...monthlyData,
+            target,
+            achieved,
             progressPercentage
         };
-    }, [selectedMonth]);
-    
+    }, [orders, selectedMonth]);
+
     // Get recent orders for the table (limit to 5)
     const recentOrdersForDisplay = filteredOrders.slice(0, 5);
-    
+
     // Format date for display
     const formatDate = (dateString: string) => {
         const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', { 
-            year: 'numeric', 
-            month: 'short', 
-            day: 'numeric' 
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
         });
     };
 
@@ -167,28 +300,23 @@ export default function SalespersonPage() {
         }
         return `${formatDate(from)} - ${formatDate(to)}`;
     };
-    
+
     // Format month for display
     const formatMonth = (monthString: string) => {
         const [year, month] = monthString.split('-');
         const date = new Date(parseInt(year), parseInt(month) - 1);
-        return date.toLocaleDateString('en-US', { 
-            year: 'numeric', 
-            month: 'long' 
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long'
         });
-    };
-    
-    // Get number of days in a month
-    const getDaysInMonth = (year: string, month: string) => {
-        return new Date(parseInt(year), parseInt(month), 0).getDate();
     };
 
     // Helper function to set preset date ranges quickly
     const setPresetRange = (type: string) => {
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
-        
-        switch(type) {
+
+        switch (type) {
             case 'today':
                 setFromDate(todayStr);
                 setToDate(todayStr);
@@ -233,24 +361,32 @@ export default function SalespersonPage() {
                 setToDate("2025-12-05");
         }
     };
-    
+
     return (
         <div className="space-y-6">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">
-                        Welcome back, {mockUser.name}!
+                        Welcome back, {user?.username ?? "there"}!
                     </h1>
                     <p className="text-gray-500 mt-1">
                         Viewing data for {formatDateRange(fromDate, toDate)}
                     </p>
+                    {lastUpdated && (
+                        <p className="text-xs text-gray-400 mt-2">
+                            Last updated {lastUpdated.toLocaleTimeString()}
+                        </p>
+                    )}
+                    {ordersError && (
+                        <p className="text-xs text-red-600 mt-2">{ordersError}</p>
+                    )}
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">
                     <Button
                         size="lg"
                         variant="outline"
-                        onClick={() => setPresetRange("default")}
+                        onClick={() => fetchOrders(true)}
                         aria-label="Refresh"
                         title="Refresh"
                         className="h-11 w-11 p-0"
@@ -387,7 +523,7 @@ export default function SalespersonPage() {
                             <div>
                                 <CardTitle className="text-xl mb-3">Orders</CardTitle>
                                 <CardDescription className="mb-4">Your order activity for {formatDateRange(fromDate, toDate)}</CardDescription>
-                                
+
                                 {/* Order Statistics - moved under title */}
                                 <div className="flex flex-wrap items-center gap-6 text-sm">
                                     <div className="flex items-center gap-2">
@@ -416,7 +552,7 @@ export default function SalespersonPage() {
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-start gap-6 pt-2 border-t border-gray-100">
                             <div className="flex flex-col lg:flex-row lg:items-end gap-6">
                                 <div className="flex flex-col">
@@ -454,7 +590,7 @@ export default function SalespersonPage() {
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <div className="flex flex-nowrap gap-3 pt-6">
                                 <Button
                                     size="sm"
@@ -488,10 +624,11 @@ export default function SalespersonPage() {
                                 >
                                     Last 30 Days
                                 </Button>
-                                <Button 
-                                    variant="outline" 
-                                    size="sm" 
+                                <Button
+                                    variant="outline"
+                                    size="sm"
                                     className="text-xs px-3 py-1.5 rounded-lg hover:bg-gray-50 h-9 w-36"
+                                    onClick={() => router.push("/salesperson/orders")}
                                 >
                                     View All Orders
                                 </Button>
@@ -502,32 +639,40 @@ export default function SalespersonPage() {
                 <CardContent>
                     {/* Mobile: Card layout */}
                     <div className="block sm:hidden space-y-4">
-                        {recentOrdersForDisplay.length === 0 ? (
+                        {ordersLoading ? (
+                            <div className="text-center py-8">
+                                <p className="text-gray-500">Loading orders...</p>
+                            </div>
+                        ) : ordersError ? (
+                            <div className="text-center py-8">
+                                <p className="text-red-600">{ordersError}</p>
+                            </div>
+                        ) : recentOrdersForDisplay.length === 0 ? (
                             <div className="text-center py-8">
                                 <p className="text-gray-500">No orders found for {formatDateRange(fromDate, toDate)}.</p>
                             </div>
                         ) : (
                             recentOrdersForDisplay.map((order) => (
-                            <div
-                                key={order.id}
-                                className="border border-gray-200 rounded-lg p-4 space-y-2"
-                            >
-                                <div className="flex items-center justify-between">
-                                    <span className="font-medium text-gray-900">{order.id}</span>
-                                    <span
-                                        className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[order.status]}`}
-                                    >
-                                        {order.status}
-                                    </span>
+                                <div
+                                    key={order.id}
+                                    className="border border-gray-200 rounded-lg p-4 space-y-2"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <span className="font-medium text-gray-900">{order.id}</span>
+                                        <span
+                                            className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[order.status] ?? "bg-gray-100 text-gray-800"}`}
+                                        >
+                                            {formatStatusLabel(order.status)}
+                                        </span>
+                                    </div>
+                                    <p className="text-gray-600">{order.customer}</p>
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="text-gray-500">{order.date}</span>
+                                        <span className="font-semibold text-gray-900">
+                                            {formatCurrency(order.amount)}
+                                        </span>
+                                    </div>
                                 </div>
-                                <p className="text-gray-600">{order.customer}</p>
-                                <div className="flex items-center justify-between text-sm">
-                                    <span className="text-gray-500">{order.date}</span>
-                                    <span className="font-semibold text-gray-900">
-                                        {formatCurrency(order.amount)}
-                                    </span>
-                                </div>
-                            </div>
                             ))
                         )}
                     </div>
@@ -559,7 +704,19 @@ export default function SalespersonPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {recentOrdersForDisplay.length === 0 ? (
+                                    {ordersLoading ? (
+                                        <tr>
+                                            <td colSpan={6} className="text-center py-8 text-gray-500 border-r border-gray-300">
+                                                Loading orders...
+                                            </td>
+                                        </tr>
+                                    ) : ordersError ? (
+                                        <tr>
+                                            <td colSpan={6} className="text-center py-8 text-red-600 border-r border-gray-300">
+                                                {ordersError}
+                                            </td>
+                                        </tr>
+                                    ) : recentOrdersForDisplay.length === 0 ? (
                                         <tr>
                                             <td colSpan={6} className="text-center py-8 text-gray-500 border-r border-gray-300">
                                                 No orders found for {formatDateRange(fromDate, toDate)}.
@@ -567,40 +724,34 @@ export default function SalespersonPage() {
                                         </tr>
                                     ) : (
                                         recentOrdersForDisplay.map((order, index) => (
-                                        <tr
-                                            key={order.id}
-                                            className={`border-b border-gray-300 ${
-                                                index % 2 === 0 ? "bg-blue-50 hover:bg-blue-100" : "bg-white hover:bg-gray-50"
-                                            } transition-colors`}
-                                        >
-                                            <td className="py-3 px-4 text-center font-semibold text-gray-900 border-r border-gray-300">
-                                                {order.id}
-                                            </td>
-                                            <td className="py-3 px-4 font-medium text-gray-900 border-r border-gray-300">
-                                                {order.customer}
-                                            </td>
-                                            <td className="py-3 px-4 text-center font-medium text-gray-900 border-r border-gray-300">
-                                                {order.date}
-                                            </td>
-                                            <td className="py-3 px-4 text-center font-medium text-gray-900 border-r border-gray-300">
-                                                {order.time}
-                                            </td>
-                                            <td className="py-3 px-4 text-center font-bold text-gray-900 border-r border-gray-300">
-                                                {formatCurrency(order.amount)}
-                                            </td>
-                                            <td className="py-3 px-4 text-center">
-                                                <span
-                                                    className={`px-2 py-1 text-xs font-bold rounded border ${
-                                                        order.status === 'completed' ? 'bg-green-50 text-green-700 border-green-200' :
-                                                        order.status === 'processing' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                                        order.status === 'pending' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                                                        'bg-red-50 text-red-700 border-red-200'
-                                                    }`}
-                                                >
-                                                    {order.status}
-                                                </span>
-                                            </td>
-                                        </tr>
+                                            <tr
+                                                key={order.id}
+                                                className={`border-b border-gray-300 ${index % 2 === 0 ? "bg-blue-50 hover:bg-blue-100" : "bg-white hover:bg-gray-50"
+                                                    } transition-colors`}
+                                            >
+                                                <td className="py-3 px-4 text-center font-semibold text-gray-900 border-r border-gray-300">
+                                                    {order.id}
+                                                </td>
+                                                <td className="py-3 px-4 font-medium text-gray-900 border-r border-gray-300">
+                                                    {order.customer}
+                                                </td>
+                                                <td className="py-3 px-4 text-center font-medium text-gray-900 border-r border-gray-300">
+                                                    {order.date}
+                                                </td>
+                                                <td className="py-3 px-4 text-center font-medium text-gray-900 border-r border-gray-300">
+                                                    {order.time}
+                                                </td>
+                                                <td className="py-3 px-4 text-center font-bold text-gray-900 border-r border-gray-300">
+                                                    {formatCurrency(order.amount)}
+                                                </td>
+                                                <td className="py-3 px-4 text-center">
+                                                    <span
+                                                        className={`px-2 py-1 text-xs font-bold rounded border ${getStatusBadgeClass(order.status)}`}
+                                                    >
+                                                        {formatStatusLabel(order.status)}
+                                                    </span>
+                                                </td>
+                                            </tr>
                                         ))
                                     )}
                                 </tbody>

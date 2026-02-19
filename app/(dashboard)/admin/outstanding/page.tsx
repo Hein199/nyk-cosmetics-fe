@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -17,163 +17,28 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
+import { apiFetch } from "@/lib/api";
 
-// Mock data for outstanding payments - this will come from API later
-const mockOutstandingPayments = [
-    {
-        id: "INV-001",
-        customer: "Beauty Store A",
-        customerPhone: "+95 9123456789",
-        amount: 125000,
-        dueDate: "2026-01-31",
-        voucherDate: "2026-01-31",
-        items: 1,
-        status: "PAID",
-        priority: "high"
-    },
-    {
-        id: "INV-002",
-        customer: "Modern Salon",
-        customerPhone: "+95 9234567890",
-        amount: 89000,
-        dueDate: "2026-01-31",
-        voucherDate: "2026-01-31",
-        items: 1,
-        status: "UNPAID",
-        priority: "medium"
-    },
-    {
-        id: "INV-003",
-        customer: "Glamour Shop G",
-        customerPhone: "+95 9345678901",
-        amount: 234000,
-        dueDate: "2026-01-30",
-        voucherDate: "2026-01-30",
-        items: 3,
-        status: "PAID",
-        priority: "low"
-    },
-    {
-        id: "INV-004",
-        customer: "Elite Beauty K",
-        customerPhone: "+95 9456789012",
-        amount: 156000,
-        dueDate: "2026-01-29",
-        voucherDate: "2026-01-29",
-        items: 2,
-        status: "UNPAID",
-        priority: "high"
-    },
-    {
-        id: "INV-005",
-        customer: "Cosmetics Shop B",
-        customerPhone: "+95 9567890123",
-        amount: 67000,
-        dueDate: "2026-01-28",
-        voucherDate: "2026-01-28",
-        items: 1,
-        status: "PAID",
-        priority: "low"
-    },
-    {
-        id: "INV-006",
-        customer: "Beauty Hub Z",
-        customerPhone: "+95 9678901234",
-        amount: 98000,
-        dueDate: "2026-02-04",
-        voucherDate: "2026-02-04",
-        items: 2,
-        status: "PAID",
-        priority: "medium"
-    }
-];
-
-const mockOrderDetails = [
-    {
-        id: "INV-001",
-        date: "2026-01-31",
-        time: "17:25",
-        staff: "salesperson",
-        status: "PAID",
-        amount: 31000,
-        customer: {
-            name: "Alice Kyaw",
-            phone: "091111111",
-            address: "Yangon",
-        },
-        items: [
-            {
-                name: "Rose Lipstick",
-                category: "COSMETIC",
-                qty: 2,
-                unitPrice: 15500,
-                total: 31000,
-                id: "a9568f71-141b-416c-86ba-112879a45447",
-            },
-        ],
-        subtotal: 31000,
-        total: 31000,
-    },
-    {
-        id: "INV-002",
-        date: "2026-01-31",
-        time: "14:33",
-        staff: "salesperson",
-        status: "UNPAID",
-        amount: 46000,
-        customer: {
-            name: "Alice Kyaw",
-            phone: "091111111",
-            address: "Yangon",
-        },
-        items: [
-            {
-                name: "Matte Lipstick",
-                category: "COSMETIC",
-                qty: 1,
-                unitPrice: 46000,
-                total: 46000,
-                id: "b1f2a3c4-1111-2222-3333-444455556666",
-            },
-        ],
-        subtotal: 46000,
-        total: 46000,
-    },
-    {
-        id: "INV-006",
-        date: "2026-02-04",
-        time: "10:15",
-        staff: "salesperson",
-        status: "PAID",
-        amount: 98000,
-        customer: {
-            name: "Beauty Hub Z",
-            phone: "099999999",
-            address: "Mandalay",
-        },
-        items: [
-            {
-                name: "Glow Foundation",
-                category: "COSMETIC",
-                qty: 1,
-                unitPrice: 98000,
-                total: 98000,
-                id: "c2f2a3c4-7777-8888-9999-000011112222",
-            },
-        ],
-        subtotal: 98000,
-        total: 98000,
-    },
-];
-
-type PaymentEvent = {
+interface OutstandingOrder {
     id: string;
-    orderId: string;
-    customer: string;
-    orderDate: string;
-    paymentDate: string;
-    amount: number;
-};
+    created_at: string;
+    total_amount: string | number;
+    status: string;
+    customer: { id: string; name: string; phone_number: string };
+    salesperson: { id: string; username: string } | null;
+    loan: {
+        id: string;
+        original_amount: string | number;
+        remaining_amount: string | number;
+        status: string;
+    } | null;
+    items: {
+        id: string;
+        quantity: number;
+        unit_price: string | number;
+        product: { name: string; category: string };
+    }[];
+}
 
 function formatCurrency(amount: number) {
     return new Intl.NumberFormat("en-MM", {
@@ -185,171 +50,165 @@ function formatCurrency(amount: number) {
 
 function formatDate(dateString: string) {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'short', 
-        day: 'numeric' 
+    return date.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
     });
 }
 
 export default function OutstandingPage() {
-    const { user } = useAuth();
+    const { user, token } = useAuth();
+    const [orders, setOrders] = useState<OutstandingOrder[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
-    const [fromDate, setFromDate] = useState("2026-01-31");
-    const [toDate, setToDate] = useState("2026-01-31");
+    const [fromDate, setFromDate] = useState("");
+    const [toDate, setToDate] = useState("");
     const [paymentDate, setPaymentDate] = useState("");
-    const [collectedPayments, setCollectedPayments] = useState<Set<string>>(new Set());
-    const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
-    const [paymentInputs, setPaymentInputs] = useState<Record<string, string>>({});
-    const [paidAmounts, setPaidAmounts] = useState<Record<string, number>>({});
+    const [paymentInputs, setPaymentInputs] = useState<Record<string, string>>(
+        {}
+    );
+    const [savingPayment, setSavingPayment] = useState<string | null>(null);
+    const [paymentDateNotice, setPaymentDateNotice] = useState<string | null>(
+        null
+    );
+    const [selectedOrder, setSelectedOrder] = useState<OutstandingOrder | null>(
+        null
+    );
     const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false);
-    const [paymentEvents, setPaymentEvents] = useState<PaymentEvent[]>([]);
-    const [paymentDateNotice, setPaymentDateNotice] = useState<string | null>(null);
+    const [recentPayments, setRecentPayments] = useState<
+        {
+            orderId: string;
+            customer: string;
+            orderDate: string;
+            paymentDate: string;
+            amount: number;
+        }[]
+    >([]);
 
-    useEffect(() => {
-        if (typeof window === "undefined") {
-            return;
-        }
-        const raw = localStorage.getItem("nyk-payment-events");
-        if (!raw) {
-            return;
-        }
+    const fetchOrders = useCallback(async () => {
+        if (!token) return;
+        setLoading(true);
+        setError(null);
         try {
-            const parsed = JSON.parse(raw) as Array<Partial<PaymentEvent> & { orderId?: string; date?: string }>;
-            if (Array.isArray(parsed)) {
-                const normalized = parsed
-                    .map((event) => {
-                        if (!event.orderId || !event.amount) {
-                            return null;
-                        }
-                        const fallback = mockOutstandingPayments.find((item) => item.id === event.orderId);
-                        const paymentDate = event.paymentDate ?? event.date ?? new Date().toISOString().split("T")[0];
-                        const orderDate = event.orderDate ?? fallback?.voucherDate ?? fallback?.dueDate ?? paymentDate;
-                        const customer = event.customer ?? fallback?.customer ?? "-";
-                        return {
-                            id: event.id ?? `${event.orderId}-${paymentDate}-${Date.now()}`,
-                            orderId: event.orderId,
-                            customer,
-                            orderDate,
-                            paymentDate,
-                            amount: event.amount,
-                        } satisfies PaymentEvent;
-                    })
-                    .filter((item): item is PaymentEvent => Boolean(item));
-                setPaymentEvents(normalized);
-            }
-        } catch {
-            // ignore malformed cache
+            const data = await apiFetch<OutstandingOrder[]>(
+                "/orders/outstanding",
+                { token }
+            );
+            setOrders(data);
+        } catch (err) {
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "Failed to load outstanding orders"
+            );
+        } finally {
+            setLoading(false);
         }
-    }, []);
+    }, [token]);
 
     useEffect(() => {
-        if (typeof window === "undefined") {
-            return;
-        }
-        localStorage.setItem("nyk-payment-events", JSON.stringify(paymentEvents));
-    }, [paymentEvents]);
+        fetchOrders();
+    }, [fetchOrders]);
 
-    // Filter outstanding payments
-    const filteredPayments = useMemo(() => {
-        return mockOutstandingPayments.filter((payment) => {
-            const alreadyPaid = paidAmounts[payment.id] ?? 0;
-            const remaining = Math.max(payment.amount - alreadyPaid, 0);
+    const filteredOrders = useMemo(() => {
+        return orders.filter((order) => {
+            const remaining = Number(order.loan?.remaining_amount ?? 0);
             const isPaid = remaining === 0;
-            
-            // Status filter
-            const matchesStatus = statusFilter === "all"
-                ? true
-                : statusFilter === "PAID"
-                    ? isPaid
-                    : !isPaid;
-
-            // Date range filter
-            const matchesDateRange = payment.dueDate >= fromDate && payment.dueDate <= toDate;
-            
-            // Search filter
-            const matchesSearch = searchQuery === "" || 
-                payment.customer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                payment.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                payment.customerPhone.includes(searchQuery);
-            
-            return matchesStatus && matchesDateRange && matchesSearch;
+            const matchesStatus =
+                statusFilter === "all" ||
+                (statusFilter === "PAID" ? isPaid : !isPaid);
+            const orderDate = order.created_at.split("T")[0];
+            const matchesFrom = !fromDate || orderDate >= fromDate;
+            const matchesTo = !toDate || orderDate <= toDate;
+            const q = searchQuery.toLowerCase();
+            const matchesSearch =
+                !q ||
+                order.customer.name.toLowerCase().includes(q) ||
+                order.id.toLowerCase().includes(q) ||
+                (order.customer.phone_number ?? "").includes(q);
+            return matchesStatus && matchesFrom && matchesTo && matchesSearch;
         });
-    }, [searchQuery, statusFilter, fromDate, toDate, paidAmounts]);
+    }, [orders, searchQuery, statusFilter, fromDate, toDate]);
 
-    // Calculate summary stats
-    const summaryStats = useMemo(() => {
-        const totalOutstanding = mockOutstandingPayments.filter(p => !collectedPayments.has(p.id));
-        const totalAmount = totalOutstanding.reduce((sum, payment) => {
-            const alreadyPaid = paidAmounts[payment.id] ?? 0;
-            return sum + Math.max(payment.amount - alreadyPaid, 0);
-        }, 0);
-        const overdue = totalOutstanding.filter(p => p.daysPastDue > 0).length;
-        const highPriority = totalOutstanding.filter(p => p.priority === "high").length;
-        
-        return {
-            totalCount: totalOutstanding.length,
-            totalAmount,
-            overdue,
-            highPriority
-        };
-    }, [collectedPayments, paidAmounts]);
-
-    const handleMarkAsCollected = (paymentId: string) => {
-        setCollectedPayments(prev => new Set(prev).add(paymentId));
-    };
-
-    const getRemainingAmount = (paymentId: string, original: number) => {
-        const alreadyPaid = paidAmounts[paymentId] ?? 0;
-        return Math.max(original - alreadyPaid, 0);
-    };
-
-    const handlePaymentChange = (paymentId: string, originalAmount: number, value: string) => {
-        const raw = value.replace(/[^\x00-\x7F]/g, "");
-        const parsed = Number(raw);
+    const handlePaymentChange = (
+        orderId: string,
+        maxAmount: number,
+        value: string
+    ) => {
+        const parsed = Number(value);
         if (Number.isNaN(parsed) || parsed < 0) {
-            setPaymentInputs((prev) => ({ ...prev, [paymentId]: value }));
+            setPaymentInputs((prev) => ({ ...prev, [orderId]: value }));
             return;
         }
-        const remaining = getRemainingAmount(paymentId, originalAmount);
-        const clamped = Math.min(parsed, remaining);
-        setPaymentInputs((prev) => ({ ...prev, [paymentId]: clamped === 0 ? "" : String(clamped) }));
+        const clamped = Math.min(parsed, maxAmount);
+        setPaymentInputs((prev) => ({
+            ...prev,
+            [orderId]: clamped === 0 ? "" : String(clamped),
+        }));
     };
 
-    const handleCollectPayment = (paymentId: string, originalAmount: number) => {
-        const inputValue = paymentInputs[paymentId];
+    const handleCollectPayment = async (order: OutstandingOrder) => {
+        const inputValue = paymentInputs[order.id];
         const parsed = Number(inputValue);
-        if (!inputValue || Number.isNaN(parsed) || parsed <= 0) {
+        if (!inputValue || Number.isNaN(parsed) || parsed <= 0 || !token)
             return;
-        }
-        const payment = mockOutstandingPayments.find((item) => item.id === paymentId);
-        const orderDate = payment?.voucherDate || payment?.dueDate;
-        const selectedPaymentDate = paymentDate || new Date().toISOString().split("T")[0];
-        if (orderDate && selectedPaymentDate < orderDate) {
-            setPaymentDateNotice("Payment date cannot be earlier than order date.");
-            return;
-        }
 
+        const orderDate = order.created_at.split("T")[0];
+        const selectedPaymentDate =
+            paymentDate || new Date().toISOString().split("T")[0];
+        if (selectedPaymentDate < orderDate) {
+            setPaymentDateNotice(
+                "Payment date cannot be earlier than order date."
+            );
+            return;
+        }
         setPaymentDateNotice(null);
-        const remaining = getRemainingAmount(paymentId, originalAmount);
-        const applied = Math.min(parsed, remaining);
-        const nextPaid = (paidAmounts[paymentId] ?? 0) + applied;
-
-        setPaidAmounts((prev) => ({ ...prev, [paymentId]: nextPaid }));
-        setPaymentInputs((prev) => ({ ...prev, [paymentId]: "" }));
-        if (payment) {
-            setPaymentEvents((prev) => [
+        setSavingPayment(order.id);
+        try {
+            const payment = await apiFetch<{ id: string }>("/payments", {
+                method: "POST",
+                token,
+                body: {
+                    customer_id: order.customer.id,
+                    order_id: order.id,
+                    amount_paid: String(parsed),
+                    payment_type: "CASH",
+                },
+            });
+            // If admin, auto-confirm the payment
+            if (user?.role === "admin") {
+                try {
+                    await apiFetch(`/payments/${payment.id}/confirm`, {
+                        method: "POST",
+                        token,
+                    });
+                } catch {
+                    // payment created but not confirmed - still OK
+                }
+            }
+            setPaymentInputs((prev) => ({ ...prev, [order.id]: "" }));
+            setRecentPayments((prev) => [
                 ...prev,
                 {
-                    id: `${paymentId}-${selectedPaymentDate}-${Date.now()}`,
-                    orderId: paymentId,
-                    customer: payment.customer,
-                    orderDate: orderDate ?? selectedPaymentDate,
+                    orderId: order.id,
+                    customer: order.customer.name,
+                    orderDate: order.created_at.split("T")[0],
                     paymentDate: selectedPaymentDate,
-                    amount: applied,
+                    amount: parsed,
                 },
             ]);
+            await fetchOrders();
+        } catch (err) {
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "Failed to create payment"
+            );
+        } finally {
+            setSavingPayment(null);
         }
     };
 
@@ -360,68 +219,27 @@ export default function OutstandingPage() {
     ];
 
     const formatDateRange = (from: string, to: string) => {
-        if (from === to) {
-            return formatDate(from);
-        }
-        return `${formatDate(from)} - ${formatDate(to)}`;
-    };
-
-    const isTodayOnly = fromDate === toDate && fromDate === new Date().toISOString().split("T")[0];
-    const paymentListDateLabel = isTodayOnly ? formatDate(fromDate) : formatDateRange(fromDate, toDate);
-
-    const printTimestamp = new Date().toLocaleString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-    });
-
-    const getPaidAmountForPrint = (payment: (typeof mockOutstandingPayments)[number]) => {
-        const paid = paidAmounts[payment.id] ?? 0;
-        if (paid > 0) {
-            return Math.min(paid, payment.amount);
-        }
-        if (payment.status === "PAID") {
-            return payment.amount;
-        }
-        return 0;
+        if (!from && !to) return "All dates";
+        if (from === to) return formatDate(from);
+        if (from && to) return `${formatDate(from)} - ${formatDate(to)}`;
+        if (from) return `From ${formatDate(from)}`;
+        return `Until ${formatDate(to)}`;
     };
 
     const printablePayments = useMemo(() => {
         const rangeFrom = paymentDate || fromDate;
         const rangeTo = paymentDate || toDate;
+        return recentPayments.filter(
+            (e) =>
+                (!rangeFrom || e.paymentDate >= rangeFrom) &&
+                (!rangeTo || e.paymentDate <= rangeTo)
+        );
+    }, [fromDate, toDate, paymentDate, recentPayments]);
 
-        return paymentEvents
-            .filter((event) => event.paymentDate >= rangeFrom && event.paymentDate <= rangeTo)
-            .map((event) => ({
-                id: event.orderId,
-                customer: event.customer,
-                orderDate: event.orderDate,
-                paidAmount: event.amount,
-                paymentDate: event.paymentDate,
-            }));
-    }, [fromDate, toDate, paymentDate, paymentEvents]);
-
-    const printableGroups = useMemo(() => {
-        const grouped = new Map<string, typeof printablePayments>();
-        printablePayments.forEach((payment) => {
-            const key = payment.paymentDate;
-            const list = grouped.get(key) ?? [];
-            list.push(payment);
-            grouped.set(key, list);
-        });
-        return Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b));
-    }, [printablePayments]);
-
-    const totalPrintableAmount = useMemo(() => {
-        return printablePayments.reduce((sum, payment) => sum + payment.paidAmount, 0);
-    }, [printablePayments]);
-
-    const selectedOrder = useMemo(() => {
-        if (!selectedOrderId) return null;
-        return mockOrderDetails.find((order) => order.id === selectedOrderId) || null;
-    }, [selectedOrderId]);
+    const totalPrintableAmount = useMemo(
+        () => printablePayments.reduce((sum, p) => sum + p.amount, 0),
+        [printablePayments]
+    );
 
     return (
         <div className="space-y-6">
@@ -430,7 +248,8 @@ export default function OutstandingPage() {
                     body * {
                         visibility: hidden !important;
                     }
-                    .printable, .printable * {
+                    .printable,
+                    .printable * {
                         visibility: visible !important;
                     }
                     .printable {
@@ -453,46 +272,68 @@ export default function OutstandingPage() {
                 }
             `}</style>
 
+            {/* Hidden print-only section */}
             <div className="printable print-only">
                 <div className="p-6">
                     <div className="mb-6">
-                        <div className="text-2xl font-semibold text-gray-900">Payments by Day</div>
-                        <div className="text-base font-medium text-black">
-                            Date: {paymentDate ? formatDate(paymentDate) : paymentListDateLabel}
+                        <div className="text-2xl font-semibold text-gray-900">
+                            Payments by Day
                         </div>
                         <div className="text-base font-medium text-black">
-                            Salesperson: {user?.username ?? "-"}
+                            Date:{" "}
+                            {paymentDate
+                                ? formatDate(paymentDate)
+                                : formatDateRange(fromDate, toDate)}
+                        </div>
+                        <div className="text-base font-medium text-black">
+                            User: {user?.username ?? "-"}
                         </div>
                     </div>
                     <div className="max-h-[60vh] overflow-y-auto border border-gray-200 rounded-md text-black max-w-[90%] mx-auto">
                         <table className="w-full text-sm border-collapse text-black">
                             <thead>
                                 <tr className="bg-blue-600 text-white">
-                                    <th className="border border-blue-500 text-center py-2 px-3">Order ID</th>
-                                    <th className="border border-blue-500 text-center py-2 px-3">Customer</th>
-                                    <th className="border border-blue-500 text-center py-2 px-3">Order Date</th>
-                                    <th className="border border-blue-500 text-center py-2 px-3">Payment Amount</th>
+                                    <th className="border border-blue-500 text-center py-2 px-3">
+                                        Order ID
+                                    </th>
+                                    <th className="border border-blue-500 text-center py-2 px-3">
+                                        Customer
+                                    </th>
+                                    <th className="border border-blue-500 text-center py-2 px-3">
+                                        Order Date
+                                    </th>
+                                    <th className="border border-blue-500 text-center py-2 px-3">
+                                        Payment Amount
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {printableGroups.length === 0 ? (
+                                {printablePayments.length === 0 ? (
                                     <tr>
-                                        <td colSpan={4} className="border border-blue-500 py-4 text-center text-gray-500">
-                                            No payments recorded for selected dates.
+                                        <td
+                                            colSpan={4}
+                                            className="border border-blue-500 py-4 text-center text-gray-500"
+                                        >
+                                            No payments recorded for selected
+                                            dates.
                                         </td>
                                     </tr>
                                 ) : (
-                                    printableGroups.map(([dateKey, payments]) => (
-                                        <Fragment key={dateKey}>
-                                            {payments.map((payment, idx) => (
-                                                <tr key={`${payment.id}-${payment.paymentDate}-${idx}`}>
-                                                    <td className="border border-blue-500 py-2 px-3">{payment.id}</td>
-                                                    <td className="border border-blue-500 py-2 px-3">{payment.customer}</td>
-                                                    <td className="border border-blue-500 py-2 px-3">{formatDate(payment.orderDate)}</td>
-                                                    <td className="border border-blue-500 py-2 px-3 text-right">{formatCurrency(payment.paidAmount)}</td>
-                                                </tr>
-                                            ))}
-                                        </Fragment>
+                                    printablePayments.map((p, i) => (
+                                        <tr key={`${p.orderId}-${i}`}>
+                                            <td className="border border-blue-500 py-2 px-3">
+                                                {p.orderId.slice(0, 8)}
+                                            </td>
+                                            <td className="border border-blue-500 py-2 px-3">
+                                                {p.customer}
+                                            </td>
+                                            <td className="border border-blue-500 py-2 px-3">
+                                                {formatDate(p.orderDate)}
+                                            </td>
+                                            <td className="border border-blue-500 py-2 px-3 text-right">
+                                                {formatCurrency(p.amount)}
+                                            </td>
+                                        </tr>
                                     ))
                                 )}
                             </tbody>
@@ -500,10 +341,14 @@ export default function OutstandingPage() {
                     </div>
                     <div className="mt-6 max-w-[90%] mx-auto flex gap-4">
                         <div className="border border-blue-600 bg-blue-50 h-24 w-1/2">
-                            <div className="text-xs text-blue-700 px-2 pt-2">Payment Accept by</div>
+                            <div className="text-xs text-blue-700 px-2 pt-2">
+                                Payment Accept by
+                            </div>
                         </div>
                         <div className="border border-blue-600 bg-blue-50 h-24 w-1/2">
-                            <div className="text-xs text-blue-700 px-2 pt-2">Total Payment Amount</div>
+                            <div className="text-xs text-blue-700 px-2 pt-2">
+                                Total Payment Amount
+                            </div>
                             <div className="px-2 pt-2 text-base font-semibold text-black">
                                 {formatCurrency(totalPrintableAmount)}
                             </div>
@@ -511,313 +356,513 @@ export default function OutstandingPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Main content */}
             <div className="no-print">
-                {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Payments</h1>
-                    <p className="text-gray-500 mt-1">
-                        Track and collect unpaid customer vouchers
-                    </p>
-                </div>
-                </div>
-
-                {/* Filters and Outstanding List */}
-                <Card>
-                <CardHeader className="pb-6">
-                    <div className="flex flex-col space-y-4">
-                        <div>
-                            <CardTitle className="text-xl">Order Payments</CardTitle>
-                            <CardDescription>Track all order payments (paid, partial, unpaid)</CardDescription>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setIsPrintDialogOpen(true)}
-                            >
-                                Payment List
-                            </Button>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row gap-4">
-                            <div className="sm:w-48">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Payment Date
-                                </label>
-                                <input
-                                    type="date"
-                                    value={paymentDate}
-                                    onChange={(e) => setPaymentDate(e.target.value)}
-                                    className="w-full h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
-                                />
-                                {paymentDateNotice && (
-                                    <div className="mt-2 text-xs text-red-600">
-                                        {paymentDateNotice}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Date Range */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Date Range
-                            </label>
-                            <div className="flex items-center gap-3">
-                                <div className="flex flex-col">
-                                    <label htmlFor="from-date" className="text-xs text-gray-500 mb-1">
-                                        From
-                                    </label>
-                                    <input
-                                        id="from-date"
-                                        type="date"
-                                        value={fromDate}
-                                        onChange={(e) => setFromDate(e.target.value)}
-                                        className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
-                                    />
-                                </div>
-                                <div className="flex flex-col">
-                                    <label htmlFor="to-date" className="text-xs text-gray-500 mb-1">
-                                        To
-                                    </label>
-                                    <input
-                                        id="to-date"
-                                        type="date"
-                                        value={toDate}
-                                        onChange={(e) => setToDate(e.target.value)}
-                                        className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
-                                        min={fromDate}
-                                    />
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="text-xs text-transparent mb-1">.</label>
-                                    <div className="flex items-center gap-2">
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => {
-                                                const today = new Date().toISOString().split("T")[0];
-                                                setFromDate(today);
-                                                setToDate(today);
-                                            }}
-                                            className="text-xs h-10 w-16"
-                                        >
-                                            Today
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => {
-                                                setFromDate("2000-01-01");
-                                                setToDate("2100-12-31");
-                                            }}
-                                            className="text-xs h-10 w-16"
-                                        >
-                                            All
-                                        </Button>
-                                    </div>
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="text-xs text-transparent mb-1">.</label>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => window.location.reload()}
-                                        aria-label="Refresh"
-                                        title="Refresh"
-                                        className="h-10 w-10 p-0"
-                                    >
-                                        <svg
-                                            aria-hidden="true"
-                                            viewBox="0 0 24 24"
-                                            className="h-4 w-4"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                        >
-                                            <path d="M21 12a9 9 0 1 1-3-6.7" />
-                                            <path d="M21 3v6h-6" />
-                                        </svg>
-                                    </Button>
-                                </div>
-                            </div>
-                            <p className="text-xs text-gray-500 mt-1">
-                                Found {filteredPayments.length} orders for {formatDateRange(fromDate, toDate)}
-                            </p>
-                        </div>
-                        
-                        {/* Search and Filter */}
-                        <div className="flex flex-col sm:flex-row gap-4">
-                            <div className="flex-1">
-                                <Input
-                                    placeholder="Search by Order ID or Customer name..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full h-10"
-                                />
-                            </div>
-                            
-                            <div className="sm:w-48">
-                                <select
-                                    value={statusFilter}
-                                    onChange={(e) => setStatusFilter(e.target.value)}
-                                    className="w-full h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
-                                >
-                                    {statusOptions.map((option) => (
-                                        <option key={option.value} value={option.value}>
-                                            {option.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900">
+                            Payments
+                        </h1>
+                        <p className="text-gray-500 mt-1">
+                            Track and collect outstanding order payments
+                        </p>
                     </div>
-                </CardHeader>
+                </div>
 
-                <CardContent>
-                    {/* Mobile: Card layout */}
-                    <div className="block sm:hidden space-y-4">
-                        {filteredPayments.length === 0 ? (
-                            <div className="text-center py-8">
-                                <p className="text-gray-500">No outstanding payments found matching your criteria.</p>
+                {error && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+                        {error}
+                    </div>
+                )}
+
+                <Card>
+                    <CardHeader className="pb-6">
+                        <div className="flex flex-col space-y-4">
+                            <div>
+                                <CardTitle className="text-xl">
+                                    Order Payments
+                                </CardTitle>
+                                <CardDescription>
+                                    Track all order payments (paid, partial,
+                                    unpaid)
+                                </CardDescription>
                             </div>
-                        ) : (
-                            filteredPayments.map((payment) => (
-                                <div key={payment.id} className="border border-gray-200 rounded-lg p-4 space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <span className="font-medium text-gray-900">{payment.id}</span>
-                                        <span className="px-2 py-1 text-xs font-bold rounded border bg-red-50 text-red-600 border-red-200">
-                                            {payment.status}
-                                        </span>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setIsPrintDialogOpen(true)}
+                                >
+                                    Payment List
+                                </Button>
+                            </div>
+                            <div className="flex flex-col sm:flex-row gap-4">
+                                <div className="sm:w-48">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Payment Date
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={paymentDate}
+                                        onChange={(e) =>
+                                            setPaymentDate(e.target.value)
+                                        }
+                                        className="w-full h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                    />
+                                    {paymentDateNotice && (
+                                        <div className="mt-2 text-xs text-red-600">
+                                            {paymentDateNotice}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Date Range
+                                </label>
+                                <div className="flex items-center gap-3">
+                                    <div className="flex flex-col">
+                                        <label className="text-xs text-gray-500 mb-1">
+                                            From
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={fromDate}
+                                            onChange={(e) =>
+                                                setFromDate(e.target.value)
+                                            }
+                                            className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                        />
                                     </div>
-                                    <div>
-                                        <p className="font-medium text-gray-900">{payment.customer}</p>
-                                        <p className="text-sm text-gray-500">{formatDate(payment.dueDate)} • {payment.time}</p>
+                                    <div className="flex flex-col">
+                                        <label className="text-xs text-gray-500 mb-1">
+                                            To
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={toDate}
+                                            onChange={(e) =>
+                                                setToDate(e.target.value)
+                                            }
+                                            className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                            min={fromDate}
+                                        />
                                     </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-lg font-bold text-gray-900">
-                                            {formatCurrency(getRemainingAmount(payment.id, payment.amount))}
-                                        </span>
-                                        <span className="text-xs text-gray-500">
-                                            Paid: {formatCurrency(paidAmounts[payment.id] ?? 0)}
-                                        </span>
-                                    </div>
+                                    <div className="flex flex-col">
+                                        <label className="text-xs text-transparent mb-1">
+                                            .
+                                        </label>
                                         <div className="flex items-center gap-2">
-                                            <Input
-                                                type="number"
-                                                min={0}
-                                                max={getRemainingAmount(payment.id, payment.amount)}
-                                                value={paymentInputs[payment.id] ?? ""}
-                                                onChange={(e) => handlePaymentChange(payment.id, payment.amount, e.target.value)}
-                                                placeholder="Payment"
-                                                className="h-9 text-sm text-black"
-                                            />
                                             <Button
                                                 size="sm"
                                                 variant="outline"
-                                                className="border-green-500 text-green-700 hover:bg-green-50"
-                                                onClick={() => handleCollectPayment(payment.id, payment.amount)}
+                                                onClick={() => {
+                                                    const t = new Date()
+                                                        .toISOString()
+                                                        .split("T")[0];
+                                                    setFromDate(t);
+                                                    setToDate(t);
+                                                }}
+                                                className="text-xs h-10 w-16"
                                             >
-                                                Save
+                                                Today
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => {
+                                                    setFromDate("");
+                                                    setToDate("");
+                                                }}
+                                                className="text-xs h-10 w-16"
+                                            >
+                                                All
                                             </Button>
                                         </div>
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <label className="text-xs text-transparent mb-1">
+                                            .
+                                        </label>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={fetchOrders}
+                                            className="h-10 w-10 p-0"
+                                        >
+                                            <svg
+                                                viewBox="0 0 24 24"
+                                                className="h-4 w-4"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeWidth="2"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                            >
+                                                <path d="M21 12a9 9 0 1 1-3-6.7" />
+                                                <path d="M21 3v6h-6" />
+                                            </svg>
+                                        </Button>
+                                    </div>
                                 </div>
-                            ))
-                        )}
-                    </div>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Found {filteredOrders.length} orders{" "}
+                                    {fromDate || toDate
+                                        ? `for ${formatDateRange(fromDate, toDate)}`
+                                        : ""}
+                                </p>
+                            </div>
+                            <div className="flex flex-col sm:flex-row gap-4">
+                                <div className="flex-1">
+                                    <Input
+                                        placeholder="Search by Order ID or Customer name..."
+                                        value={searchQuery}
+                                        onChange={(e) =>
+                                            setSearchQuery(e.target.value)
+                                        }
+                                        className="w-full h-10"
+                                    />
+                                </div>
+                                <div className="sm:w-48">
+                                    <select
+                                        value={statusFilter}
+                                        onChange={(e) =>
+                                            setStatusFilter(e.target.value)
+                                        }
+                                        className="w-full h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                    >
+                                        {statusOptions.map((o) => (
+                                            <option
+                                                key={o.value}
+                                                value={o.value}
+                                            >
+                                                {o.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </CardHeader>
 
-                    {/* Desktop: Table layout */}
-                    <div className="hidden sm:block overflow-x-auto">
-                        <table className="w-full table-fixed">
-                            <thead>
-                                <tr className="border-b border-gray-200">
-                                    <th className="w-28 text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">Order ID</th>
-                                    <th className="w-40 text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">Customer</th>
-                                    <th className="w-28 text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">Order Date</th>
-                                    <th className="w-28 text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">Amount</th>
-                                    <th className="w-24 text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">Status</th>
-                                    <th className="w-44 text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">Make Payment</th>
-                                    <th className="w-20 text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">Save</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filteredPayments.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={7} className="text-center py-8 text-gray-500">
-                                            No outstanding payments found matching your criteria.
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    filteredPayments.map((payment) => (
-                                        <tr key={payment.id} className="border-b border-gray-100 hover:bg-gray-50">
-                                            <td className="py-3 px-4 text-center font-medium text-gray-900 border-l border-gray-200">
-                                                {payment.id}
-                                            </td>
-                                            <td className="py-3 px-4 text-center text-gray-900 border-l border-gray-200">
-                                                {payment.customer}
-                                            </td>
-                                            <td className="py-3 px-4 text-center text-gray-900 border-l border-gray-200">
-                                                {formatDate(payment.dueDate)}
-                                            </td>
-                                            <td className="py-3 px-4 text-center font-semibold text-gray-900 border-l border-gray-200">
-                                                <div>{formatCurrency(getRemainingAmount(payment.id, payment.amount))}</div>
-                                                <div className="text-xs text-gray-500">
-                                                    Paid: {formatCurrency(paidAmounts[payment.id] ?? 0)}
-                                                </div>
-                                            </td>
-                                            <td className="py-3 px-4 text-center border-l border-gray-200">
-                                                <span className={`inline-flex items-center justify-center h-9 w-20 px-2 text-xs font-bold rounded border ${
-                                                    getRemainingAmount(payment.id, payment.amount) === 0
-                                                        ? "bg-green-50 text-green-600 border-green-200"
-                                                        : "bg-red-50 text-red-600 border-red-200"
-                                                }`}>
-                                                    {getRemainingAmount(payment.id, payment.amount) === 0 ? "PAID" : "UNPAID"}
-                                                </span>
-                                            </td>
-                                            <td className="py-3 px-4 text-center border-l border-gray-200">
-                                                <div className="flex items-center justify-center">
-                                                    <Input
-                                                        type="number"
-                                                        min={0}
-                                                        max={getRemainingAmount(payment.id, payment.amount)}
-                                                        value={paymentInputs[payment.id] ?? ""}
-                                                        onChange={(e) => handlePaymentChange(payment.id, payment.amount, e.target.value)}
-                                                        placeholder="Payment"
-                                                        className="h-9 w-40 text-sm text-black"
-                                                    />
-                                                </div>
-                                            </td>
-                                            <td className="py-3 px-4 text-center border-l border-gray-200">
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="border-green-500 text-green-700 hover:bg-green-50 h-9 w-20"
-                                                    onClick={() => handleCollectPayment(payment.id, payment.amount)}
+                    <CardContent>
+                        {loading ? (
+                            <div className="text-center py-8 text-gray-500">
+                                Loading outstanding orders...
+                            </div>
+                        ) : (
+                            <>
+                                {/* Mobile view */}
+                                <div className="block sm:hidden space-y-4">
+                                    {filteredOrders.length === 0 ? (
+                                        <div className="text-center py-8">
+                                            <p className="text-gray-500">
+                                                No outstanding payments found.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        filteredOrders.map((order) => {
+                                            const remaining = Number(
+                                                order.loan
+                                                    ?.remaining_amount ?? 0
+                                            );
+                                            const original = Number(
+                                                order.loan?.original_amount ??
+                                                order.total_amount
+                                            );
+                                            const paid = original - remaining;
+                                            return (
+                                                <div
+                                                    key={order.id}
+                                                    className="border border-gray-200 rounded-lg p-4 space-y-3"
                                                 >
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-medium text-gray-900">
+                                                            {order.id.slice(
+                                                                0,
+                                                                8
+                                                            )}
+                                                        </span>
+                                                        <span
+                                                            className={`px-2 py-1 text-xs font-bold rounded border ${remaining === 0 ? "bg-green-50 text-green-600 border-green-200" : "bg-red-50 text-red-600 border-red-200"}`}
+                                                        >
+                                                            {remaining === 0
+                                                                ? "PAID"
+                                                                : "UNPAID"}
+                                                        </span>
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-medium text-gray-900">
+                                                            {
+                                                                order.customer
+                                                                    .name
+                                                            }
+                                                        </p>
+                                                        <p className="text-sm text-gray-500">
+                                                            {formatDate(
+                                                                order.created_at
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-lg font-bold text-gray-900">
+                                                            {formatCurrency(
+                                                                remaining
+                                                            )}
+                                                        </span>
+                                                        <span className="text-xs text-gray-500">
+                                                            Paid:{" "}
+                                                            {formatCurrency(
+                                                                paid
+                                                            )}
+                                                        </span>
+                                                    </div>
+                                                    {remaining > 0 && (
+                                                        <div className="flex items-center gap-2">
+                                                            <Input
+                                                                type="number"
+                                                                min={0}
+                                                                max={remaining}
+                                                                value={
+                                                                    paymentInputs[
+                                                                    order.id
+                                                                    ] ?? ""
+                                                                }
+                                                                onChange={(e) =>
+                                                                    handlePaymentChange(
+                                                                        order.id,
+                                                                        remaining,
+                                                                        e.target
+                                                                            .value
+                                                                    )
+                                                                }
+                                                                placeholder="Payment"
+                                                                className="h-9 text-sm text-black"
+                                                            />
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                className="border-green-500 text-green-700 hover:bg-green-50"
+                                                                disabled={
+                                                                    savingPayment ===
+                                                                    order.id
+                                                                }
+                                                                onClick={() =>
+                                                                    handleCollectPayment(
+                                                                        order
+                                                                    )
+                                                                }
+                                                            >
+                                                                {savingPayment ===
+                                                                    order.id
+                                                                    ? "..."
+                                                                    : "Save"}
+                                                            </Button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
+
+                                {/* Desktop table */}
+                                <div className="hidden sm:block overflow-x-auto">
+                                    <table className="w-full table-fixed">
+                                        <thead>
+                                            <tr className="border-b border-gray-200">
+                                                <th className="w-28 text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">
+                                                    Order ID
+                                                </th>
+                                                <th className="w-40 text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">
+                                                    Customer
+                                                </th>
+                                                <th className="w-28 text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">
+                                                    Order Date
+                                                </th>
+                                                <th className="w-28 text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">
+                                                    Amount
+                                                </th>
+                                                <th className="w-24 text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">
+                                                    Status
+                                                </th>
+                                                <th className="w-44 text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">
+                                                    Make Payment
+                                                </th>
+                                                <th className="w-20 text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">
                                                     Save
-                                                </Button>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </CardContent>
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {filteredOrders.length === 0 ? (
+                                                <tr>
+                                                    <td
+                                                        colSpan={7}
+                                                        className="text-center py-8 text-gray-500"
+                                                    >
+                                                        No outstanding payments
+                                                        found.
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                filteredOrders.map((order) => {
+                                                    const remaining = Number(
+                                                        order.loan
+                                                            ?.remaining_amount ??
+                                                        0
+                                                    );
+                                                    const original = Number(
+                                                        order.loan
+                                                            ?.original_amount ??
+                                                        order.total_amount
+                                                    );
+                                                    const paid =
+                                                        original - remaining;
+                                                    return (
+                                                        <tr
+                                                            key={order.id}
+                                                            className="border-b border-gray-100 hover:bg-gray-50"
+                                                        >
+                                                            <td
+                                                                className="py-3 px-4 text-center font-medium text-gray-900 border-l border-gray-200 cursor-pointer hover:text-blue-600"
+                                                                onClick={() =>
+                                                                    setSelectedOrder(
+                                                                        order
+                                                                    )
+                                                                }
+                                                            >
+                                                                {order.id.slice(
+                                                                    0,
+                                                                    8
+                                                                )}
+                                                            </td>
+                                                            <td className="py-3 px-4 text-center text-gray-900 border-l border-gray-200">
+                                                                {
+                                                                    order
+                                                                        .customer
+                                                                        .name
+                                                                }
+                                                            </td>
+                                                            <td className="py-3 px-4 text-center text-gray-900 border-l border-gray-200">
+                                                                {formatDate(
+                                                                    order.created_at
+                                                                )}
+                                                            </td>
+                                                            <td className="py-3 px-4 text-center font-semibold text-gray-900 border-l border-gray-200">
+                                                                <div>
+                                                                    {formatCurrency(
+                                                                        remaining
+                                                                    )}
+                                                                </div>
+                                                                <div className="text-xs text-gray-500">
+                                                                    Paid:{" "}
+                                                                    {formatCurrency(
+                                                                        paid
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                            <td className="py-3 px-4 text-center border-l border-gray-200">
+                                                                <span
+                                                                    className={`inline-flex items-center justify-center h-9 w-20 px-2 text-xs font-bold rounded border ${remaining === 0 ? "bg-green-50 text-green-600 border-green-200" : "bg-red-50 text-red-600 border-red-200"}`}
+                                                                >
+                                                                    {remaining ===
+                                                                        0
+                                                                        ? "PAID"
+                                                                        : "UNPAID"}
+                                                                </span>
+                                                            </td>
+                                                            <td className="py-3 px-4 text-center border-l border-gray-200">
+                                                                {remaining >
+                                                                    0 && (
+                                                                        <div className="flex items-center justify-center">
+                                                                            <Input
+                                                                                type="number"
+                                                                                min={
+                                                                                    0
+                                                                                }
+                                                                                max={
+                                                                                    remaining
+                                                                                }
+                                                                                value={
+                                                                                    paymentInputs[
+                                                                                    order
+                                                                                        .id
+                                                                                    ] ??
+                                                                                    ""
+                                                                                }
+                                                                                onChange={(
+                                                                                    e
+                                                                                ) =>
+                                                                                    handlePaymentChange(
+                                                                                        order.id,
+                                                                                        remaining,
+                                                                                        e
+                                                                                            .target
+                                                                                            .value
+                                                                                    )
+                                                                                }
+                                                                                placeholder="Payment"
+                                                                                className="h-9 w-40 text-sm text-black"
+                                                                            />
+                                                                        </div>
+                                                                    )}
+                                                            </td>
+                                                            <td className="py-3 px-4 text-center border-l border-gray-200">
+                                                                {remaining >
+                                                                    0 && (
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="outline"
+                                                                            className="border-green-500 text-green-700 hover:bg-green-50 h-9 w-20"
+                                                                            disabled={
+                                                                                savingPayment ===
+                                                                                order.id
+                                                                            }
+                                                                            onClick={() =>
+                                                                                handleCollectPayment(
+                                                                                    order
+                                                                                )
+                                                                            }
+                                                                        >
+                                                                            {savingPayment ===
+                                                                                order.id
+                                                                                ? "..."
+                                                                                : "Save"}
+                                                                        </Button>
+                                                                    )}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </>
+                        )}
+                    </CardContent>
                 </Card>
 
-                <Dialog open={isPrintDialogOpen} onOpenChange={setIsPrintDialogOpen}>
+                {/* Print Dialog */}
+                <Dialog
+                    open={isPrintDialogOpen}
+                    onOpenChange={setIsPrintDialogOpen}
+                >
                     <DialogContent className="w-[794px] h-[1123px] max-w-[95vw] max-h-[90vh] overflow-y-auto">
                         <DialogHeader className="space-y-1 text-left">
-                            <DialogTitle className="text-2xl font-semibold text-gray-900">Payments by Day</DialogTitle>
+                            <DialogTitle className="text-2xl font-semibold text-gray-900">
+                                Payments by Day
+                            </DialogTitle>
                             <div className="text-base font-medium text-black">
-                                Date: {paymentDate ? formatDate(paymentDate) : paymentListDateLabel}
+                                Date:{" "}
+                                {paymentDate
+                                    ? formatDate(paymentDate)
+                                    : formatDateRange(fromDate, toDate)}
                             </div>
                             <div className="text-base font-medium text-black">
-                                Salesperson: {user?.username ?? "-"}
+                                User: {user?.username ?? "-"}
                             </div>
                         </DialogHeader>
                         <div className="space-y-4">
@@ -825,31 +870,51 @@ export default function OutstandingPage() {
                                 <table className="w-full text-sm border-collapse text-black">
                                     <thead>
                                         <tr className="bg-blue-600 text-white">
-                                            <th className="border border-blue-500 text-center py-2 px-3">Order ID</th>
-                                            <th className="border border-blue-500 text-center py-2 px-3">Customer</th>
-                                            <th className="border border-blue-500 text-center py-2 px-3">Order Date</th>
-                                            <th className="border border-blue-500 text-center py-2 px-3">Payment Amount</th>
+                                            <th className="border border-blue-500 text-center py-2 px-3">
+                                                Order ID
+                                            </th>
+                                            <th className="border border-blue-500 text-center py-2 px-3">
+                                                Customer
+                                            </th>
+                                            <th className="border border-blue-500 text-center py-2 px-3">
+                                                Order Date
+                                            </th>
+                                            <th className="border border-blue-500 text-center py-2 px-3">
+                                                Payment Amount
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {printableGroups.length === 0 ? (
+                                        {printablePayments.length === 0 ? (
                                             <tr>
-                                                <td colSpan={4} className="border border-blue-500 py-4 text-center text-gray-500">
-                                                    No payments recorded for selected dates.
+                                                <td
+                                                    colSpan={4}
+                                                    className="border border-blue-500 py-4 text-center text-gray-500"
+                                                >
+                                                    No payments recorded for
+                                                    selected dates.
                                                 </td>
                                             </tr>
                                         ) : (
-                                            printableGroups.map(([dateKey, payments]) => (
-                                                <Fragment key={dateKey}>
-                                                    {payments.map((payment, idx) => (
-                                                        <tr key={`${payment.id}-${payment.paymentDate}-${idx}`}>
-                                                            <td className="border border-blue-500 py-2 px-3">{payment.id}</td>
-                                                            <td className="border border-blue-500 py-2 px-3">{payment.customer}</td>
-                                                            <td className="border border-blue-500 py-2 px-3">{formatDate(payment.orderDate)}</td>
-                                                            <td className="border border-blue-500 py-2 px-3 text-right">{formatCurrency(payment.paidAmount)}</td>
-                                                        </tr>
-                                                    ))}
-                                                </Fragment>
+                                            printablePayments.map((p, i) => (
+                                                <tr key={`${p.orderId}-${i}`}>
+                                                    <td className="border border-blue-500 py-2 px-3">
+                                                        {p.orderId.slice(0, 8)}
+                                                    </td>
+                                                    <td className="border border-blue-500 py-2 px-3">
+                                                        {p.customer}
+                                                    </td>
+                                                    <td className="border border-blue-500 py-2 px-3">
+                                                        {formatDate(
+                                                            p.orderDate
+                                                        )}
+                                                    </td>
+                                                    <td className="border border-blue-500 py-2 px-3 text-right">
+                                                        {formatCurrency(
+                                                            p.amount
+                                                        )}
+                                                    </td>
+                                                </tr>
                                             ))
                                         )}
                                     </tbody>
@@ -857,10 +922,14 @@ export default function OutstandingPage() {
                             </div>
                             <div className="mt-6 max-w-[90%] mx-auto flex gap-4">
                                 <div className="border border-blue-600 bg-blue-50 h-24 w-1/2">
-                                    <div className="text-xs text-blue-700 px-2 pt-2">Payment Accept by</div>
+                                    <div className="text-xs text-blue-700 px-2 pt-2">
+                                        Payment Accept by
+                                    </div>
                                 </div>
                                 <div className="border border-blue-600 bg-blue-50 h-24 w-1/2">
-                                    <div className="text-xs text-blue-700 px-2 pt-2">Total Payment Amount for Today</div>
+                                    <div className="text-xs text-blue-700 px-2 pt-2">
+                                        Total Payment Amount
+                                    </div>
                                     <div className="px-2 pt-2 text-base font-semibold text-black">
                                         {formatCurrency(totalPrintableAmount)}
                                     </div>
@@ -888,124 +957,200 @@ export default function OutstandingPage() {
                     </DialogContent>
                 </Dialog>
 
-                <Dialog open={Boolean(selectedOrderId)} onOpenChange={() => setSelectedOrderId(null)}>
-                <DialogContent className="max-w-5xl">
-                    {selectedOrder && (
-                        <div className="space-y-6">
-                            <DialogHeader>
-                                <DialogTitle>Order #{selectedOrder.id}</DialogTitle>
-                            </DialogHeader>
-
-                            <Card>
-                                <CardContent className="pt-6">
-                                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
-                                        <div>
+                {/* Order Detail Dialog */}
+                <Dialog
+                    open={Boolean(selectedOrder)}
+                    onOpenChange={() => setSelectedOrder(null)}
+                >
+                    <DialogContent className="max-w-5xl">
+                        {selectedOrder && (
+                            <div className="space-y-6">
+                                <DialogHeader>
+                                    <DialogTitle>
+                                        Order #
+                                        {selectedOrder.id.slice(0, 8)}
+                                    </DialogTitle>
+                                </DialogHeader>
+                                <Card>
+                                    <CardContent className="pt-6">
+                                        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
                                             <div className="grid grid-cols-[80px_1fr] gap-y-2 text-sm text-gray-600">
                                                 <span>Date:</span>
-                                                <span className="text-gray-900">{formatDate(selectedOrder.date)}</span>
-                                                <span>Time:</span>
-                                                <span className="text-gray-900">{selectedOrder.time}</span>
+                                                <span className="text-gray-900">
+                                                    {formatDate(
+                                                        selectedOrder.created_at
+                                                    )}
+                                                </span>
                                                 <span>Staff:</span>
-                                                <span className="text-gray-900">{selectedOrder.staff}</span>
+                                                <span className="text-gray-900">
+                                                    {selectedOrder.salesperson
+                                                        ?.username ?? "-"}
+                                                </span>
+                                                <span>Customer:</span>
+                                                <span className="text-gray-900">
+                                                    {
+                                                        selectedOrder.customer
+                                                            .name
+                                                    }
+                                                </span>
+                                                <span>Phone:</span>
+                                                <span className="text-gray-900">
+                                                    {
+                                                        selectedOrder.customer
+                                                            .phone_number
+                                                    }
+                                                </span>
+                                            </div>
+                                            <div className="text-right">
+                                                <span
+                                                    className={`inline-block px-3 py-1 text-xs font-bold rounded border ${Number(selectedOrder.loan?.remaining_amount ?? 0) === 0 ? "bg-green-50 text-green-600 border-green-200" : "bg-red-50 text-red-600 border-red-200"}`}
+                                                >
+                                                    {Number(
+                                                        selectedOrder.loan
+                                                            ?.remaining_amount ??
+                                                        0
+                                                    ) === 0
+                                                        ? "PAID"
+                                                        : "UNPAID"}
+                                                </span>
+                                                <div className="mt-3 text-2xl font-bold text-gray-900">
+                                                    {formatCurrency(
+                                                        Number(
+                                                            selectedOrder.total_amount
+                                                        )
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <span className={`inline-block px-3 py-1 text-xs font-bold rounded border ${
-                                                selectedOrder.status === "PAID"
-                                                    ? "bg-green-50 text-green-600 border-green-200"
-                                                    : "bg-red-50 text-red-600 border-red-200"
-                                            }`}>
-                                                {selectedOrder.status}
-                                            </span>
-                                            <div className="mt-3 text-2xl font-bold text-gray-900">
-                                                {formatCurrency(selectedOrder.amount)}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <div>
-                                <h2 className="text-lg font-semibold text-gray-900">Customer Details</h2>
-                                <div className="mt-3 border-t border-gray-200 pt-4 text-sm text-gray-700 space-y-2">
-                                    <div className="grid grid-cols-[80px_1fr]">
-                                        <span>Name:</span>
-                                        <span className="text-gray-900">{selectedOrder.customer.name}</span>
-                                    </div>
-                                    <div className="grid grid-cols-[80px_1fr]">
-                                        <span>Phone:</span>
-                                        <span className="text-gray-900">{selectedOrder.customer.phone}</span>
-                                    </div>
-                                    <div className="grid grid-cols-[80px_1fr]">
-                                        <span>Address:</span>
-                                        <span className="text-gray-900">{selectedOrder.customer.address}</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div>
-                                <h2 className="text-lg font-semibold text-gray-900">Items Ordered</h2>
-                                <div className="mt-4 border-2 border-blue-200 rounded-lg overflow-hidden">
-                                    <table className="w-full text-sm">
-                                        <thead className="bg-blue-600 text-white">
-                                            <tr>
-                                                <th className="py-3 px-4 text-left">No.</th>
-                                                <th className="py-3 px-4 text-left">Product</th>
-                                                <th className="py-3 px-4 text-left">Category</th>
-                                                <th className="py-3 px-4 text-center">Qty</th>
-                                                <th className="py-3 px-4 text-center">Unit Price</th>
-                                                <th className="py-3 px-4 text-right">Total</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="bg-blue-50">
-                                            {selectedOrder.items.map((item, index) => (
-                                                <tr key={item.id} className="border-t border-blue-200">
-                                                    <td className="py-3 px-4 text-gray-900">{index + 1}</td>
-                                                    <td className="py-3 px-4">
-                                                        <div className="font-medium text-gray-900">{item.name}</div>
-                                                        <div className="text-xs text-gray-500">{item.id}</div>
-                                                    </td>
-                                                    <td className="py-3 px-4 text-gray-700">{item.category}</td>
-                                                    <td className="py-3 px-4 text-center text-gray-900">{item.qty}</td>
-                                                    <td className="py-3 px-4 text-center text-gray-900">
-                                                        {formatCurrency(item.unitPrice)}
-                                                    </td>
-                                                    <td className="py-3 px-4 text-right font-semibold text-gray-900">
-                                                        {formatCurrency(item.total)}
-                                                    </td>
+                                    </CardContent>
+                                </Card>
+                                <div>
+                                    <h2 className="text-lg font-semibold text-gray-900">
+                                        Items Ordered
+                                    </h2>
+                                    <div className="mt-4 border-2 border-blue-200 rounded-lg overflow-hidden">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-blue-600 text-white">
+                                                <tr>
+                                                    <th className="py-3 px-4 text-left">
+                                                        No.
+                                                    </th>
+                                                    <th className="py-3 px-4 text-left">
+                                                        Product
+                                                    </th>
+                                                    <th className="py-3 px-4 text-left">
+                                                        Category
+                                                    </th>
+                                                    <th className="py-3 px-4 text-center">
+                                                        Qty
+                                                    </th>
+                                                    <th className="py-3 px-4 text-center">
+                                                        Unit Price
+                                                    </th>
+                                                    <th className="py-3 px-4 text-right">
+                                                        Total
+                                                    </th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody className="bg-blue-50">
+                                                {selectedOrder.items.map(
+                                                    (item, i) => (
+                                                        <tr
+                                                            key={item.id}
+                                                            className="border-t border-blue-200"
+                                                        >
+                                                            <td className="py-3 px-4 text-gray-900">
+                                                                {i + 1}
+                                                            </td>
+                                                            <td className="py-3 px-4 font-medium text-gray-900">
+                                                                {
+                                                                    item.product
+                                                                        .name
+                                                                }
+                                                            </td>
+                                                            <td className="py-3 px-4 text-gray-700">
+                                                                {
+                                                                    item.product
+                                                                        .category
+                                                                }
+                                                            </td>
+                                                            <td className="py-3 px-4 text-center text-gray-900">
+                                                                {item.quantity}
+                                                            </td>
+                                                            <td className="py-3 px-4 text-center text-gray-900">
+                                                                {formatCurrency(
+                                                                    Number(
+                                                                        item.unit_price
+                                                                    )
+                                                                )}
+                                                            </td>
+                                                            <td className="py-3 px-4 text-right font-semibold text-gray-900">
+                                                                {formatCurrency(
+                                                                    item.quantity *
+                                                                    Number(
+                                                                        item.unit_price
+                                                                    )
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    )
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
+                                <Card>
+                                    <CardContent className="pt-6 space-y-3 text-sm text-gray-700">
+                                        <div className="flex justify-between">
+                                            <span>Total:</span>
+                                            <span className="font-semibold text-gray-900">
+                                                {formatCurrency(
+                                                    Number(
+                                                        selectedOrder.total_amount
+                                                    )
+                                                )}
+                                            </span>
+                                        </div>
+                                        {selectedOrder.loan && (
+                                            <>
+                                                <div className="flex justify-between">
+                                                    <span>
+                                                        Loan Remaining:
+                                                    </span>
+                                                    <span className="font-semibold text-red-600">
+                                                        {formatCurrency(
+                                                            Number(
+                                                                selectedOrder
+                                                                    .loan
+                                                                    .remaining_amount
+                                                            )
+                                                        )}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span>Paid:</span>
+                                                    <span className="font-semibold text-green-600">
+                                                        {formatCurrency(
+                                                            Number(
+                                                                selectedOrder
+                                                                    .loan
+                                                                    .original_amount
+                                                            ) -
+                                                            Number(
+                                                                selectedOrder
+                                                                    .loan
+                                                                    .remaining_amount
+                                                            )
+                                                        )}
+                                                    </span>
+                                                </div>
+                                            </>
+                                        )}
+                                    </CardContent>
+                                </Card>
                             </div>
-
-                            <div>
-                                <h2 className="text-lg font-semibold text-gray-900">Payment Summary</h2>
-                                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <Card>
-                                        <CardContent className="pt-6 space-y-3 text-sm text-gray-700">
-                                            <div className="flex justify-between">
-                                                <span>Subtotal:</span>
-                                                <span className="text-gray-900">{formatCurrency(selectedOrder.subtotal)}</span>
-                                            </div>
-                                            <div className="flex justify-between font-semibold text-gray-900">
-                                                <span>Total:</span>
-                                                <span>{formatCurrency(selectedOrder.total)}</span>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                    <Card>
-                                        <CardContent className="pt-6">
-                                            <h3 className="text-sm font-medium text-gray-700 mb-3">Customer Signature</h3>
-                                            <div className="h-24 border border-gray-200 rounded-lg bg-gray-50" />
-                                        </CardContent>
-                                    </Card>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </DialogContent>
+                        )}
+                    </DialogContent>
                 </Dialog>
             </div>
         </div>
