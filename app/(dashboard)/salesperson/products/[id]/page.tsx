@@ -10,7 +10,7 @@ import { useCart } from "@/lib/cart-context";
 import { useAuth } from "@/lib/auth-context";
 import { API_BASE_URL } from "@/lib/constants";
 type Product = {
-    id: string;
+    id: number;
     name: string;
     category: string;
     unit_price: string | number;
@@ -331,18 +331,17 @@ export default function ProductDetailPage() {
                                     </button>
                                 </div>
                                 <Button
-                                    onClick={() =>
-                                        {
-                                            animateToCart();
-                                            addToCart(
-                                                product.id,
-                                                quantity,
-                                                unit,
-                                                useCustomPrice && customPrice ? Number(customPrice) : undefined,
-                                                product.name,
-                                                Number(product.unit_price)
-                                            );
-                                        }
+                                    onClick={() => {
+                                        animateToCart();
+                                        addToCart(
+                                            product.id,
+                                            quantity,
+                                            unit,
+                                            useCustomPrice && customPrice ? Number(customPrice) : undefined,
+                                            product.name,
+                                            Number(product.unit_price)
+                                        );
+                                    }
                                     }
                                     className="flex-1 min-w-[180px] h-10 rounded-full text-sm bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700"
                                 >

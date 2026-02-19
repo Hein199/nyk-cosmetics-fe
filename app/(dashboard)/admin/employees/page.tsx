@@ -20,7 +20,7 @@ import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 
 interface Employee {
-    id: string;
+    id: number;
     name: string;
     basic_salary: string | number;
     created_at: string;
@@ -28,8 +28,8 @@ interface Employee {
 }
 
 interface SalaryRecord {
-    id: string;
-    employee_id: string;
+    id: number;
+    employee_id: number;
     basic_salary: string | number;
     bonus_amount: string | number;
     deduction_amount: string | number;
@@ -124,8 +124,8 @@ export default function EmployeesPage() {
         setSavingSal(true);
         setError(null);
         try {
-            const body: Record<string, string> = {
-                employee_id: salEmployeeId,
+            const body: Record<string, string | number> = {
+                employee_id: parseInt(salEmployeeId),
                 basic_salary: salBasic,
             };
             if (salBonus) body.bonus_amount = salBonus;
@@ -151,7 +151,7 @@ export default function EmployeesPage() {
     };
 
     const openPaySalary = (emp?: Employee) => {
-        setSalEmployeeId(emp?.id ?? "");
+        setSalEmployeeId(emp?.id ? String(emp.id) : "");
         setSalBasic(emp ? String(emp.basic_salary) : "");
         setSalBonus("");
         setSalDeduction("");
@@ -317,7 +317,7 @@ export default function EmployeesPage() {
                                             className="border-b border-gray-100 hover:bg-gray-50"
                                         >
                                             <td className="py-3 px-4 font-medium text-gray-900">
-                                                {s.employee?.name ?? s.employee_id.slice(0, 8)}
+                                                {s.employee?.name ?? `EMP#${String(s.employee_id).padStart(2, '0')}`}
                                             </td>
                                             <td className="py-3 px-4 text-center text-gray-900">
                                                 {formatCurrency(
@@ -424,7 +424,7 @@ export default function EmployeesPage() {
                                 onChange={(e) => {
                                     setSalEmployeeId(e.target.value);
                                     const emp = employees.find(
-                                        (em) => em.id === e.target.value
+                                        (em) => em.id === parseInt(e.target.value)
                                     );
                                     if (emp)
                                         setSalBasic(String(emp.basic_salary));

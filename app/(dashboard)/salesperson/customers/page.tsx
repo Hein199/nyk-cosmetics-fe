@@ -8,7 +8,7 @@ import { useAuth } from "@/lib/auth-context";
 import { API_BASE_URL } from "@/lib/constants";
 
 type Customer = {
-    id: string;
+    id: number;
     name: string;
     phone_number: string;
     address: string;

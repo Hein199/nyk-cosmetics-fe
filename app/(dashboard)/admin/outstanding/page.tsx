@@ -18,42 +18,43 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
+import { formatId } from "@/lib/utils";
 
 interface OutstandingOrder {
-    id: string;
+    id: number;
     created_at: string;
     total_amount: string | number;
     status: string;
-    customer: { id: string; name: string; phone_number: string };
-    salesperson: { id: string; username: string } | null;
+    customer: { id: number; name: string; phone_number: string };
+    salesperson: { id: number; username: string } | null;
     loan: {
-        id: string;
+        id: number;
         original_amount: string | number;
         remaining_amount: string | number;
         status: string;
     } | null;
     items: {
-        id: string;
+        id: number;
         quantity: number;
         unit_price: string | number;
         product: { name: string; category: string };
     }[];
     payments: {
-        id: string;
+        id: number;
         amount_paid: string | number;
         status: string;
     }[];
 }
 
 interface PaymentRecord {
-    id: string;
-    order_id: string | null;
+    id: number;
+    order_id: number | null;
     amount_paid: string | number;
     payment_type: string;
     status: string;
     created_at: string;
-    customer: { id: string; name: string };
-    order: { id: string; created_at: string } | null;
+    customer: { id: number; name: string };
+    order: { id: number; created_at: string } | null;
 }
 
 function formatCurrency(amount: number) {
@@ -87,8 +88,8 @@ export default function OutstandingPage() {
     const [paymentInputs, setPaymentInputs] = useState<Record<string, string>>(
         {}
     );
-    const [savingPayment, setSavingPayment] = useState<string | null>(null);
-    const [confirmingPayment, setConfirmingPayment] = useState<string | null>(
+    const [savingPayment, setSavingPayment] = useState<number | null>(null);
+    const [confirmingPayment, setConfirmingPayment] = useState<number | null>(
         null
     );
     const [paymentDateNotice, setPaymentDateNotice] = useState<string | null>(
@@ -156,12 +157,12 @@ export default function OutstandingPage() {
             const matchesTo = !toDate || orderDate <= toDate;
             const matchesEmployee =
                 employeeFilter === "all" ||
-                order.salesperson?.id === employeeFilter;
+                String(order.salesperson?.id) === employeeFilter;
             const q = searchQuery.toLowerCase();
             const matchesSearch =
                 !q ||
                 order.customer.name.toLowerCase().includes(q) ||
-                order.id.toLowerCase().includes(q) ||
+                String(order.id).includes(q) ||
                 (order.customer.phone_number ?? "").includes(q);
             return matchesStatus && matchesFrom && matchesTo && matchesSearch && matchesEmployee;
         });
@@ -171,7 +172,7 @@ export default function OutstandingPage() {
         const unique = new Map<string, string>();
         orders.forEach((order) => {
             if (order.salesperson?.id && order.salesperson?.username) {
-                unique.set(order.salesperson.id, order.salesperson.username);
+                unique.set(String(order.salesperson.id), order.salesperson.username);
             }
         });
         return Array.from(unique.entries()).map(([id, username]) => ({ id, username }));
@@ -195,7 +196,7 @@ export default function OutstandingPage() {
     };
 
     const handleCollectPayment = async (order: OutstandingOrder) => {
-        const inputValue = paymentInputs[order.id];
+        const inputValue = paymentInputs[String(order.id)];
         const parsed = Number(inputValue);
         if (!inputValue || Number.isNaN(parsed) || parsed <= 0 || !token)
             return;
@@ -212,7 +213,7 @@ export default function OutstandingPage() {
         setPaymentDateNotice(null);
         setSavingPayment(order.id);
         try {
-            await apiFetch<{ id: string }>("/payments", {
+            await apiFetch<{ id: number }>("/payments", {
                 method: "POST",
                 token,
                 body: {
@@ -222,7 +223,7 @@ export default function OutstandingPage() {
                     payment_type: "CASH",
                 },
             });
-            setPaymentInputs((prev) => ({ ...prev, [order.id]: "" }));
+            setPaymentInputs((prev) => ({ ...prev, [String(order.id)]: "" }));
             await fetchOrders();
         } catch (err) {
             setError(
@@ -381,7 +382,7 @@ export default function OutstandingPage() {
                                     printablePayments.map((p) => (
                                         <tr key={p.id}>
                                             <td className="border border-blue-500 py-2 px-3">
-                                                {(p.order_id ?? p.id).slice(0, 8)}
+                                                {p.order_id ? formatId('ORD', p.order_id) : formatId('PAY', p.id)}
                                             </td>
                                             <td className="border border-blue-500 py-2 px-3">
                                                 {p.customer.name}
@@ -662,10 +663,7 @@ export default function OutstandingPage() {
                                                 >
                                                     <div className="flex items-center justify-between">
                                                         <span className="font-medium text-gray-900">
-                                                            {order.id.slice(
-                                                                0,
-                                                                8
-                                                            )}
+                                                            {formatId('ORD', order.id)}
                                                         </span>
                                                         <span
                                                             className={`px-2 py-1 text-xs font-bold rounded border ${remaining === 0
@@ -712,12 +710,12 @@ export default function OutstandingPage() {
                                                                 max={remaining}
                                                                 value={
                                                                     paymentInputs[
-                                                                    order.id
+                                                                    String(order.id)
                                                                     ] ?? ""
                                                                 }
                                                                 onChange={(e) =>
                                                                     handlePaymentChange(
-                                                                        order.id,
+                                                                        String(order.id),
                                                                         remaining,
                                                                         e.target
                                                                             .value
@@ -843,10 +841,7 @@ export default function OutstandingPage() {
                                                                     )
                                                                 }
                                                             >
-                                                                {order.id.slice(
-                                                                    0,
-                                                                    8
-                                                                )}
+                                                                {formatId('ORD', order.id)}
                                                             </td>
                                                             <td className="py-3 px-4 text-center text-gray-900 border-l border-gray-200">
                                                                 {
@@ -900,8 +895,8 @@ export default function OutstandingPage() {
                                                                                 }
                                                                                 value={
                                                                                     paymentInputs[
-                                                                                    order
-                                                                                        .id
+                                                                                    String(order
+                                                                                        .id)
                                                                                     ] ??
                                                                                     ""
                                                                                 }
@@ -909,7 +904,7 @@ export default function OutstandingPage() {
                                                                                     e
                                                                                 ) =>
                                                                                     handlePaymentChange(
-                                                                                        order.id,
+                                                                                        String(order.id),
                                                                                         remaining,
                                                                                         e
                                                                                             .target
@@ -1048,7 +1043,7 @@ export default function OutstandingPage() {
                                             printablePayments.map((p) => (
                                                 <tr key={p.id}>
                                                     <td className="border border-blue-500 py-2 px-3">
-                                                        {(p.order_id ?? p.id).slice(0, 8)}
+                                                        {p.order_id ? formatId('ORD', p.order_id) : formatId('PAY', p.id)}
                                                     </td>
                                                     <td className="border border-blue-500 py-2 px-3">
                                                         {p.customer.name}
@@ -1119,8 +1114,7 @@ export default function OutstandingPage() {
                             <div className="space-y-6">
                                 <DialogHeader>
                                     <DialogTitle>
-                                        Order #
-                                        {selectedOrder.id.slice(0, 8)}
+                                        Order {formatId('ORD', selectedOrder.id)}
                                     </DialogTitle>
                                 </DialogHeader>
                                 <Card>

@@ -16,14 +16,14 @@ import { API_BASE_URL } from "@/lib/constants";
 import { useAuth } from "@/lib/auth-context";
 
 type Customer = {
-    id: string;
+    id: number;
     name: string;
     address: string;
     phone_number: string;
 };
 
 type Product = {
-    id: string;
+    id: number;
     name: string;
     category: string;
     unit_price: string | number;
@@ -231,7 +231,7 @@ export default function ProductsPage() {
     }, [selectedCustomer]);
 
     // Local add to cart function that uses global context
-    const localAddToCart = (productId: string) => {
+    const localAddToCart = (productId: number) => {
         const product = products.find(p => p.id === productId);
         if (!product) return;
         const price = Number(product.unit_price);
@@ -331,7 +331,7 @@ export default function ProductsPage() {
                                                     <button
                                                         key={customer.id}
                                                         onClick={() => {
-                                                            setSelectedCustomer(customer.id);
+                                                            setSelectedCustomer(String(customer.id));
                                                             setCustomerSearch(customer.name);
                                                             setShowCustomerDropdown(false);
                                                         }}
@@ -479,7 +479,7 @@ export default function ProductsPage() {
 // Product Card Component
 interface ProductCardProps {
     product: Product;
-    onAddToCart: (productId: string) => void;
+    onAddToCart: (productId: number) => void;
 }
 
 function ProductCard({ product, onAddToCart }: ProductCardProps) {
