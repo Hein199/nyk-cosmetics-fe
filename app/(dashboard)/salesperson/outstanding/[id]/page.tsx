@@ -1,61 +1,32 @@
 "use client";
 
-import { useMemo } from "react";
-import { useParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/auth-context";
+import { apiFetch } from "@/lib/api";
 
-const mockOrderDetails = [
-    {
-        id: "INV-001",
-        date: "2026-01-31",
-        time: "17:25",
-        staff: "salesperson",
-        status: "DELIVERED",
-        amount: 31000,
-        customer: {
-            name: "Alice Kyaw",
-            phone: "091111111",
-            address: "Yangon",
-        },
-        items: [
-            {
-                name: "Rose Lipstick",
-                category: "COSMETIC",
-                qty: 2,
-                unitPrice: 15500,
-                total: 31000,
-                id: "a9568f71-141b-416c-86ba-112879a45447",
-            },
-        ],
-        subtotal: 31000,
-        total: 31000,
-    },
-    {
-        id: "INV-002",
-        date: "2026-01-31",
-        time: "14:33",
-        staff: "salesperson",
-        status: "PENDING ADMIN",
-        amount: 46000,
-        customer: {
-            name: "Alice Kyaw",
-            phone: "091111111",
-            address: "Yangon",
-        },
-        items: [
-            {
-                name: "Matte Lipstick",
-                category: "COSMETIC",
-                qty: 1,
-                unitPrice: 46000,
-                total: 46000,
-                id: "b1f2a3c4-1111-2222-3333-444455556666",
-            },
-        ],
-        subtotal: 46000,
-        total: 46000,
-    },
-];
+interface OrderDetail {
+    id: string;
+    created_at: string;
+    total_amount: string | number;
+    status: string;
+    customer: { id: string; name: string; phone_number: string };
+    salesperson: { id: string; username: string } | null;
+    loan: {
+        id: string;
+        original_amount: string | number;
+        remaining_amount: string | number;
+        status: string;
+    } | null;
+    items: {
+        id: string;
+        quantity: number;
+        unit_price: string | number;
+        product: { name: string; category: string };
+    }[];
+}
 
 function formatCurrency(amount: number) {
     return new Intl.NumberFormat("en-MM", {
@@ -76,50 +47,118 @@ function formatDate(dateString: string) {
 
 export default function OutstandingDetailPage() {
     const params = useParams<{ id: string }>();
+    const router = useRouter();
+    const { token } = useAuth();
+    const [order, setOrder] = useState<OrderDetail | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-    const order = useMemo(() => {
-        return mockOrderDetails.find((item) => item.id === params.id);
-    }, [params.id]);
+    const fetchOrder = useCallback(async () => {
+        if (!token || !params.id) return;
+        setLoading(true);
+        try {
+            const data = await apiFetch<OrderDetail>(`/orders/${params.id}`, {
+                token,
+            });
+            setOrder(data);
+        } catch (err) {
+            setError(
+                err instanceof Error ? err.message : "Failed to load order"
+            );
+        } finally {
+            setLoading(false);
+        }
+    }, [token, params.id]);
 
-    if (!order) {
+    useEffect(() => {
+        fetchOrder();
+    }, [fetchOrder]);
+
+    if (loading) {
         return (
-            <div className="min-h-screen bg-[#FFCDC9] p-6">
+            <div className="p-6">
+                <div className="max-w-5xl mx-auto text-center py-12 text-gray-500">
+                    Loading order...
+                </div>
+            </div>
+        );
+    }
+
+    if (error || !order) {
+        return (
+            <div className="p-6">
                 <div className="max-w-5xl mx-auto">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Order not found</CardTitle>
+                            <CardTitle>
+                                {error ?? "Order not found"}
+                            </CardTitle>
                         </CardHeader>
+                        <CardContent>
+                            <Button
+                                variant="outline"
+                                onClick={() => router.back()}
+                            >
+                                Go Back
+                            </Button>
+                        </CardContent>
                     </Card>
                 </div>
             </div>
         );
     }
 
+    const remaining = Number(order.loan?.remaining_amount ?? 0);
+    const paid =
+        Number(order.loan?.original_amount ?? order.total_amount) - remaining;
+
     return (
-        <div className="min-h-screen bg-[#FFCDC9] p-6">
+        <div className="p-6">
             <div className="max-w-5xl mx-auto space-y-6">
+                <div className="flex items-center gap-4">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => router.back()}
+                    >
+                        &larr; Back
+                    </Button>
+                    <h1 className="text-xl font-semibold text-gray-900">
+                        Order #{order.id.slice(0, 8)}
+                    </h1>
+                </div>
+
                 <Card>
                     <CardContent className="pt-6">
                         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
-                            <div>
-                                <h1 className="text-xl font-semibold text-gray-900">
-                                    Order #{order.id}
-                                </h1>
-                                <div className="mt-4 grid grid-cols-[80px_1fr] gap-y-2 text-sm text-gray-600">
-                                    <span>Date:</span>
-                                    <span className="text-gray-900">{formatDate(order.date)}</span>
-                                    <span>Time:</span>
-                                    <span className="text-gray-900">{order.time}</span>
-                                    <span>Staff:</span>
-                                    <span className="text-gray-900">{order.staff}</span>
-                                </div>
+                            <div className="grid grid-cols-[80px_1fr] gap-y-2 text-sm text-gray-600">
+                                <span>Date:</span>
+                                <span className="text-gray-900">
+                                    {formatDate(order.created_at)}
+                                </span>
+                                <span>Staff:</span>
+                                <span className="text-gray-900">
+                                    {order.salesperson?.username ?? "-"}
+                                </span>
+                                <span>Customer:</span>
+                                <span className="text-gray-900">
+                                    {order.customer.name}
+                                </span>
+                                <span>Phone:</span>
+                                <span className="text-gray-900">
+                                    {order.customer.phone_number}
+                                </span>
                             </div>
                             <div className="text-right">
-                                <span className="inline-block px-3 py-1 text-xs font-bold rounded border bg-red-50 text-red-600 border-red-200">
-                                    {order.status}
+                                <span
+                                    className={`inline-block px-3 py-1 text-xs font-bold rounded border ${remaining === 0 ? "bg-green-50 text-green-600 border-green-200" : "bg-red-50 text-red-600 border-red-200"}`}
+                                >
+                                    {remaining === 0 ? "PAID" : "UNPAID"}
                                 </span>
                                 <div className="mt-3 text-2xl font-bold text-gray-900">
-                                    {formatCurrency(order.amount)}
+                                    {formatCurrency(
+                                        Number(order.total_amount)
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -127,52 +166,59 @@ export default function OutstandingDetailPage() {
                 </Card>
 
                 <div>
-                    <h2 className="text-lg font-semibold text-gray-900">Customer Details</h2>
-                    <div className="mt-3 border-t border-gray-200 pt-4 text-sm text-gray-700 space-y-2">
-                        <div className="grid grid-cols-[80px_1fr]">
-                            <span>Name:</span>
-                            <span className="text-gray-900">{order.customer.name}</span>
-                        </div>
-                        <div className="grid grid-cols-[80px_1fr]">
-                            <span>Phone:</span>
-                            <span className="text-gray-900">{order.customer.phone}</span>
-                        </div>
-                        <div className="grid grid-cols-[80px_1fr]">
-                            <span>Address:</span>
-                            <span className="text-gray-900">{order.customer.address}</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div>
-                    <h2 className="text-lg font-semibold text-gray-900">Items Ordered</h2>
+                    <h2 className="text-lg font-semibold text-gray-900">
+                        Items Ordered
+                    </h2>
                     <div className="mt-4 border-2 border-blue-200 rounded-lg overflow-hidden">
                         <table className="w-full text-sm">
                             <thead className="bg-blue-600 text-white">
                                 <tr>
                                     <th className="py-3 px-4 text-left">No.</th>
-                                    <th className="py-3 px-4 text-left">Product</th>
-                                    <th className="py-3 px-4 text-left">Category</th>
-                                    <th className="py-3 px-4 text-center">Qty</th>
-                                    <th className="py-3 px-4 text-center">Unit Price</th>
-                                    <th className="py-3 px-4 text-right">Total</th>
+                                    <th className="py-3 px-4 text-left">
+                                        Product
+                                    </th>
+                                    <th className="py-3 px-4 text-left">
+                                        Category
+                                    </th>
+                                    <th className="py-3 px-4 text-center">
+                                        Qty
+                                    </th>
+                                    <th className="py-3 px-4 text-center">
+                                        Unit Price
+                                    </th>
+                                    <th className="py-3 px-4 text-right">
+                                        Total
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody className="bg-blue-50">
-                                {order.items.map((item, index) => (
-                                    <tr key={item.id} className="border-t border-blue-200">
-                                        <td className="py-3 px-4 text-gray-900">{index + 1}</td>
-                                        <td className="py-3 px-4">
-                                            <div className="font-medium text-gray-900">{item.name}</div>
-                                            <div className="text-xs text-gray-500">{item.id}</div>
+                                {order.items.map((item, i) => (
+                                    <tr
+                                        key={item.id}
+                                        className="border-t border-blue-200"
+                                    >
+                                        <td className="py-3 px-4 text-gray-900">
+                                            {i + 1}
                                         </td>
-                                        <td className="py-3 px-4 text-gray-700">{item.category}</td>
-                                        <td className="py-3 px-4 text-center text-gray-900">{item.qty}</td>
+                                        <td className="py-3 px-4 font-medium text-gray-900">
+                                            {item.product.name}
+                                        </td>
+                                        <td className="py-3 px-4 text-gray-700">
+                                            {item.product.category}
+                                        </td>
                                         <td className="py-3 px-4 text-center text-gray-900">
-                                            {formatCurrency(item.unitPrice)}
+                                            {item.quantity}
+                                        </td>
+                                        <td className="py-3 px-4 text-center text-gray-900">
+                                            {formatCurrency(
+                                                Number(item.unit_price)
+                                            )}
                                         </td>
                                         <td className="py-3 px-4 text-right font-semibold text-gray-900">
-                                            {formatCurrency(item.total)}
+                                            {formatCurrency(
+                                                item.quantity *
+                                                    Number(item.unit_price)
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
@@ -181,29 +227,32 @@ export default function OutstandingDetailPage() {
                     </div>
                 </div>
 
-                <div>
-                    <h2 className="text-lg font-semibold text-gray-900">Payment Summary</h2>
-                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <Card>
-                            <CardContent className="pt-6 space-y-3 text-sm text-gray-700">
+                <Card>
+                    <CardContent className="pt-6 space-y-3 text-sm text-gray-700">
+                        <div className="flex justify-between">
+                            <span>Total:</span>
+                            <span className="font-semibold text-gray-900">
+                                {formatCurrency(Number(order.total_amount))}
+                            </span>
+                        </div>
+                        {order.loan && (
+                            <>
                                 <div className="flex justify-between">
-                                    <span>Subtotal:</span>
-                                    <span className="text-gray-900">{formatCurrency(order.subtotal)}</span>
+                                    <span>Loan Remaining:</span>
+                                    <span className="font-semibold text-red-600">
+                                        {formatCurrency(remaining)}
+                                    </span>
                                 </div>
-                                <div className="flex justify-between font-semibold text-gray-900">
-                                    <span>Total:</span>
-                                    <span>{formatCurrency(order.total)}</span>
+                                <div className="flex justify-between">
+                                    <span>Paid:</span>
+                                    <span className="font-semibold text-green-600">
+                                        {formatCurrency(paid)}
+                                    </span>
                                 </div>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardContent className="pt-6">
-                                <h3 className="text-sm font-medium text-gray-700 mb-3">Customer Signature</h3>
-                                <div className="h-24 border border-gray-200 rounded-lg bg-gray-50" />
-                            </CardContent>
-                        </Card>
-                    </div>
-                </div>
+                            </>
+                        )}
+                    </CardContent>
+                </Card>
             </div>
         </div>
     );
