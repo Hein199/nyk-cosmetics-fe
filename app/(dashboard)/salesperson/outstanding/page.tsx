@@ -38,6 +38,11 @@ interface OutstandingOrder {
         unit_price: string | number;
         product: { name: string; category: string };
     }[];
+    payments: {
+        id: string;
+        amount_paid: string | number;
+        status: string;
+    }[];
 }
 
 function formatCurrency(amount: number) {
@@ -116,10 +121,10 @@ export default function OutstandingPage() {
     const filteredOrders = useMemo(() => {
         return orders.filter((order) => {
             const remaining = Number(order.loan?.remaining_amount ?? 0);
-            const isPaid = remaining === 0;
+            const isCompleted = remaining === 0;
             const matchesStatus =
                 statusFilter === "all" ||
-                (statusFilter === "PAID" ? isPaid : !isPaid);
+                (statusFilter === "COMPLETED" ? isCompleted : !isCompleted);
             const orderDate = order.created_at.split("T")[0];
             const matchesFrom = !fromDate || orderDate >= fromDate;
             const matchesTo = !toDate || orderDate <= toDate;
@@ -214,8 +219,8 @@ export default function OutstandingPage() {
 
     const statusOptions = [
         { value: "all", label: "All Orders" },
-        { value: "PAID", label: "Paid" },
         { value: "UNPAID", label: "Unpaid" },
+        { value: "COMPLETED", label: "Completed" },
     ];
 
     const formatDateRange = (from: string, to: string) => {
@@ -585,10 +590,13 @@ export default function OutstandingPage() {
                                                             )}
                                                         </span>
                                                         <span
-                                                            className={`px-2 py-1 text-xs font-bold rounded border ${remaining === 0 ? "bg-green-50 text-green-600 border-green-200" : "bg-red-50 text-red-600 border-red-200"}`}
+                                                            className={`px-2 py-1 text-xs font-bold rounded border ${remaining === 0
+                                                                    ? "bg-yellow-50 text-yellow-600 border-yellow-200"
+                                                                    : "bg-red-50 text-red-600 border-red-200"
+                                                                }`}
                                                         >
                                                             {remaining === 0
-                                                                ? "PAID"
+                                                                ? "COMPLETED"
                                                                 : "UNPAID"}
                                                         </span>
                                                     </div>
@@ -765,11 +773,14 @@ export default function OutstandingPage() {
                                                             </td>
                                                             <td className="py-3 px-4 text-center border-l border-gray-200">
                                                                 <span
-                                                                    className={`inline-flex items-center justify-center h-9 w-20 px-2 text-xs font-bold rounded border ${remaining === 0 ? "bg-green-50 text-green-600 border-green-200" : "bg-red-50 text-red-600 border-red-200"}`}
+                                                                    className={`inline-flex items-center justify-center h-9 w-24 px-2 text-xs font-bold rounded border ${remaining === 0
+                                                                            ? "bg-yellow-50 text-yellow-600 border-yellow-200"
+                                                                            : "bg-red-50 text-red-600 border-red-200"
+                                                                        }`}
                                                                 >
                                                                     {remaining ===
                                                                         0
-                                                                        ? "PAID"
+                                                                        ? "COMPLETED"
                                                                         : "UNPAID"}
                                                                 </span>
                                                             </td>

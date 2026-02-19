@@ -38,6 +38,22 @@ interface OutstandingOrder {
         unit_price: string | number;
         product: { name: string; category: string };
     }[];
+    payments: {
+        id: string;
+        amount_paid: string | number;
+        status: string;
+    }[];
+}
+
+interface PaymentRecord {
+    id: string;
+    order_id: string | null;
+    amount_paid: string | number;
+    payment_type: string;
+    status: string;
+    created_at: string;
+    customer: { id: string; name: string };
+    order: { id: string; created_at: string } | null;
 }
 
 function formatCurrency(amount: number) {
@@ -72,6 +88,9 @@ export default function OutstandingPage() {
         {}
     );
     const [savingPayment, setSavingPayment] = useState<string | null>(null);
+    const [confirmingPayment, setConfirmingPayment] = useState<string | null>(
+        null
+    );
     const [paymentDateNotice, setPaymentDateNotice] = useState<string | null>(
         null
     );
@@ -79,15 +98,8 @@ export default function OutstandingPage() {
         null
     );
     const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false);
-    const [recentPayments, setRecentPayments] = useState<
-        {
-            orderId: string;
-            customer: string;
-            orderDate: string;
-            paymentDate: string;
-            amount: number;
-        }[]
-    >([]);
+    const [allPayments, setAllPayments] = useState<PaymentRecord[]>([]);
+    const [loadingPayments, setLoadingPayments] = useState(false);
 
     const fetchOrders = useCallback(async () => {
         if (!token) return;
@@ -114,13 +126,28 @@ export default function OutstandingPage() {
         fetchOrders();
     }, [fetchOrders]);
 
+    const fetchPayments = useCallback(async () => {
+        if (!token) return;
+        setLoadingPayments(true);
+        try {
+            const data = await apiFetch<PaymentRecord[]>("/payments", {
+                token,
+            });
+            setAllPayments(data);
+        } catch {
+            // silently ignore
+        } finally {
+            setLoadingPayments(false);
+        }
+    }, [token]);
+
     const filteredOrders = useMemo(() => {
         return orders.filter((order) => {
             const remaining = Number(order.loan?.remaining_amount ?? 0);
-            const isPaid = remaining === 0;
+            const isCompleted = remaining === 0;
             const matchesStatus =
                 statusFilter === "all" ||
-                (statusFilter === "PAID" ? isPaid : !isPaid);
+                (statusFilter === "COMPLETED" ? isCompleted : !isCompleted);
             const orderDate = order.created_at.split("T")[0];
             const matchesFrom = !fromDate || orderDate >= fromDate;
             const matchesTo = !toDate || orderDate <= toDate;
@@ -182,7 +209,7 @@ export default function OutstandingPage() {
         setPaymentDateNotice(null);
         setSavingPayment(order.id);
         try {
-            const payment = await apiFetch<{ id: string }>("/payments", {
+            await apiFetch<{ id: string }>("/payments", {
                 method: "POST",
                 token,
                 body: {
@@ -192,28 +219,7 @@ export default function OutstandingPage() {
                     payment_type: "CASH",
                 },
             });
-            // If admin, auto-confirm the payment
-            if (user?.role === "admin") {
-                try {
-                    await apiFetch(`/payments/${payment.id}/confirm`, {
-                        method: "POST",
-                        token,
-                    });
-                } catch {
-                    // payment created but not confirmed - still OK
-                }
-            }
             setPaymentInputs((prev) => ({ ...prev, [order.id]: "" }));
-            setRecentPayments((prev) => [
-                ...prev,
-                {
-                    orderId: order.id,
-                    customer: order.customer.name,
-                    orderDate: order.created_at.split("T")[0],
-                    paymentDate: selectedPaymentDate,
-                    amount: parsed,
-                },
-            ]);
             await fetchOrders();
         } catch (err) {
             setError(
@@ -228,9 +234,36 @@ export default function OutstandingPage() {
 
     const statusOptions = [
         { value: "all", label: "All Orders" },
-        { value: "PAID", label: "Paid" },
         { value: "UNPAID", label: "Unpaid" },
+        { value: "COMPLETED", label: "Completed" },
     ];
+
+    const handleConfirmPayments = async (order: OutstandingOrder) => {
+        const pendingPayments = (order.payments ?? []).filter(
+            (p) => p.status === "PENDING"
+        );
+        if (!token || pendingPayments.length === 0) return;
+        setConfirmingPayment(order.id);
+        try {
+            await Promise.all(
+                pendingPayments.map((p) =>
+                    apiFetch(`/payments/${p.id}/confirm`, {
+                        method: "POST",
+                        token,
+                    })
+                )
+            );
+            await fetchOrders();
+        } catch (err) {
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "Failed to confirm payments"
+            );
+        } finally {
+            setConfirmingPayment(null);
+        }
+    };
 
     const formatDateRange = (from: string, to: string) => {
         if (!from && !to) return "All dates";
@@ -243,15 +276,21 @@ export default function OutstandingPage() {
     const printablePayments = useMemo(() => {
         const rangeFrom = paymentDate || fromDate;
         const rangeTo = paymentDate || toDate;
-        return recentPayments.filter(
-            (e) =>
-                (!rangeFrom || e.paymentDate >= rangeFrom) &&
-                (!rangeTo || e.paymentDate <= rangeTo)
-        );
-    }, [fromDate, toDate, paymentDate, recentPayments]);
+        return allPayments.filter((p) => {
+            const pDate = p.created_at.split("T")[0];
+            return (
+                (!rangeFrom || pDate >= rangeFrom) &&
+                (!rangeTo || pDate <= rangeTo)
+            );
+        });
+    }, [allPayments, paymentDate, fromDate, toDate]);
 
     const totalPrintableAmount = useMemo(
-        () => printablePayments.reduce((sum, p) => sum + p.amount, 0),
+        () =>
+            printablePayments.reduce(
+                (sum, p) => sum + Number(p.amount_paid),
+                0
+            ),
         [printablePayments]
     );
 
@@ -317,7 +356,10 @@ export default function OutstandingPage() {
                                         Order Date
                                     </th>
                                     <th className="border border-blue-500 text-center py-2 px-3">
-                                        Payment Amount
+                                        Payment Date
+                                    </th>
+                                    <th className="border border-blue-500 text-center py-2 px-3">
+                                        Amount
                                     </th>
                                 </tr>
                             </thead>
@@ -325,7 +367,7 @@ export default function OutstandingPage() {
                                 {printablePayments.length === 0 ? (
                                     <tr>
                                         <td
-                                            colSpan={4}
+                                            colSpan={5}
                                             className="border border-blue-500 py-4 text-center text-gray-500"
                                         >
                                             No payments recorded for selected
@@ -333,19 +375,24 @@ export default function OutstandingPage() {
                                         </td>
                                     </tr>
                                 ) : (
-                                    printablePayments.map((p, i) => (
-                                        <tr key={`${p.orderId}-${i}`}>
+                                    printablePayments.map((p) => (
+                                        <tr key={p.id}>
                                             <td className="border border-blue-500 py-2 px-3">
-                                                {p.orderId.slice(0, 8)}
+                                                {(p.order_id ?? p.id).slice(0, 8)}
                                             </td>
                                             <td className="border border-blue-500 py-2 px-3">
-                                                {p.customer}
+                                                {p.customer.name}
                                             </td>
                                             <td className="border border-blue-500 py-2 px-3">
-                                                {formatDate(p.orderDate)}
+                                                {p.order
+                                                    ? formatDate(p.order.created_at)
+                                                    : "-"}
+                                            </td>
+                                            <td className="border border-blue-500 py-2 px-3">
+                                                {formatDate(p.created_at)}
                                             </td>
                                             <td className="border border-blue-500 py-2 px-3 text-right">
-                                                {formatCurrency(p.amount)}
+                                                {formatCurrency(Number(p.amount_paid))}
                                             </td>
                                         </tr>
                                     ))
@@ -406,7 +453,10 @@ export default function OutstandingPage() {
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => setIsPrintDialogOpen(true)}
+                                    onClick={() => {
+                                        setIsPrintDialogOpen(true);
+                                        fetchPayments();
+                                    }}
                                 >
                                     Payment List
                                 </Button>
@@ -615,10 +665,13 @@ export default function OutstandingPage() {
                                                             )}
                                                         </span>
                                                         <span
-                                                            className={`px-2 py-1 text-xs font-bold rounded border ${remaining === 0 ? "bg-green-50 text-green-600 border-green-200" : "bg-red-50 text-red-600 border-red-200"}`}
+                                                            className={`px-2 py-1 text-xs font-bold rounded border ${remaining === 0
+                                                                ? "bg-yellow-50 text-yellow-600 border-yellow-200"
+                                                                : "bg-red-50 text-red-600 border-red-200"
+                                                                }`}
                                                         >
                                                             {remaining === 0
-                                                                ? "PAID"
+                                                                ? "COMPLETED"
                                                                 : "UNPAID"}
                                                         </span>
                                                     </div>
@@ -648,7 +701,7 @@ export default function OutstandingPage() {
                                                             )}
                                                         </span>
                                                     </div>
-                                                    {remaining > 0 && (
+                                                    {remaining > 0 ? (
                                                         <div className="flex items-center gap-2">
                                                             <Input
                                                                 type="number"
@@ -690,7 +743,31 @@ export default function OutstandingPage() {
                                                                     : "Save"}
                                                             </Button>
                                                         </div>
-                                                    )}
+                                                    ) : (order.payments ?? []).some(
+                                                        (p) =>
+                                                            p.status ===
+                                                            "PENDING"
+                                                    ) ? (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="border-blue-500 text-blue-700 hover:bg-blue-50 w-full"
+                                                            disabled={
+                                                                confirmingPayment ===
+                                                                order.id
+                                                            }
+                                                            onClick={() =>
+                                                                handleConfirmPayments(
+                                                                    order
+                                                                )
+                                                            }
+                                                        >
+                                                            {confirmingPayment ===
+                                                                order.id
+                                                                ? "..."
+                                                                : "Confirm"}
+                                                        </Button>
+                                                    ) : null}
                                                 </div>
                                             );
                                         })
@@ -795,11 +872,14 @@ export default function OutstandingPage() {
                                                             </td>
                                                             <td className="py-3 px-4 text-center border-l border-gray-200">
                                                                 <span
-                                                                    className={`inline-flex items-center justify-center h-9 w-20 px-2 text-xs font-bold rounded border ${remaining === 0 ? "bg-green-50 text-green-600 border-green-200" : "bg-red-50 text-red-600 border-red-200"}`}
+                                                                    className={`inline-flex items-center justify-center h-9 w-24 px-2 text-xs font-bold rounded border ${remaining === 0
+                                                                        ? "bg-yellow-50 text-yellow-600 border-yellow-200"
+                                                                        : "bg-red-50 text-red-600 border-red-200"
+                                                                        }`}
                                                                 >
                                                                     {remaining ===
                                                                         0
-                                                                        ? "PAID"
+                                                                        ? "COMPLETED"
                                                                         : "UNPAID"}
                                                                 </span>
                                                             </td>
@@ -841,27 +921,51 @@ export default function OutstandingPage() {
                                                             </td>
                                                             <td className="py-3 px-4 text-center border-l border-gray-200">
                                                                 {remaining >
-                                                                    0 && (
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="outline"
-                                                                            className="border-green-500 text-green-700 hover:bg-green-50 h-9 w-20"
-                                                                            disabled={
-                                                                                savingPayment ===
-                                                                                order.id
-                                                                            }
-                                                                            onClick={() =>
-                                                                                handleCollectPayment(
-                                                                                    order
-                                                                                )
-                                                                            }
-                                                                        >
-                                                                            {savingPayment ===
-                                                                                order.id
-                                                                                ? "..."
-                                                                                : "Save"}
-                                                                        </Button>
-                                                                    )}
+                                                                    0 ? (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        className="border-green-500 text-green-700 hover:bg-green-50 h-9 w-20"
+                                                                        disabled={
+                                                                            savingPayment ===
+                                                                            order.id
+                                                                        }
+                                                                        onClick={() =>
+                                                                            handleCollectPayment(
+                                                                                order
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        {savingPayment ===
+                                                                            order.id
+                                                                            ? "..."
+                                                                            : "Save"}
+                                                                    </Button>
+                                                                ) : (order.payments ?? []).some(
+                                                                    (p) =>
+                                                                        p.status ===
+                                                                        "PENDING"
+                                                                ) ? (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        className="border-blue-500 text-blue-700 hover:bg-blue-50 h-9 w-20"
+                                                                        disabled={
+                                                                            confirmingPayment ===
+                                                                            order.id
+                                                                        }
+                                                                        onClick={() =>
+                                                                            handleConfirmPayments(
+                                                                                order
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        {confirmingPayment ===
+                                                                            order.id
+                                                                            ? "..."
+                                                                            : "Confirm"}
+                                                                    </Button>
+                                                                ) : null}
                                                             </td>
                                                         </tr>
                                                     );
@@ -910,15 +1014,27 @@ export default function OutstandingPage() {
                                                 Order Date
                                             </th>
                                             <th className="border border-blue-500 text-center py-2 px-3">
-                                                Payment Amount
+                                                Payment Date
+                                            </th>
+                                            <th className="border border-blue-500 text-center py-2 px-3">
+                                                Amount
                                             </th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {printablePayments.length === 0 ? (
+                                        {loadingPayments ? (
                                             <tr>
                                                 <td
-                                                    colSpan={4}
+                                                    colSpan={5}
+                                                    className="border border-blue-500 py-4 text-center text-gray-500"
+                                                >
+                                                    Loading payments...
+                                                </td>
+                                            </tr>
+                                        ) : printablePayments.length === 0 ? (
+                                            <tr>
+                                                <td
+                                                    colSpan={5}
                                                     className="border border-blue-500 py-4 text-center text-gray-500"
                                                 >
                                                     No payments recorded for
@@ -926,22 +1042,25 @@ export default function OutstandingPage() {
                                                 </td>
                                             </tr>
                                         ) : (
-                                            printablePayments.map((p, i) => (
-                                                <tr key={`${p.orderId}-${i}`}>
+                                            printablePayments.map((p) => (
+                                                <tr key={p.id}>
                                                     <td className="border border-blue-500 py-2 px-3">
-                                                        {p.orderId.slice(0, 8)}
+                                                        {(p.order_id ?? p.id).slice(0, 8)}
                                                     </td>
                                                     <td className="border border-blue-500 py-2 px-3">
-                                                        {p.customer}
+                                                        {p.customer.name}
                                                     </td>
                                                     <td className="border border-blue-500 py-2 px-3">
-                                                        {formatDate(
-                                                            p.orderDate
-                                                        )}
+                                                        {p.order
+                                                            ? formatDate(p.order.created_at)
+                                                            : "-"}
+                                                    </td>
+                                                    <td className="border border-blue-500 py-2 px-3">
+                                                        {formatDate(p.created_at)}
                                                     </td>
                                                     <td className="border border-blue-500 py-2 px-3 text-right">
                                                         {formatCurrency(
-                                                            p.amount
+                                                            Number(p.amount_paid)
                                                         )}
                                                     </td>
                                                 </tr>
