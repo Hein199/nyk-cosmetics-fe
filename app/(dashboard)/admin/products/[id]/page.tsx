@@ -219,6 +219,7 @@ export default function ProductDetailPage() {
                                         alt={product.name}
                                         ref={productImageRef}
                                         className="w-3/4 h-3/4 object-contain"
+                                        onError={(e) => { e.currentTarget.src = "/mock/product-1.svg"; }}
                                     />
                                 </div>
                             </div>
