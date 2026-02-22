@@ -14,6 +14,9 @@ type Product = {
     name: string;
     category: string;
     unit_price: string | number;
+    pcs_per_dozen: string | number;
+    pcs_per_pack: string | number;
+    pcs_per_box: string | number;
     photo_url: string;
     inventory?: { quantity: number } | null;
     is_active: boolean;
@@ -55,15 +58,15 @@ export default function ProductDetailPage() {
     const unitMultiplier = useMemo(() => {
         switch (unit) {
             case INVENTORY_UNITS.DOZEN:
-                return 12;
+                return Number(product?.pcs_per_dozen ?? 12);
             case INVENTORY_UNITS.PACKAGE:
-                return 6;
+                return Number(product?.pcs_per_pack ?? 12);
             case INVENTORY_UNITS.BOX:
-                return 24;
+                return Number(product?.pcs_per_box ?? 24);
             default:
                 return 1;
         }
-    }, [unit]);
+    }, [unit, product?.pcs_per_dozen, product?.pcs_per_pack, product?.pcs_per_box]);
 
     const pricePerSelectedUnit = useMemo(() => {
         if (useCustomPrice && customPrice) {
@@ -340,7 +343,7 @@ export default function ProductDetailPage() {
                                             unit,
                                             useCustomPrice && customPrice ? Number(customPrice) : undefined,
                                             product.name,
-                                            Number(product.unit_price)
+                                            Number(product.unit_price) * unitMultiplier
                                         );
                                     }
                                     }
