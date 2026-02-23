@@ -13,7 +13,6 @@ import {
 import {
     Dialog,
     DialogContent,
-    DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
@@ -27,6 +26,10 @@ interface Expense {
     payment_method: string;
     remark?: string | null;
     created_at: string;
+}
+
+function todayStr() {
+    return new Date().toISOString().split("T")[0];
 }
 
 function formatCurrency(amount: number) {
@@ -54,6 +57,7 @@ export default function ExpensesPage() {
     const [paymentMethod, setPaymentMethod] = useState<"CASH" | "BANK">(
         "CASH"
     );
+    const [expenseDate, setExpenseDate] = useState(todayStr());
 
     const fetchExpenses = useCallback(async (signal?: AbortSignal) => {
         if (!token) return;
@@ -108,6 +112,7 @@ export default function ExpensesPage() {
                     category,
                     payment_method: paymentMethod,
                     remark: remark || undefined,
+                    expense_date: expenseDate,
                 },
             });
             setIsCreateOpen(false);
@@ -116,6 +121,7 @@ export default function ExpensesPage() {
             setCategory("");
             setRemark("");
             setPaymentMethod("CASH");
+            setExpenseDate(todayStr());
             await fetchExpenses();
         } catch (err) {
             setError(
@@ -251,31 +257,27 @@ export default function ExpensesPage() {
 
             {/* Create Expense Dialog */}
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-                <DialogContent className="sm:max-w-xl">
-                    <DialogHeader>
-                        <DialogTitle>Add New Expense</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Description
-                            </label>
-                            <Input
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                placeholder="What was this expense for?"
-                            />
-                        </div>
+                <DialogContent className="sm:max-w-lg rounded-lg shadow-lg p-0 gap-0">
+                    {/* Header */}
+                    <div className="px-6 pt-6 pb-4 border-b border-gray-200">
+                        <DialogTitle className="text-lg font-semibold text-gray-900">
+                            Add New Expense
+                        </DialogTitle>
+                    </div>
+
+                    {/* Body */}
+                    <div className="p-6 space-y-4">
+                        {/* Row 1: Date + Category */}
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Amount (MMK)
+                                    Date
                                 </label>
-                                <Input
-                                    type="number"
-                                    value={amount}
-                                    onChange={(e) => setAmount(e.target.value)}
-                                    placeholder="e.g. 50000"
+                                <input
+                                    type="date"
+                                    value={expenseDate}
+                                    onChange={(e) => setExpenseDate(e.target.value)}
+                                    className="w-full h-10 px-3 text-sm text-black border border-gray-300 rounded-md bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
                                 />
                             </div>
                             <div>
@@ -286,26 +288,58 @@ export default function ExpensesPage() {
                                     value={category}
                                     onChange={(e) => setCategory(e.target.value)}
                                     placeholder="e.g. Rent, Utilities"
+                                    className="h-10 rounded-md px-3 border-gray-300"
                                 />
                             </div>
                         </div>
+
+                        {/* Row 2: Amount + Payment Method */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Amount (MMK)
+                                </label>
+                                <Input
+                                    type="number"
+                                    value={amount}
+                                    onChange={(e) => setAmount(e.target.value)}
+                                    placeholder="e.g. 50000"
+                                    className="h-10 rounded-md px-3 border-gray-300"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Payment Method
+                                </label>
+                                <select
+                                    value={paymentMethod}
+                                    onChange={(e) =>
+                                        setPaymentMethod(
+                                            e.target.value as "CASH" | "BANK"
+                                        )
+                                    }
+                                    className="w-full h-10 px-3 text-sm text-black border border-gray-300 rounded-md bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                                >
+                                    <option value="CASH">CASH</option>
+                                    <option value="BANK">BANK</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Row 3: Description */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Payment Method
+                                Description
                             </label>
-                            <select
-                                value={paymentMethod}
-                                onChange={(e) =>
-                                    setPaymentMethod(
-                                        e.target.value as "CASH" | "BANK"
-                                    )
-                                }
-                                className="w-full h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg bg-white shadow-sm"
-                            >
-                                <option value="CASH">CASH</option>
-                                <option value="BANK">BANK</option>
-                            </select>
+                            <Input
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                placeholder="What was this expense for?"
+                                className="h-10 rounded-md px-3 border-gray-300"
+                            />
                         </div>
+
+                        {/* Row 4: Remark */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Remark
@@ -314,30 +348,32 @@ export default function ExpensesPage() {
                                 value={remark}
                                 onChange={(e) => setRemark(e.target.value)}
                                 placeholder="Optional notes..."
-                                rows={3}
-                                className="w-full px-3 py-2 text-sm text-black border border-gray-300 rounded-lg bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 resize-none"
+                                className="w-full min-h-[90px] px-3 py-2 text-sm text-black border border-gray-300 rounded-md bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 resize-none"
                             />
                         </div>
-                        <div className="flex justify-end gap-2 pt-2">
-                            <Button
-                                variant="outline"
-                                onClick={() => setIsCreateOpen(false)}
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                onClick={handleCreate}
-                                disabled={
-                                    saving ||
-                                    !description ||
-                                    !amount ||
-                                    !category
-                                }
-                                className="bg-pink-600 hover:bg-pink-700 text-white"
-                            >
-                                {saving ? "Saving..." : "Create"}
-                            </Button>
-                        </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200">
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsCreateOpen(false)}
+                            className="h-10 px-4 border-gray-300 text-gray-700"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleCreate}
+                            disabled={
+                                saving ||
+                                !description ||
+                                !amount ||
+                                !category
+                            }
+                            className="h-10 px-4 bg-pink-600 hover:bg-pink-700 text-white"
+                        >
+                            {saving ? "Saving..." : "Create"}
+                        </Button>
                     </div>
                 </DialogContent>
             </Dialog>
