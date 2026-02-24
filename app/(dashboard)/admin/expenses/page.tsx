@@ -48,6 +48,8 @@ export default function ExpensesPage() {
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
+    const [fromDate, setFromDate] = useState("");
+    const [toDate, setToDate] = useState("");
 
     // Form
     const [description, setDescription] = useState("");
@@ -84,14 +86,18 @@ export default function ExpensesPage() {
     }, [fetchExpenses]);
 
     const filtered = useMemo(() => {
-        const q = searchQuery.toLowerCase();
-        if (!q) return expenses;
-        return expenses.filter(
-            (e) =>
+        return expenses.filter((e) => {
+            const eDate = e.created_at.split("T")[0];
+            const matchesFrom = !fromDate || eDate >= fromDate;
+            const matchesTo = !toDate || eDate <= toDate;
+            const q = searchQuery.toLowerCase();
+            const matchesSearch =
+                !q ||
                 e.description.toLowerCase().includes(q) ||
-                e.category.toLowerCase().includes(q)
-        );
-    }, [expenses, searchQuery]);
+                e.category.toLowerCase().includes(q);
+            return matchesFrom && matchesTo && matchesSearch;
+        });
+    }, [expenses, searchQuery, fromDate, toDate]);
 
     const totalExpenses = useMemo(
         () => filtered.reduce((sum, e) => sum + Number(e.amount), 0),
@@ -160,19 +166,79 @@ export default function ExpensesPage() {
             )}
 
             <Card>
-                <CardHeader>
-                    <CardTitle>All Expenses</CardTitle>
-                    <CardDescription>
-                        {filtered.length} expenses — Total:{" "}
-                        {formatCurrency(totalExpenses)}
-                    </CardDescription>
-                    <div className="pt-2">
-                        <Input
-                            placeholder="Search by description or category..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="max-w-md"
-                        />
+                <CardHeader className="pb-4">
+                    <div className="flex flex-col space-y-4">
+                        <div>
+                            <CardTitle className="text-xl">All Expenses</CardTitle>
+                            <CardDescription>
+                                Showing {filtered.length} expenses
+                                {filtered.length > 0 &&
+                                    ` — Total: ${formatCurrency(totalExpenses)}`}
+                            </CardDescription>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-4">
+                            <div className="flex items-center gap-3">
+                                <div className="flex flex-col">
+                                    <label className="text-xs text-gray-500 mb-1">
+                                        From
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={fromDate}
+                                        onChange={(e) => setFromDate(e.target.value)}
+                                        className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white shadow-sm"
+                                    />
+                                </div>
+                                <div className="flex flex-col">
+                                    <label className="text-xs text-gray-500 mb-1">
+                                        To
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={toDate}
+                                        onChange={(e) => setToDate(e.target.value)}
+                                        className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white shadow-sm"
+                                        min={fromDate}
+                                    />
+                                </div>
+                                <div className="flex flex-col">
+                                    <label className="text-xs text-transparent mb-1">.</label>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => {
+                                                const t = new Date().toISOString().split("T")[0];
+                                                setFromDate(t);
+                                                setToDate(t);
+                                            }}
+                                            className="text-xs h-10 w-16"
+                                        >
+                                            Today
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => {
+                                                setFromDate("");
+                                                setToDate("");
+                                            }}
+                                            className="text-xs h-10 w-16"
+                                        >
+                                            All
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <Input
+                                placeholder="Search by description or category..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="max-w-md h-10"
+                            />
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent>
