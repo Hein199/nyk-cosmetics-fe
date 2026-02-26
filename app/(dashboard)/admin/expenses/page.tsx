@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
-import { thaiToday } from "@/lib/utils";
+import { thaiToday, toBangkokDateStr } from "@/lib/utils";
 
 interface Expense {
     id: number;
@@ -87,7 +87,7 @@ export default function ExpensesPage() {
 
     const filtered = useMemo(() => {
         return expenses.filter((e) => {
-            const eDate = e.created_at.split("T")[0];
+            const eDate = toBangkokDateStr(e.created_at);
             const matchesFrom = !fromDate || eDate >= fromDate;
             const matchesTo = !toDate || eDate <= toDate;
             const q = searchQuery.toLowerCase();

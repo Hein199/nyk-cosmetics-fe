@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
-import { formatId, thaiToday } from "@/lib/utils";
+import { formatId, thaiToday, toBangkokDateStr } from "@/lib/utils";
 
 interface OutstandingOrder {
     id: number;
@@ -129,7 +129,7 @@ export default function OutstandingPage() {
             const matchesStatus =
                 statusFilter === "all" ||
                 (statusFilter === "COMPLETED" ? isCompleted : !isCompleted);
-            const orderDate = order.created_at.split("T")[0];
+            const orderDate = toBangkokDateStr(order.created_at);
             const matchesFrom = !fromDate || orderDate >= fromDate;
             const matchesTo = !toDate || orderDate <= toDate;
             const q = searchQuery.toLowerCase();
@@ -165,7 +165,7 @@ export default function OutstandingPage() {
         if (!inputValue || Number.isNaN(parsed) || parsed <= 0 || !token)
             return;
 
-        const orderDate = order.created_at.split("T")[0];
+        const orderDate = toBangkokDateStr(order.created_at);
         const selectedPaymentDate =
             paymentDate || thaiToday();
         if (selectedPaymentDate < orderDate) {
@@ -204,7 +204,7 @@ export default function OutstandingPage() {
                 {
                     orderId: order.id,
                     customer: order.customer.name,
-                    orderDate: order.created_at.split("T")[0],
+                    orderDate: toBangkokDateStr(order.created_at),
                     paymentDate: selectedPaymentDate,
                     amount: parsed,
                 },

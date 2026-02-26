@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
-import { formatId, thaiToday, formatThaiDate } from "@/lib/utils";
+import { formatId, thaiToday, formatThaiDate, toBangkokDateStr } from "@/lib/utils";
 
 interface Payment {
     id: number;
@@ -71,7 +71,7 @@ export default function PaymentHistoryPage() {
 
     const filteredPayments = useMemo(() => {
         return payments.filter((p) => {
-            const pDate = p.created_at.split("T")[0];
+            const pDate = toBangkokDateStr(p.created_at);
             const matchesFrom = !fromDate || pDate >= fromDate;
             const matchesTo = !toDate || pDate <= toDate;
             const matchesStatus =
