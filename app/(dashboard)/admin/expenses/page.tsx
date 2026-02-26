@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
+import { thaiToday } from "@/lib/utils";
 
 interface Expense {
     id: number;
@@ -29,7 +30,7 @@ interface Expense {
 }
 
 function todayStr() {
-    return new Date().toISOString().split("T")[0];
+    return thaiToday();
 }
 
 function formatCurrency(amount: number) {
@@ -204,7 +205,7 @@ export default function ExpensesPage() {
                                             size="sm"
                                             variant="outline"
                                             onClick={() => {
-                                                const t = new Date().toISOString().split("T")[0];
+                                                const t = thaiToday();
                                                 setFromDate(t);
                                                 setToDate(t);
                                             }}

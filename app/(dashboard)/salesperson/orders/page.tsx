@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
 import { API_BASE_URL } from "@/lib/constants";
-import { formatId } from "@/lib/utils";
+import { formatId, thaiToday, formatThaiDate } from "@/lib/utils";
 
 type OrderListItem = {
     id: number;
@@ -80,12 +80,7 @@ function formatCurrency(amount: number) {
 
 // Format date for display
 function formatDate(dateString: string) {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-    });
+    return formatThaiDate(dateString);
 }
 
 function formatStatusLabel(status: string) {
@@ -426,7 +421,7 @@ export default function OrdersPage() {
                                     size="sm"
                                     variant="outline"
                                     onClick={() => {
-                                        const today = new Date().toISOString().split('T')[0];
+                                        const today = thaiToday();
                                         setFromDate(today);
                                         setToDate(today);
                                     }}
