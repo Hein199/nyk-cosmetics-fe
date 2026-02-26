@@ -33,7 +33,7 @@ const adminSetupItems = [
 const salespersonNavItems = [
     { href: "/salesperson", label: "Dashboard", icon: "home" },
     { href: "/salesperson/orders", label: "Orders", icon: "orders" },
-    { href: "/salesperson/products", label: "Products", icon: "products" },
+    { href: "/salesperson/products", label: "Create Order", icon: "products" },
     { href: "/salesperson/customers", label: "Customers", icon: "customers" },
     { href: "/salesperson/outstanding", label: "Payment", icon: "outstanding" },
     { href: "/salesperson/payment-history", label: "Payment History", icon: "history" },

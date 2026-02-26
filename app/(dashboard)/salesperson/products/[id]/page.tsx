@@ -15,7 +15,6 @@ type Product = {
     category: string;
     unit_price: string | number;
     pcs_per_dozen: string | number;
-    pcs_per_pack: string | number;
     pcs_per_box: string | number;
     photo_url: string;
     inventory?: { quantity: number } | null;
@@ -27,6 +26,7 @@ function formatCurrency(amount: number) {
         style: "currency",
         currency: "MMK",
         minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
     }).format(amount);
 }
 
@@ -37,7 +37,7 @@ function formatCategory(category: string) {
 export default function ProductDetailPage() {
     const params = useParams<{ id: string }>();
     const router = useRouter();
-    const { addToCart } = useCart();
+    const { addToCart, cart } = useCart();
     const { token } = useAuth();
     const [product, setProduct] = useState<Product | null>(null);
     const [loading, setLoading] = useState(true);
@@ -47,11 +47,11 @@ export default function ProductDetailPage() {
     const [unit, setUnit] = useState<string>(INVENTORY_UNITS.PIECES);
     const [useCustomPrice, setUseCustomPrice] = useState(false);
     const [customPrice, setCustomPrice] = useState("");
+    const [stockError, setStockError] = useState<string | null>(null);
     const productImageRef = useRef<HTMLImageElement | null>(null);
     const unitOptions = [
         { value: INVENTORY_UNITS.PIECES, label: "Pcs" },
         { value: INVENTORY_UNITS.DOZEN, label: "Dozen" },
-        { value: INVENTORY_UNITS.PACKAGE, label: "Package" },
         { value: INVENTORY_UNITS.BOX, label: "Box" },
     ];
 
@@ -59,14 +59,12 @@ export default function ProductDetailPage() {
         switch (unit) {
             case INVENTORY_UNITS.DOZEN:
                 return Number(product?.pcs_per_dozen ?? 12);
-            case INVENTORY_UNITS.PACKAGE:
-                return Number(product?.pcs_per_pack ?? 12);
             case INVENTORY_UNITS.BOX:
                 return Number(product?.pcs_per_box ?? 24);
             default:
                 return 1;
         }
-    }, [unit, product?.pcs_per_dozen, product?.pcs_per_pack, product?.pcs_per_box]);
+    }, [unit, product?.pcs_per_dozen, product?.pcs_per_box]);
 
     const pricePerSelectedUnit = useMemo(() => {
         if (useCustomPrice && customPrice) {
@@ -78,13 +76,30 @@ export default function ProductDetailPage() {
         return Number(product?.unit_price ?? 0) * unitMultiplier;
     }, [customPrice, product?.unit_price, unitMultiplier, useCustomPrice]);
 
+    const existingCartPieces = useMemo(() => {
+        if (!product) return 0;
+        const cartItem = cart.find(item => item.id === product.id);
+        if (!cartItem) return 0;
+        const mult = cartItem.unit === INVENTORY_UNITS.DOZEN
+            ? Number(product.pcs_per_dozen)
+            : cartItem.unit === INVENTORY_UNITS.BOX
+                ? Number(product.pcs_per_box)
+                : 1;
+        return cartItem.quantity * mult;
+    }, [cart, product]);
+
+    const maxQuantity = useMemo(() => {
+        const stock = product?.inventory?.quantity ?? Number.MAX_SAFE_INTEGER;
+        const remaining = Math.max(0, stock - existingCartPieces);
+        return Math.max(0, Math.floor(remaining / unitMultiplier));
+    }, [product, existingCartPieces, unitMultiplier]);
+
     const handleDecrease = () => {
         setQuantity((prev) => Math.max(1, prev - 1));
     };
 
     const handleIncrease = () => {
-        const stock = product?.inventory?.quantity ?? Number.MAX_SAFE_INTEGER;
-        setQuantity((prev) => Math.min(stock, prev + 1));
+        setQuantity((prev) => Math.min(maxQuantity, prev + 1));
     };
 
     const animateToCart = () => {
@@ -199,7 +214,7 @@ export default function ProductDetailPage() {
                             {error && (
                                 <p className="text-sm text-red-600 mb-4">{error}</p>
                             )}
-                            <Button variant="outline" onClick={() => router.back()}>
+                            <Button variant="outline" onClick={() => router.push("/salesperson/products")}>
                                 Back
                             </Button>
                         </CardContent>
@@ -244,11 +259,9 @@ export default function ProductDetailPage() {
                                 <p className="text-xs text-gray-500">
                                     {unit === INVENTORY_UNITS.DOZEN
                                         ? "Price per Dozen"
-                                        : unit === INVENTORY_UNITS.PACKAGE
-                                            ? "Price per Package"
-                                            : unit === INVENTORY_UNITS.BOX
-                                                ? "Price per Box"
-                                                : "Price per Unit"}
+                                        : unit === INVENTORY_UNITS.BOX
+                                            ? "Price per Box"
+                                            : "Price per Unit"}
                                 </p>
                             </div>
 
@@ -263,7 +276,7 @@ export default function ProductDetailPage() {
                                         <button
                                             key={option.value}
                                             type="button"
-                                            onClick={() => setUnit(option.value)}
+                                            onClick={() => { setUnit(option.value); setQuantity(1); setStockError(null); }}
                                             className={`h-10 rounded-full border text-sm font-medium transition-colors ${unit === option.value
                                                 ? "bg-pink-100 border-pink-300 text-pink-700"
                                                 : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
@@ -287,11 +300,9 @@ export default function ProductDetailPage() {
                                     <label htmlFor="use-custom-price" className="text-sm text-gray-700">
                                         {unit === INVENTORY_UNITS.DOZEN
                                             ? "Custom price per Dozen"
-                                            : unit === INVENTORY_UNITS.PACKAGE
-                                                ? "Custom price per Package"
-                                                : unit === INVENTORY_UNITS.BOX
-                                                    ? "Custom price per Box"
-                                                    : "Custom price per Unit"}
+                                            : unit === INVENTORY_UNITS.BOX
+                                                ? "Custom price per Box"
+                                                : "Custom price per Unit"}
                                     </label>
                                 </div>
                                 {useCustomPrice && (
@@ -320,9 +331,9 @@ export default function ProductDetailPage() {
                                         <Input
                                             type="number"
                                             min="1"
-                                            max={product.inventory?.quantity}
+                                            max={maxQuantity}
                                             value={quantity}
-                                            onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                                            onChange={(e) => setQuantity(Math.max(1, Math.min(maxQuantity, parseInt(e.target.value) || 1)))}
                                             className="h-10 w-16 border-0 text-center text-sm font-medium text-gray-900 focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                         />
                                     </div>
@@ -336,6 +347,13 @@ export default function ProductDetailPage() {
                                 </div>
                                 <Button
                                     onClick={() => {
+                                        const inventoryQty = product.inventory?.quantity ?? Number.MAX_SAFE_INTEGER;
+                                        const newPieces = quantity * unitMultiplier;
+                                        if (existingCartPieces + newPieces > inventoryQty) {
+                                            setStockError(`Insufficient stock.`);
+                                            return;
+                                        }
+                                        setStockError(null);
                                         animateToCart();
                                         addToCart(
                                             product.id,
@@ -345,20 +363,23 @@ export default function ProductDetailPage() {
                                             product.name,
                                             Number(product.unit_price) * unitMultiplier
                                         );
-                                    }
-                                    }
-                                    className="flex-1 min-w-[180px] h-10 rounded-full text-sm bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700"
+                                    }}
+                                    disabled={maxQuantity === 0}
+                                    className="flex-1 min-w-[180px] h-10 rounded-full text-sm bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     Add to Cart
                                 </Button>
                                 <Button
                                     variant="outline"
-                                    onClick={() => router.back()}
+                                    onClick={() => router.push("/salesperson/products")}
                                     className="h-10 rounded-full"
                                 >
                                     Back
                                 </Button>
                             </div>
+                            {stockError && (
+                                <p className="text-sm font-medium text-red-600">{stockError}</p>
+                            )}
 
                             <div className="pt-6 border-t border-gray-200">
                                 <div className="flex items-center justify-between">
