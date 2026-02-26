@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
 import { API_BASE_URL } from "@/lib/constants";
-import { formatId } from "@/lib/utils";
+import { formatId, thaiToday, thaiOffsetDay, formatThaiDate } from "@/lib/utils";
 
 type OrderListItem = {
     id: number;
@@ -290,12 +290,7 @@ export default function SalespersonPage() {
 
     // Format date for display
     const formatDate = (dateString: string) => {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-        });
+        return formatThaiDate(dateString);
     };
 
     // Format date range for display
@@ -318,50 +313,44 @@ export default function SalespersonPage() {
 
     // Helper function to set preset date ranges quickly
     const setPresetRange = (type: string) => {
-        const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
+        const todayStr = thaiToday();
+        // Bangkok today midnight as a UTC Date for reliable day-of-week arithmetic
+        const todayBkk = new Date(`${todayStr}T00:00:00+07:00`);
 
         switch (type) {
             case 'today':
                 setFromDate(todayStr);
                 setToDate(todayStr);
                 break;
-            case 'yesterday':
-                const yesterday = new Date(today);
-                yesterday.setDate(yesterday.getDate() - 1);
-                const yesterdayStr = yesterday.toISOString().split('T')[0];
-                setFromDate(yesterdayStr);
-                setToDate(yesterdayStr);
+            case 'yesterday': {
+                const y = thaiOffsetDay(-1);
+                setFromDate(y);
+                setToDate(y);
                 break;
-            case 'thisWeek':
-                const weekStart = new Date(today);
-                weekStart.setDate(today.getDate() - today.getDay());
-                const weekStartStr = weekStart.toISOString().split('T')[0];
-                setFromDate(weekStartStr);
+            }
+            case 'thisWeek': {
+                // Sunday = day 0; getUTCDay() is correct since todayBkk is Bangkok midnight in UTC
+                setFromDate(thaiOffsetDay(-todayBkk.getUTCDay()));
                 setToDate(todayStr);
                 break;
-            case 'thisMonth':
-                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-                const monthStartStr = monthStart.toISOString().split('T')[0];
-                setFromDate(monthStartStr);
+            }
+            case 'thisMonth': {
+                const [y, m] = todayStr.split('-');
+                setFromDate(`${y}-${m}-01`);
                 setToDate(todayStr);
                 break;
-            case 'last7days':
-                const sevenDaysAgo = new Date(today);
-                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-                const sevenDaysStr = sevenDaysAgo.toISOString().split('T')[0];
-                setFromDate(sevenDaysStr);
+            }
+            case 'last7days': {
+                setFromDate(thaiOffsetDay(-6));
                 setToDate(todayStr);
                 break;
-            case 'last30days':
-                const thirtyDaysAgo = new Date(today);
-                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
-                const thirtyDaysStr = thirtyDaysAgo.toISOString().split('T')[0];
-                setFromDate(thirtyDaysStr);
+            }
+            case 'last30days': {
+                setFromDate(thaiOffsetDay(-29));
                 setToDate(todayStr);
                 break;
+            }
             default:
-                // Default to current period (December 1-5, 2025)
                 setFromDate("2025-12-01");
                 setToDate("2025-12-05");
         }

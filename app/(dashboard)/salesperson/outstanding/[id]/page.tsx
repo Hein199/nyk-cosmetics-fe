@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
-import { formatId } from "@/lib/utils";
+import { formatId, formatThaiDate } from "@/lib/utils";
 
 interface OrderDetail {
     id: number;
@@ -38,12 +38,7 @@ function formatCurrency(amount: number) {
 }
 
 function formatDate(dateString: string) {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-    });
+    return formatThaiDate(dateString);
 }
 
 export default function OutstandingDetailPage() {

@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
-import { formatId } from "@/lib/utils";
+import { formatId, thaiToday, formatThaiDate } from "@/lib/utils";
 
 interface Payment {
     id: number;
@@ -33,12 +33,7 @@ function formatCurrency(amount: number) {
 }
 
 function formatDate(dateString: string) {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-    });
+    return formatThaiDate(dateString);
 }
 
 export default function PaymentHistoryPage() {
@@ -167,9 +162,7 @@ export default function PaymentHistoryPage() {
                                             size="sm"
                                             variant="outline"
                                             onClick={() => {
-                                                const t = new Date()
-                                                    .toISOString()
-                                                    .split("T")[0];
+                                                const t = thaiToday();
                                                 setFromDate(t);
                                                 setToDate(t);
                                             }}

@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
+import { thaiToday, formatThaiDate } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,15 +52,11 @@ function formatCurrency(amount: number) {
 }
 
 function formatDate(dateString: string) {
-    return new Date(dateString).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-    });
+    return formatThaiDate(dateString);
 }
 
 function today() {
-    return new Date().toLocaleDateString("en-CA");
+    return thaiToday();
 }
 
 function buildDisplayEntries(entries: LedgerEntry[]): DisplayEntry[] {

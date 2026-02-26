@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
-import { formatId } from "@/lib/utils";
+import { formatId, thaiToday } from "@/lib/utils";
 
 interface OutstandingOrder {
     id: number;
@@ -203,7 +203,7 @@ export default function OutstandingPage() {
 
         const orderDate = order.created_at.split("T")[0];
         const selectedPaymentDate =
-            paymentDate || new Date().toISOString().split("T")[0];
+            paymentDate || thaiToday();
         if (selectedPaymentDate < orderDate) {
             setPaymentDateNotice(
                 "Payment date cannot be earlier than order date."
