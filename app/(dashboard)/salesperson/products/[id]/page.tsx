@@ -9,6 +9,7 @@ import { INVENTORY_UNITS } from "@/lib/constants";
 import { useCart } from "@/lib/cart-context";
 import { useAuth } from "@/lib/auth-context";
 import { API_BASE_URL } from "@/lib/constants";
+
 type Product = {
     id: number;
     name: string;
