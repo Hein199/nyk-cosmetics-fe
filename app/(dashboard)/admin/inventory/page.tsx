@@ -8,12 +8,15 @@ import { ImageUpload } from "@/components/ui/image-upload";
 import { useAuth } from "@/lib/auth-context";
 import { API_BASE_URL } from "@/lib/constants";
 
-type ProductCategory = "COSMETIC" | "SKINCARE" | "ACCESSORY" | "OTHER";
+type Category = {
+    id: number;
+    name: string;
+};
 
 type Product = {
     id: number;
     name: string;
-    category: ProductCategory;
+    category: string;
     unit_price: string | number;
     pcs_per_dozen: string | number;
     pcs_per_box: string | number;
@@ -22,16 +25,9 @@ type Product = {
     inventory: { quantity: number } | null;
 };
 
-const CATEGORIES: { value: ProductCategory; label: string }[] = [
-    { value: "COSMETIC", label: "Cosmetic" },
-    { value: "SKINCARE", label: "Skincare" },
-    { value: "ACCESSORY", label: "Accessory" },
-    { value: "OTHER", label: "Other" },
-];
-
 const emptyForm = {
     name: "",
-    category: "COSMETIC" as ProductCategory,
+    category: "",
     unit_price: "",
     pcs_per_dozen: "12",
     pcs_per_box: "24",
@@ -72,6 +68,78 @@ export default function AdminInventoryPage() {
     const [stockQty, setStockQty] = useState("");
     const [savingStock, setSavingStock] = useState(false);
 
+    // Add Category dialog
+    const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+    const [newCategoryName, setNewCategoryName] = useState("");
+    const [categories, setCategories] = useState<Category[]>([]);
+    const [categorySaving, setCategorySaving] = useState(false);
+    const [categoryError, setCategoryError] = useState<string | null>(null);
+    const [deletingCategoryId, setDeletingCategoryId] = useState<number | null>(null);
+
+    const fetchCategories = useCallback(async () => {
+        if (!token) return;
+        try {
+            const res = await fetch(`${API_BASE_URL}/_api/categories`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) setCategories(await res.json());
+        } catch {
+            // silently ignore
+        }
+    }, [token]);
+
+    useEffect(() => { fetchCategories(); }, [fetchCategories]);
+
+    async function handleCreateCategory() {
+        if (!token || !newCategoryName.trim()) return;
+        setCategorySaving(true);
+        setCategoryError(null);
+        try {
+            const res = await fetch(`${API_BASE_URL}/_api/categories`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ name: newCategoryName.trim() }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ message: "Failed to create category" }));
+                throw new Error(err.message ?? "Failed to create category");
+            }
+            const created = (await res.json()) as Category;
+            // Optimistically update state — no refetch needed
+            setCategories((prev) =>
+                [...prev, created].sort((a, b) => a.name.localeCompare(b.name))
+            );
+            setNewCategoryName("");
+        } catch (err) {
+            setCategoryError(err instanceof Error ? err.message : "Failed to create category");
+        } finally {
+            setCategorySaving(false);
+        }
+    }
+
+    async function handleDeleteCategory(id: number, name: string) {
+        if (!token) return;
+        const confirmed = window.confirm(`Are you sure you want to delete "${name}"?`);
+        if (!confirmed) return;
+        setDeletingCategoryId(id);
+        setCategoryError(null);
+        try {
+            const res = await fetch(`${API_BASE_URL}/_api/categories/${id}`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ message: "Failed to delete category" }));
+                throw new Error(err.message ?? "Failed to delete category");
+            }
+            setCategories((prev) => prev.filter((c) => c.id !== id));
+        } catch (err) {
+            setCategoryError(err instanceof Error ? err.message : "Failed to delete category");
+        } finally {
+            setDeletingCategoryId(null);
+        }
+    }
+
     const fetchProducts = useCallback(async (signal?: AbortSignal) => {
         if (!token) return;
         setLoading(true);
@@ -101,14 +169,22 @@ export default function AdminInventoryPage() {
     const filteredProducts = useMemo(() => {
         return products.filter((p) => {
             const matchesSearch = !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase());
-            const matchesCategory = categoryFilter === "all" || p.category === categoryFilter;
+            const matchesCategory =
+                categoryFilter === "all" ||
+                p.category.toLowerCase() === categoryFilter.toLowerCase();
             return matchesSearch && matchesCategory;
         });
     }, [products, searchQuery, categoryFilter]);
 
+    // Derive enum-style key from a category display name: "Cosmetic" → "COSMETIC"
+    function toEnumKey(name: string) {
+        return name.toUpperCase().replace(/\s+/g, "_");
+    }
+
     function openCreate() {
         setEditingProduct(null);
-        setForm(emptyForm);
+        const defaultCategory = categories[0] ? toEnumKey(categories[0].name) : "COSMETIC";
+        setForm({ ...emptyForm, category: defaultCategory });
         setSaveError(null);
         setDialogOpen(true);
     }
@@ -190,37 +266,41 @@ export default function AdminInventoryPage() {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Products</h1>
-                    <p className="text-gray-500 mt-1">Manage product catalogue and inventory stock</p>
-                </div>
-                <Button
-                    className="bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700"
-                    onClick={openCreate}
-                >
-                    + Add Product
-                </Button>
+            <div>
+                <h1 className="text-2xl font-bold text-gray-900">Products</h1>
+                <p className="text-gray-500 mt-1">Manage product catalogue and inventory stock</p>
             </div>
 
-            {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-3">
+            {/* Filters + Actions */}
+            <div className="flex flex-col sm:flex-row items-center gap-4">
                 <Input
                     placeholder="Search products…"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="sm:w-64"
+                    className="flex-1 h-10 px-4 bg-white text-black placeholder:text-gray-400 border-gray-300 rounded-md"
                 />
                 <select
-                    className="border border-gray-200 rounded-md px-3 py-2 text-sm bg-white"
+                    className="h-10 px-4 rounded-md text-sm text-white font-medium bg-gradient-to-r from-pink-500 to-rose-600 border-0 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-pink-400 whitespace-nowrap"
                     value={categoryFilter}
                     onChange={(e) => setCategoryFilter(e.target.value)}
                 >
-                    <option value="all">All categories</option>
-                    {CATEGORIES.map((c) => (
-                        <option key={c.value} value={c.value}>{c.label}</option>
+                    <option value="all" className="bg-white text-black">All Categories</option>
+                    {categories.map((c) => (
+                        <option key={c.id} value={c.name} className="bg-white text-black">{c.name}</option>
                     ))}
                 </select>
+                <Button
+                    className="h-10 px-4 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 whitespace-nowrap"
+                    onClick={() => { setNewCategoryName(""); setCategoryError(null); setCategoryDialogOpen(true); }}
+                >
+                    + Add Category
+                </Button>
+                <Button
+                    className="h-10 px-4 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 whitespace-nowrap"
+                    onClick={openCreate}
+                >
+                    + Add Product
+                </Button>
             </div>
 
             {/* Content */}
@@ -243,11 +323,11 @@ export default function AdminInventoryPage() {
                             </div>
                             <CardContent className="p-3 space-y-2">
                                 <div>
-                                    <p className="font-medium text-sm line-clamp-1">{product.name}</p>
-                                    <p className="text-xs text-gray-500">{formatCategory(product.category)}</p>
+                                    <p className="font-medium text-sm text-black line-clamp-1">{product.name}</p>
+                                    <p className="text-xs text-black">{formatCategory(product.category)}</p>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                    <span className="text-sm font-semibold">{formatCurrency(Number(product.unit_price))}</span>
+                                    <span className="text-sm font-semibold text-black">{formatCurrency(Number(product.unit_price))}</span>
                                     <span className={`text-xs px-2 py-0.5 rounded-full ${(product.inventory?.quantity ?? 0) > 10
                                         ? "bg-green-100 text-green-700"
                                         : (product.inventory?.quantity ?? 0) > 0
@@ -273,6 +353,88 @@ export default function AdminInventoryPage() {
                             No products found.
                         </p>
                     )}
+                </div>
+            )}
+
+            {/* Add Category Dialog */}
+            {categoryDialogOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+                        <div className="p-6 space-y-4">
+                            <h2 className="text-lg font-semibold text-gray-900">Manage Categories</h2>
+
+                            {/* New category input */}
+                            <div>
+                                <label className="text-sm font-medium text-gray-700 block mb-1">
+                                    New Category Name
+                                </label>
+                                <input
+                                    type="text"
+                                    value={newCategoryName}
+                                    onChange={(e) => setNewCategoryName(e.target.value)}
+                                    onKeyDown={(e) => e.key === "Enter" && handleCreateCategory()}
+                                    placeholder="e.g. Skincare, Makeup, Accessories"
+                                    className="w-full h-10 px-4 text-sm text-black border border-gray-300 rounded-md bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                                    autoFocus
+                                />
+                            </div>
+
+                            {categoryError && (
+                                <p className="text-sm text-red-600">{categoryError}</p>
+                            )}
+
+                            {/* Existing categories vertical list */}
+                            {categories.length > 0 && (
+                                <div>
+                                    <p className="text-xs font-medium text-gray-500 mb-2">Existing Categories</p>
+                                    <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
+                                        {categories.map((c) => (
+                                            <div
+                                                key={c.id}
+                                                className="flex justify-between items-center py-2 px-3 rounded-md border border-gray-100 bg-gray-50"
+                                            >
+                                                <span className="text-sm text-gray-800">{c.name}</span>
+                                                <button
+                                                    onClick={() => handleDeleteCategory(c.id, c.name)}
+                                                    disabled={deletingCategoryId === c.id}
+                                                    className="text-xs text-red-500 hover:text-red-700 disabled:opacity-40 flex items-center gap-1 font-medium transition-colors"
+                                                    title="Delete category"
+                                                >
+                                                    {deletingCategoryId === c.id ? (
+                                                        <span>…</span>
+                                                    ) : (
+                                                        <span>✓ Delete</span>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {categories.length === 0 && (
+                                <p className="text-xs text-gray-400 text-center py-2">No custom categories yet.</p>
+                            )}
+
+                            <div className="flex justify-end gap-3 pt-2">
+                                <Button
+                                    variant="outline"
+                                    className="h-10 px-4 border-gray-300 text-gray-700"
+                                    onClick={() => setCategoryDialogOpen(false)}
+                                    disabled={categorySaving}
+                                >
+                                    Close
+                                </Button>
+                                <Button
+                                    className="h-10 px-4 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700"
+                                    disabled={!newCategoryName.trim() || categorySaving}
+                                    onClick={handleCreateCategory}
+                                >
+                                    {categorySaving ? "Saving…" : "Create"}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -311,13 +473,13 @@ export default function AdminInventoryPage() {
                             <div>
                                 <label className="text-sm font-medium text-gray-700 block mb-1">Category *</label>
                                 <select
-                                    className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm bg-white"
+                                    className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm bg-white text-black"
                                     value={form.category}
-                                    onChange={(e) => setForm((f) => ({ ...f, category: e.target.value as ProductCategory }))}
+                                    onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
                                     disabled={saving}
                                 >
-                                    {CATEGORIES.map((c) => (
-                                        <option key={c.value} value={c.value}>{c.label}</option>
+                                    {categories.map((c) => (
+                                        <option key={c.id} value={toEnumKey(c.name)}>{c.name}</option>
                                     ))}
                                 </select>
                             </div>

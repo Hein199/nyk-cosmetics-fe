@@ -98,7 +98,6 @@ export default function ProductsPage() {
         setOrderDate,
         setPaymentType,
         setRemark,
-        cartSummary
     } = useCart();
 
     // Close dropdown when clicking outside
@@ -229,8 +228,8 @@ export default function ProductsPage() {
 
     // Get selected customer details
     const selectedCustomerDetails = useMemo(() => {
-        return customers.find(c => c.id === selectedCustomer);
-    }, [selectedCustomer]);
+        return customers.find(c => c.id === Number(selectedCustomer));
+    }, [selectedCustomer, customers]);
 
 
 
@@ -269,29 +268,7 @@ export default function ProductsPage() {
                                 <path d="M21 3v6h-6" />
                             </svg>
                         </Button>
-                        {cart.length > 0 && (
-                            <div className="flex items-center gap-3">
-                                <div className="text-right">
-                                    <div className="text-sm text-gray-600">
-                                        {cartSummary.itemCount} items in cart
-                                    </div>
-                                    <div className="text-lg font-semibold text-gray-900">
-                                        Total: {formatCurrency(cartSummary.total)}
-                                    </div>
-                                </div>
-                                <Link href="/admin/cart">
-                                    <Button className="bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 relative">
-                                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-1.5 6H19" />
-                                        </svg>
-                                        View Cart
-                                        <span className="ml-2 bg-white text-pink-600 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                                            {cartSummary.itemCount}
-                                        </span>
-                                    </Button>
-                                </Link>
-                            </div>
-                        )}
+
                     </div>
                 </div>
 

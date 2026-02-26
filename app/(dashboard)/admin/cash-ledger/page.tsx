@@ -38,7 +38,7 @@ interface DisplayEntry extends LedgerEntry {
     expense: number;
 }
 
-type TypeFilter = "all" | "INCOME" | "EXPENSE" | "ADJUSTMENT";
+type TypeFilter = "all" | "INCOME" | "EXPENSE";
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -59,7 +59,7 @@ function formatDate(dateString: string) {
 }
 
 function today() {
-    return new Date().toISOString().split("T")[0];
+    return new Date().toLocaleDateString("en-CA");
 }
 
 function buildDisplayEntries(entries: LedgerEntry[]): DisplayEntry[] {
@@ -175,9 +175,6 @@ export default function CashLedgerPage() {
         return displayEntries.filter((e) => {
             if (typeFilter === "INCOME" && e.income === 0) return false;
             if (typeFilter === "EXPENSE" && e.expense === 0) return false;
-            if (typeFilter === "ADJUSTMENT" && e.category !== "OTHER_INCOME")
-                return false;
-
             if (searchQuery) {
                 const q = searchQuery.toLowerCase();
                 const refMatch = referenceText(e).toLowerCase().includes(q);
@@ -237,7 +234,7 @@ export default function CashLedgerPage() {
             const body = {
                 entry_date: modalDate,
                 type: modalType,
-                amount: modalAmount,
+                amount: String(modalAmount),
                 description: modalDescription,
             };
 
@@ -338,38 +335,8 @@ export default function CashLedgerPage() {
                     </CardDescription>
 
                     {/* Filters */}
-                    <div className="pt-2 space-y-3">
-                        <div className="flex flex-col sm:flex-row gap-3">
-                            <div className="flex-1">
-                                <Input
-                                    placeholder="Search by reference or description..."
-                                    value={searchQuery}
-                                    onChange={(e) =>
-                                        setSearchQuery(e.target.value)
-                                    }
-                                    className="h-10"
-                                />
-                            </div>
-                            <div className="sm:w-44">
-                                <select
-                                    value={typeFilter}
-                                    onChange={(e) =>
-                                        setTypeFilter(
-                                            e.target.value as TypeFilter
-                                        )
-                                    }
-                                    className={selectClass}
-                                >
-                                    <option value="all">All Types</option>
-                                    <option value="INCOME">Income</option>
-                                    <option value="EXPENSE">Expense</option>
-                                    <option value="ADJUSTMENT">
-                                        Adjustment
-                                    </option>
-                                </select>
-                            </div>
-                        </div>
-                        <div className="flex flex-wrap items-end gap-3">
+                    <div className="pt-2 space-y-4">
+                        <div className="flex flex-wrap items-end gap-4">
                             <div className="flex flex-col">
                                 <label className="text-xs text-gray-500 mb-1">
                                     From
@@ -435,6 +402,33 @@ export default function CashLedgerPage() {
                                 )}
                             </Button>
                         </div>
+                        <div className="flex flex-col sm:flex-row gap-4">
+                            <div className="flex-1">
+                                <Input
+                                    placeholder="Search by reference or description..."
+                                    value={searchQuery}
+                                    onChange={(e) =>
+                                        setSearchQuery(e.target.value)
+                                    }
+                                    className="h-10 w-full"
+                                />
+                            </div>
+                            <div className="sm:w-44">
+                                <select
+                                    value={typeFilter}
+                                    onChange={(e) =>
+                                        setTypeFilter(
+                                            e.target.value as TypeFilter
+                                        )
+                                    }
+                                    className={selectClass}
+                                >
+                                    <option value="all">All Types</option>
+                                    <option value="INCOME">Income</option>
+                                    <option value="EXPENSE">Expense</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
                 </CardHeader>
 
@@ -448,7 +442,7 @@ export default function CashLedgerPage() {
                             <div className="overflow-x-auto">
                                 <table className="w-full">
                                     <thead>
-                                        <tr>
+                                        <tr className="divide-x divide-gray-200">
                                             <th className={`${thBase} text-left`}>
                                                 Date
                                             </th>
@@ -468,7 +462,7 @@ export default function CashLedgerPage() {
                                     </thead>
                                     <tbody>
                                         {filtered.length === 0 ? (
-                                            <tr>
+                                            <tr className="divide-x divide-gray-200">
                                                 <td
                                                     colSpan={5}
                                                     className="text-center py-8 text-gray-500"
@@ -483,7 +477,7 @@ export default function CashLedgerPage() {
                                                 return (
                                                     <tr
                                                         key={e.id}
-                                                        className="border-b border-gray-100 hover:bg-gray-50"
+                                                        className="border-b border-gray-100 hover:bg-gray-50 divide-x divide-gray-200"
                                                     >
                                                         <td className="py-3 px-4 text-sm text-gray-500">
                                                             {formatDate(
@@ -616,8 +610,6 @@ export default function CashLedgerPage() {
                                 >
                                     <option value="INCOME">Income (Cash In)</option>
                                     <option value="EXPENSE">Expense (Cash Out)</option>
-                                    <option value="ADJUSTMENT_ADD">Adjustment (+)</option>
-                                    <option value="ADJUSTMENT_SUB">Adjustment (-)</option>
                                 </select>
                             </div>
                         </div>

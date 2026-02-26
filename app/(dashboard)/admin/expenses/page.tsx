@@ -20,9 +20,9 @@ import { apiFetch } from "@/lib/api";
 
 interface Expense {
     id: number;
+    expenseCode: string;
     description: string;
     amount: string | number;
-    category: string;
     payment_method: string;
     remark?: string | null;
     created_at: string;
@@ -54,7 +54,6 @@ export default function ExpensesPage() {
     // Form
     const [description, setDescription] = useState("");
     const [amount, setAmount] = useState("");
-    const [category, setCategory] = useState("");
     const [remark, setRemark] = useState("");
     const [paymentMethod, setPaymentMethod] = useState<"CASH" | "BANK">(
         "CASH"
@@ -93,8 +92,7 @@ export default function ExpensesPage() {
             const q = searchQuery.toLowerCase();
             const matchesSearch =
                 !q ||
-                e.description.toLowerCase().includes(q) ||
-                e.category.toLowerCase().includes(q);
+                e.description.toLowerCase().includes(q);
             return matchesFrom && matchesTo && matchesSearch;
         });
     }, [expenses, searchQuery, fromDate, toDate]);
@@ -105,7 +103,7 @@ export default function ExpensesPage() {
     );
 
     const handleCreate = async () => {
-        if (!token || !description || !amount || !category) return;
+        if (!token || !description || !amount) return;
         setSaving(true);
         setError(null);
         try {
@@ -115,7 +113,6 @@ export default function ExpensesPage() {
                 body: {
                     description,
                     amount,
-                    category,
                     payment_method: paymentMethod,
                     remark: remark || undefined,
                     expense_date: expenseDate,
@@ -124,7 +121,6 @@ export default function ExpensesPage() {
             setIsCreateOpen(false);
             setDescription("");
             setAmount("");
-            setCategory("");
             setRemark("");
             setPaymentMethod("CASH");
             setExpenseDate(todayStr());
@@ -233,10 +229,10 @@ export default function ExpensesPage() {
                         </div>
                         <div>
                             <Input
-                                placeholder="Search by description or category..."
+                                placeholder="Search by description..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="max-w-md h-10"
+                                className="w-full h-10"
                             />
                         </div>
                     </div>
@@ -250,15 +246,15 @@ export default function ExpensesPage() {
                         <div className="overflow-x-auto">
                             <table className="w-full">
                                 <thead>
-                                    <tr>
+                                    <tr className="divide-x divide-gray-200">
+                                        <th className="text-left py-3 px-4 text-sm font-medium text-white bg-blue-600">
+                                            Expense ID
+                                        </th>
                                         <th className="text-left py-3 px-4 text-sm font-medium text-white bg-blue-600">
                                             Date
                                         </th>
                                         <th className="text-left py-3 px-4 text-sm font-medium text-white bg-blue-600">
                                             Description
-                                        </th>
-                                        <th className="text-center py-3 px-4 text-sm font-medium text-white bg-blue-600">
-                                            Category
                                         </th>
                                         <th className="text-center py-3 px-4 text-sm font-medium text-white bg-blue-600">
                                             Amount
@@ -273,9 +269,9 @@ export default function ExpensesPage() {
                                 </thead>
                                 <tbody>
                                     {filtered.length === 0 ? (
-                                        <tr>
+                                        <tr className="divide-x divide-gray-200">
                                             <td
-                                                colSpan={6}
+                                                    colSpan={6}
                                                 className="text-center py-8 text-gray-500"
                                             >
                                                 No expenses found.
@@ -285,8 +281,11 @@ export default function ExpensesPage() {
                                         filtered.map((e) => (
                                             <tr
                                                 key={e.id}
-                                                className="border-b border-gray-100 hover:bg-gray-50"
+                                                className="border-b border-gray-100 hover:bg-gray-50 divide-x divide-gray-200"
                                             >
+                                                <td className="py-3 px-4 text-sm text-gray-700">
+                                                    {e.expenseCode}
+                                                </td>
                                                 <td className="py-3 px-4 text-sm text-gray-500">
                                                     {new Date(
                                                         e.created_at
@@ -294,11 +293,6 @@ export default function ExpensesPage() {
                                                 </td>
                                                 <td className="py-3 px-4 font-medium text-gray-900">
                                                     {e.description}
-                                                </td>
-                                                <td className="py-3 px-4 text-center">
-                                                    <span className="px-2 py-1 text-xs font-medium rounded bg-gray-100 text-gray-700">
-                                                        {e.category}
-                                                    </span>
                                                 </td>
                                                 <td className="py-3 px-4 text-center font-semibold text-red-600">
                                                     {formatCurrency(
@@ -333,8 +327,8 @@ export default function ExpensesPage() {
 
                     {/* Body */}
                     <div className="p-6 space-y-4">
-                        {/* Row 1: Date + Category */}
-                        <div className="grid grid-cols-2 gap-4">
+                        {/* Row 1: Date */}
+                        <div className="grid grid-cols-1 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Date
@@ -344,17 +338,6 @@ export default function ExpensesPage() {
                                     value={expenseDate}
                                     onChange={(e) => setExpenseDate(e.target.value)}
                                     className="w-full h-10 px-3 text-sm text-black border border-gray-300 rounded-md bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Category
-                                </label>
-                                <Input
-                                    value={category}
-                                    onChange={(e) => setCategory(e.target.value)}
-                                    placeholder="e.g. Rent, Utilities"
-                                    className="h-10 rounded-md px-3 border-gray-300"
                                 />
                             </div>
                         </div>
@@ -433,8 +416,7 @@ export default function ExpensesPage() {
                             disabled={
                                 saving ||
                                 !description ||
-                                !amount ||
-                                !category
+                                !amount
                             }
                             className="h-10 px-4 bg-pink-600 hover:bg-pink-700 text-white"
                         >
