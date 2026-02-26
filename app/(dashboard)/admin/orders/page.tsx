@@ -40,11 +40,20 @@ type OrderDetail = {
     items: Array<{
         id: number;
         quantity: number;
+        unit_type: string;
         unit_price: string | number;
         product?: { name: string; category?: string | null } | null;
     }>;
     salesperson?: { id: number; username: string } | null;
 };
+
+function unitTypeLabel(unit: string) {
+    switch (unit) {
+        case "D": return "Dozen";
+        case "P": return "Box";
+        default: return "Pcs";
+    }
+}
 
 const statusColors: Record<string, string> = {
     delivered: "bg-green-100 text-green-800",
@@ -851,6 +860,9 @@ export default function OrdersPage() {
                                                     <th className="text-center py-3 px-4 font-bold border-r border-blue-500">
                                                         Category
                                                     </th>
+                                                    <th className="text-center py-3 px-4 font-bold border-r border-blue-500 w-20">
+                                                        Qty Type
+                                                    </th>
                                                     <th className="text-center py-3 px-4 font-bold border-r border-blue-500 w-16">
                                                         Qty
                                                     </th>
@@ -882,6 +894,9 @@ export default function OrdersPage() {
                                                             </td>
                                                             <td className="py-3 px-4 text-gray-700 font-medium border-r border-gray-300">
                                                                 {item.product?.category ?? "-"}
+                                                            </td>
+                                                            <td className="py-3 px-4 text-center text-gray-700 font-medium border-r border-gray-300">
+                                                                {unitTypeLabel(item.unit_type)}
                                                             </td>
                                                             <td className="py-3 px-4 text-center text-gray-900 font-semibold border-r border-gray-300">
                                                                 {item.quantity}
