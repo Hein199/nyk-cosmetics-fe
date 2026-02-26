@@ -14,15 +14,26 @@ import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import { formatId, thaiToday, formatThaiDate, toBangkokDateStr } from "@/lib/utils";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface CollectedBy {
+    id: number;
+    role: "ADMIN" | "SALESPERSON";
+    salesperson: { name: string } | null;
+}
+
 interface Payment {
     id: number;
     created_at: string;
     amount_paid: string | number;
     payment_type: string;
-    status: string;
+    status: "PENDING" | "CONFIRMED" | "REJECTED";
     customer: { id: number; name: string; phone_number: string } | null;
     order: { id: number; total_amount: string | number; created_at: string } | null;
+    collected_by: CollectedBy;
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatCurrency(amount: number) {
     return new Intl.NumberFormat("en-MM", {
@@ -32,9 +43,30 @@ function formatCurrency(amount: number) {
     }).format(amount);
 }
 
-function formatDate(dateString: string) {
-    return formatThaiDate(dateString);
+function getCreatedByLabel(collected_by: CollectedBy): string {
+    if (collected_by.role === "ADMIN") return "Admin";
+    return collected_by.salesperson?.name ?? "Salesperson";
 }
+
+function statusBadge(status: Payment["status"]) {
+    const styles: Record<Payment["status"], string> = {
+        CONFIRMED: "bg-green-50 text-green-600 border-green-200",
+        PENDING: "bg-yellow-50 text-yellow-600 border-yellow-200",
+        REJECTED: "bg-red-50 text-red-600 border-red-200",
+    };
+    return (
+        <span className={`px-2 py-1 text-xs font-bold rounded border ${styles[status]}`}>
+            {status}
+        </span>
+    );
+}
+
+/** A salesperson-created payment that is still awaiting admin decision */
+function needsAction(p: Payment): boolean {
+    return p.status === "PENDING" && p.collected_by.role === "SALESPERSON";
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function PaymentHistoryPage() {
     const { token } = useAuth();
@@ -46,6 +78,11 @@ export default function PaymentHistoryPage() {
     const [toDate, setToDate] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
 
+    // Per-row action loading: { [paymentId]: 'confirm' | 'reject' | null }
+    const [actionLoading, setActionLoading] = useState<Record<number, "confirm" | "reject" | null>>({});
+
+    // ── Fetch ────────────────────────────────────────────────────────────────
+
     const fetchPayments = useCallback(async (signal?: AbortSignal) => {
         if (!token) return;
         setLoading(true);
@@ -54,10 +91,8 @@ export default function PaymentHistoryPage() {
             const data = await apiFetch<Payment[]>("/payments", { token, signal });
             setPayments(data);
         } catch (err) {
-            if (err instanceof Error && err.name === 'AbortError') return;
-            setError(
-                err instanceof Error ? err.message : "Failed to load payments"
-            );
+            if (err instanceof Error && err.name === "AbortError") return;
+            setError(err instanceof Error ? err.message : "Failed to load payments");
         } finally {
             setLoading(false);
         }
@@ -68,6 +103,33 @@ export default function PaymentHistoryPage() {
         fetchPayments(controller.signal);
         return () => controller.abort();
     }, [fetchPayments]);
+
+    // ── Actions ──────────────────────────────────────────────────────────────
+
+    async function handleAction(paymentId: number, action: "confirm" | "reject") {
+        if (!token) return;
+        setActionLoading((prev) => ({ ...prev, [paymentId]: action }));
+        try {
+            await apiFetch(`/payments/${paymentId}/${action}`, {
+                token,
+                method: "POST",
+            });
+            // Optimistically update local state
+            setPayments((prev) =>
+                prev.map((p) =>
+                    p.id === paymentId
+                        ? { ...p, status: action === "confirm" ? "CONFIRMED" : "REJECTED" }
+                        : p
+                )
+            );
+        } catch (err) {
+            setError(err instanceof Error ? err.message : `Failed to ${action} payment`);
+        } finally {
+            setActionLoading((prev) => ({ ...prev, [paymentId]: null }));
+        }
+    }
+
+    // ── Filtering ────────────────────────────────────────────────────────────
 
     const filteredPayments = useMemo(() => {
         return payments.filter((p) => {
@@ -82,27 +144,41 @@ export default function PaymentHistoryPage() {
                 !q ||
                 (p.customer?.name ?? "").toLowerCase().includes(q) ||
                 String(p.id).includes(q) ||
-                (p.order ? String(p.order.id) : "").includes(q);
+                (p.order ? String(p.order.id) : "").includes(q) ||
+                getCreatedByLabel(p.collected_by).toLowerCase().includes(q);
             return matchesFrom && matchesTo && matchesStatus && matchesSearch;
         });
     }, [payments, searchQuery, fromDate, toDate, statusFilter]);
 
     const totalAmount = useMemo(
-        () => filteredPayments.reduce((sum, p) => sum + Number(p.amount_paid), 0),
+        () =>
+            filteredPayments
+                .filter((p) => p.status === "CONFIRMED")
+                .reduce((sum, p) => sum + Number(p.amount_paid), 0),
         [filteredPayments]
     );
 
+    const pendingCount = useMemo(
+        () => payments.filter(needsAction).length,
+        [payments]
+    );
+
+    // ─────────────────────────────────────────────────────────────────────────
+
     return (
         <div className="space-y-6">
+            {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">
-                        Payment History
-                    </h1>
-                    <p className="text-gray-500 mt-1">
-                        View all payment records
-                    </p>
+                    <h1 className="text-2xl font-bold text-gray-900">Payment History</h1>
+                    <p className="text-gray-500 mt-1">Review, confirm, or reject salesperson payments</p>
                 </div>
+                {pendingCount > 0 && (
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-yellow-50 border border-yellow-200 text-yellow-700 text-sm font-medium">
+                        <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                        {pendingCount} pending approval
+                    </div>
+                )}
             </div>
 
             {error && (
@@ -115,48 +191,39 @@ export default function PaymentHistoryPage() {
                 <CardHeader className="pb-4">
                     <div className="flex flex-col space-y-4">
                         <div>
-                            <CardTitle className="text-xl">
-                                All Payments
-                            </CardTitle>
+                            <CardTitle className="text-xl">All Payments</CardTitle>
                             <CardDescription>
-                                Showing {filteredPayments.length} payments
-                                {filteredPayments.length > 0 &&
-                                    ` — Total: ${formatCurrency(totalAmount)}`}
+                                Showing {filteredPayments.length} payment
+                                {filteredPayments.length !== 1 ? "s" : ""}
+                                {totalAmount > 0 &&
+                                    ` — Confirmed total: ${formatCurrency(totalAmount)}`}
                             </CardDescription>
                         </div>
+
+                        {/* Date filters */}
                         <div className="flex flex-col sm:flex-row gap-4">
                             <div className="flex items-center gap-3">
                                 <div className="flex flex-col">
-                                    <label className="text-xs text-gray-500 mb-1">
-                                        From
-                                    </label>
+                                    <label className="text-xs text-gray-500 mb-1">From</label>
                                     <input
                                         type="date"
                                         value={fromDate}
-                                        onChange={(e) =>
-                                            setFromDate(e.target.value)
-                                        }
+                                        onChange={(e) => setFromDate(e.target.value)}
                                         className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white shadow-sm"
                                     />
                                 </div>
                                 <div className="flex flex-col">
-                                    <label className="text-xs text-gray-500 mb-1">
-                                        To
-                                    </label>
+                                    <label className="text-xs text-gray-500 mb-1">To</label>
                                     <input
                                         type="date"
                                         value={toDate}
-                                        onChange={(e) =>
-                                            setToDate(e.target.value)
-                                        }
+                                        onChange={(e) => setToDate(e.target.value)}
                                         className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white shadow-sm"
                                         min={fromDate}
                                     />
                                 </div>
                                 <div className="flex flex-col">
-                                    <label className="text-xs text-transparent mb-1">
-                                        .
-                                    </label>
+                                    <label className="text-xs text-transparent mb-1">.</label>
                                     <div className="flex items-center gap-2">
                                         <Button
                                             size="sm"
@@ -185,28 +252,27 @@ export default function PaymentHistoryPage() {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Search + status filter */}
                         <div className="flex flex-col sm:flex-row gap-4">
                             <div className="flex-1">
                                 <Input
-                                    placeholder="Search by customer, order ID..."
+                                    placeholder="Search by customer, order ID, created by..."
                                     value={searchQuery}
-                                    onChange={(e) =>
-                                        setSearchQuery(e.target.value)
-                                    }
+                                    onChange={(e) => setSearchQuery(e.target.value)}
                                     className="w-full h-10"
                                 />
                             </div>
                             <div className="sm:w-48">
                                 <select
                                     value={statusFilter}
-                                    onChange={(e) =>
-                                        setStatusFilter(e.target.value)
-                                    }
+                                    onChange={(e) => setStatusFilter(e.target.value)}
                                     className="w-full h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white shadow-sm"
                                 >
                                     <option value="all">All Status</option>
                                     <option value="CONFIRMED">Confirmed</option>
                                     <option value="PENDING">Pending</option>
+                                    <option value="REJECTED">Rejected</option>
                                 </select>
                             </div>
                         </div>
@@ -215,17 +281,13 @@ export default function PaymentHistoryPage() {
 
                 <CardContent>
                     {loading ? (
-                        <div className="text-center py-8 text-gray-500">
-                            Loading payments...
-                        </div>
+                        <div className="text-center py-8 text-gray-500">Loading payments...</div>
                     ) : (
                         <>
-                            {/* Mobile */}
+                            {/* ── Mobile cards ─────────────────────────────── */}
                             <div className="block sm:hidden space-y-4">
                                 {filteredPayments.length === 0 ? (
-                                    <div className="text-center py-8 text-gray-500">
-                                        No payments found.
-                                    </div>
+                                    <div className="text-center py-8 text-gray-500">No payments found.</div>
                                 ) : (
                                     filteredPayments.map((p) => (
                                         <div
@@ -234,69 +296,87 @@ export default function PaymentHistoryPage() {
                                         >
                                             <div className="flex items-center justify-between">
                                                 <span className="font-medium text-gray-900">
-                                                    {formatId('PAY', p.id)}
+                                                    {formatId("PAY", p.id)}
                                                 </span>
-                                                <span
-                                                    className={`px-2 py-1 text-xs font-bold rounded border ${p.status === "CONFIRMED" ? "bg-green-50 text-green-600 border-green-200" : "bg-yellow-50 text-yellow-600 border-yellow-200"}`}
-                                                >
-                                                    {p.status}
-                                                </span>
+                                                {statusBadge(p.status)}
                                             </div>
                                             <p className="text-sm text-gray-700">
                                                 {p.customer?.name ?? "N/A"}
                                             </p>
                                             <div className="flex items-center justify-between">
                                                 <span className="text-sm text-gray-500">
-                                                    {formatDate(p.created_at)}
+                                                    {formatThaiDate(p.created_at)}
                                                 </span>
                                                 <span className="font-bold text-gray-900">
-                                                    {formatCurrency(
-                                                        Number(p.amount_paid)
-                                                    )}
+                                                    {formatCurrency(Number(p.amount_paid))}
                                                 </span>
                                             </div>
                                             <p className="text-xs text-gray-500">
                                                 {p.payment_type} — Order:{" "}
-                                                {p.order ? formatId('ORD', p.order.id) : "-"}
+                                                {p.order ? formatId("ORD", p.order.id) : "-"}
                                             </p>
+                                            <p className="text-xs text-gray-500">
+                                                By: {getCreatedByLabel(p.collected_by)}
+                                            </p>
+                                            {needsAction(p) && (
+                                                <div className="flex gap-2 pt-1">
+                                                    <Button
+                                                        size="sm"
+                                                        className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs h-8"
+                                                        disabled={!!actionLoading[p.id]}
+                                                        onClick={() => handleAction(p.id, "confirm")}
+                                                    >
+                                                        {actionLoading[p.id] === "confirm"
+                                                            ? "Confirming…"
+                                                            : "Confirm"}
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="flex-1 border-red-300 text-red-600 hover:bg-red-50 text-xs h-8"
+                                                        disabled={!!actionLoading[p.id]}
+                                                        onClick={() => handleAction(p.id, "reject")}
+                                                    >
+                                                        {actionLoading[p.id] === "reject"
+                                                            ? "Rejecting…"
+                                                            : "Reject"}
+                                                    </Button>
+                                                </div>
+                                            )}
                                         </div>
                                     ))
                                 )}
                             </div>
 
-                            {/* Desktop */}
+                            {/* ── Desktop table ─────────────────────────────── */}
                             <div className="hidden sm:block overflow-x-auto">
                                 <table className="w-full">
                                     <thead>
                                         <tr className="border-b border-gray-200">
-                                            <th className="text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">
-                                                Payment ID
-                                            </th>
-                                            <th className="text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">
-                                                Date
-                                            </th>
-                                            <th className="text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">
-                                                Customer
-                                            </th>
-                                            <th className="text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">
-                                                Order ID
-                                            </th>
-                                            <th className="text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">
-                                                Amount
-                                            </th>
-                                            <th className="text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">
-                                                Type
-                                            </th>
-                                            <th className="text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">
-                                                Status
-                                            </th>
+                                            {[
+                                                "Date",
+                                                "Payment ID",
+                                                "Order ID",
+                                                "Customer",
+                                                "Amount",
+                                                "Created By",
+                                                "Status",
+                                                "Action",
+                                            ].map((col) => (
+                                                <th
+                                                    key={col}
+                                                    className="text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500"
+                                                >
+                                                    {col}
+                                                </th>
+                                            ))}
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {filteredPayments.length === 0 ? (
                                             <tr>
                                                 <td
-                                                    colSpan={7}
+                                                    colSpan={8}
                                                     className="text-center py-8 text-gray-500"
                                                 >
                                                     No payments found.
@@ -308,37 +388,75 @@ export default function PaymentHistoryPage() {
                                                     key={p.id}
                                                     className="border-b border-gray-100 hover:bg-gray-50"
                                                 >
+                                                    {/* Date */}
+                                                    <td className="py-3 px-4 text-center text-sm text-gray-900 border-l border-gray-200 whitespace-nowrap">
+                                                        {formatThaiDate(p.created_at)}
+                                                    </td>
+                                                    {/* Payment ID */}
                                                     <td className="py-3 px-4 text-center text-sm font-medium text-gray-900 border-l border-gray-200">
-                                                        {formatId('PAY', p.id)}
+                                                        {formatId("PAY", p.id)}
                                                     </td>
+                                                    {/* Order ID */}
                                                     <td className="py-3 px-4 text-center text-sm text-gray-900 border-l border-gray-200">
-                                                        {formatDate(
-                                                            p.created_at
-                                                        )}
+                                                        {p.order ? formatId("ORD", p.order.id) : "-"}
                                                     </td>
+                                                    {/* Customer */}
                                                     <td className="py-3 px-4 text-center text-sm text-gray-900 border-l border-gray-200">
-                                                        {p.customer?.name ??
-                                                            "N/A"}
+                                                        {p.customer?.name ?? "N/A"}
                                                     </td>
-                                                    <td className="py-3 px-4 text-center text-sm text-gray-900 border-l border-gray-200">
-                                                        {p.order ? formatId('ORD', p.order.id) : "-"}
-                                                    </td>
+                                                    {/* Amount */}
                                                     <td className="py-3 px-4 text-center text-sm font-semibold text-gray-900 border-l border-gray-200">
-                                                        {formatCurrency(
-                                                            Number(
-                                                                p.amount_paid
-                                                            )
-                                                        )}
+                                                        {formatCurrency(Number(p.amount_paid))}
                                                     </td>
+                                                    {/* Created By */}
                                                     <td className="py-3 px-4 text-center text-sm text-gray-700 border-l border-gray-200">
-                                                        {p.payment_type}
-                                                    </td>
-                                                    <td className="py-3 px-4 text-center border-l border-gray-200">
                                                         <span
-                                                            className={`px-2 py-1 text-xs font-bold rounded border ${p.status === "CONFIRMED" ? "bg-green-50 text-green-600 border-green-200" : "bg-yellow-50 text-yellow-600 border-yellow-200"}`}
+                                                            className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                                                p.collected_by.role === "ADMIN"
+                                                                    ? "bg-blue-50 text-blue-600"
+                                                                    : "bg-purple-50 text-purple-600"
+                                                            }`}
                                                         >
-                                                            {p.status}
+                                                            {getCreatedByLabel(p.collected_by)}
                                                         </span>
+                                                    </td>
+                                                    {/* Status */}
+                                                    <td className="py-3 px-4 text-center border-l border-gray-200">
+                                                        {statusBadge(p.status)}
+                                                    </td>
+                                                    {/* Action */}
+                                                    <td className="py-3 px-4 text-center border-l border-gray-200">
+                                                        {needsAction(p) ? (
+                                                            <div className="flex items-center justify-center gap-2">
+                                                                <Button
+                                                                    size="sm"
+                                                                    className="bg-green-600 hover:bg-green-700 text-white text-xs h-7 px-3"
+                                                                    disabled={!!actionLoading[p.id]}
+                                                                    onClick={() =>
+                                                                        handleAction(p.id, "confirm")
+                                                                    }
+                                                                >
+                                                                    {actionLoading[p.id] === "confirm"
+                                                                        ? "…"
+                                                                        : "Confirm"}
+                                                                </Button>
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    className="border-red-300 text-red-600 hover:bg-red-50 text-xs h-7 px-3"
+                                                                    disabled={!!actionLoading[p.id]}
+                                                                    onClick={() =>
+                                                                        handleAction(p.id, "reject")
+                                                                    }
+                                                                >
+                                                                    {actionLoading[p.id] === "reject"
+                                                                        ? "…"
+                                                                        : "Reject"}
+                                                                </Button>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-xs text-gray-400">—</span>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             ))
