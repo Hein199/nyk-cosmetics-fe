@@ -28,6 +28,14 @@ export function thaiOffsetDay(days: number): string {
     return new Intl.DateTimeFormat("en-CA", { timeZone: THAI_TZ }).format(target);
 }
 
+/** Extracts the YYYY-MM-DD date in Asia/Bangkok timezone from any ISO/UTC date string.
+ *  Use this for date-range filter comparisons so UTC 17:00 = Bangkok next day, not same day. */
+export function toBangkokDateStr(isoString: string): string {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: THAI_TZ }).format(
+        new Date(isoString)
+    );
+}
+
 /** Formats any ISO/date string for display in Asia/Bangkok timezone */
 export function formatThaiDate(dateString: string): string {
     return new Date(dateString).toLocaleDateString("en-US", {

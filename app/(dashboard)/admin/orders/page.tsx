@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
 import { API_BASE_URL } from "@/lib/constants";
-import { formatId, thaiToday, formatThaiDate } from "@/lib/utils";
+import { formatId, thaiToday, formatThaiDate, toBangkokDateStr } from "@/lib/utils";
 
 type OrderListItem = {
     id: number;
@@ -371,7 +371,7 @@ export default function OrdersPage() {
     // Filter and search orders
     const filteredOrders = useMemo(() => {
         return orders.filter((order) => {
-            const orderDate = order.created_at.split("T")[0];
+            const orderDate = toBangkokDateStr(order.created_at);
             // Date range filter
             const matchesDateRange = orderDate >= fromDate && orderDate <= toDate;
 
