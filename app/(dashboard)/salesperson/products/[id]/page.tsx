@@ -78,14 +78,16 @@ export default function ProductDetailPage() {
 
     const existingCartPieces = useMemo(() => {
         if (!product) return 0;
-        const cartItem = cart.find(item => item.id === product.id);
-        if (!cartItem) return 0;
-        const mult = cartItem.unit === INVENTORY_UNITS.DOZEN
-            ? Number(product.pcs_per_dozen)
-            : cartItem.unit === INVENTORY_UNITS.BOX
-                ? Number(product.pcs_per_box)
-                : 1;
-        return cartItem.quantity * mult;
+        return cart
+            .filter(item => item.id === product.id)
+            .reduce((total, cartItem) => {
+                const mult = cartItem.unit === INVENTORY_UNITS.DOZEN
+                    ? Number(product.pcs_per_dozen)
+                    : cartItem.unit === INVENTORY_UNITS.BOX
+                        ? Number(product.pcs_per_box)
+                        : 1;
+                return total + cartItem.quantity * mult;
+            }, 0);
     }, [cart, product]);
 
     const maxQuantity = useMemo(() => {
@@ -254,9 +256,14 @@ export default function ProductDetailPage() {
 
                             <div className="space-y-1">
                                 <p className="text-2xl font-semibold text-gray-900">
-                                    {formatCurrency(pricePerSelectedUnit)}
+                                    {formatCurrency(pricePerSelectedUnit * quantity)}
                                 </p>
                                 <p className="text-xs text-gray-500">
+                                    {quantity > 1 && (
+                                        <span className="mr-1">
+                                            {formatCurrency(pricePerSelectedUnit)} ×{" "}{quantity} ={" "}
+                                        </span>
+                                    )}
                                     {unit === INVENTORY_UNITS.DOZEN
                                         ? "Price per Dozen"
                                         : unit === INVENTORY_UNITS.BOX

@@ -96,7 +96,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
         setCart(prevCart => {
             const existingIndex = prevCart.findIndex(
-                (item) => item.id === productId
+                (item) => item.id === productId && item.unit === unit
             );
 
             if (existingIndex === -1) {

@@ -7,7 +7,7 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { useCart } from "@/lib/cart-context";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { API_BASE_URL } from "@/lib/constants";
+import { API_BASE_URL, INVENTORY_UNITS } from "@/lib/constants";
 
 type Customer = {
     id: number;
@@ -22,6 +22,14 @@ function formatCurrency(amount: number) {
         currency: "MMK",
         minimumFractionDigits: 0,
     }).format(amount);
+}
+
+function unitLabel(unit: string) {
+    switch (unit) {
+        case INVENTORY_UNITS.DOZEN: return "Dozen";
+        case INVENTORY_UNITS.BOX: return "Box";
+        default: return "Pcs";
+    }
 }
 
 export default function CartPage() {
@@ -340,10 +348,10 @@ export default function CartPage() {
                                                         </h4>
                                                         <div className="flex items-center gap-4 text-sm text-gray-700 mb-2">
                                                             <span>
-                                                                Quantity: <span className="text-black font-semibold">{item.quantity}</span> {item.unit}
+                                                                Quantity: <span className="text-black font-semibold">{item.quantity}</span> {unitLabel(item.unit)}
                                                             </span>
                                                             <span>
-                                                                Price: <span className="text-black font-semibold">{formatCurrency(item.customPrice || item.price)}</span>
+                                                                Price: <span className="text-black font-semibold">{formatCurrency(item.customPrice || item.price)}</span>/{unitLabel(item.unit)}
                                                                 {item.customPrice && (
                                                                     <span className="ml-1 text-orange-800 font-medium">(Custom Price)</span>
                                                                 )}
