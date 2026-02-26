@@ -133,6 +133,7 @@ export default function CartPage() {
                     items: cart.map((item) => ({
                         product_id: item.id,
                         quantity: item.quantity,
+                        unit_type: item.unit,
                         unit_price: String(item.customPrice ?? item.price),
                     })),
                 }),

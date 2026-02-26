@@ -16,7 +16,6 @@ type Product = {
     category: ProductCategory;
     unit_price: string | number;
     pcs_per_dozen: string | number;
-    pcs_per_pack: string | number;
     pcs_per_box: string | number;
     photo_url: string;
     is_active: boolean;
@@ -35,7 +34,6 @@ const emptyForm = {
     category: "COSMETIC" as ProductCategory,
     unit_price: "",
     pcs_per_dozen: "12",
-    pcs_per_pack: "12",
     pcs_per_box: "24",
     photo_url: "",
     is_active: true,
@@ -122,7 +120,6 @@ export default function AdminInventoryPage() {
             category: product.category,
             unit_price: String(product.unit_price),
             pcs_per_dozen: String(product.pcs_per_dozen),
-            pcs_per_pack: String(product.pcs_per_pack),
             pcs_per_box: String(product.pcs_per_box),
             photo_url: product.photo_url,
             is_active: product.is_active,
@@ -338,8 +335,8 @@ export default function AdminInventoryPage() {
                                 />
                             </div>
 
-                            {/* Dozen / Pack / Box */}
-                            <div className="grid grid-cols-3 gap-3">
+                            {/* Dozen / Box */}
+                            <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="text-sm font-medium text-gray-700 block mb-1">Pcs per Dozen</label>
                                     <Input
@@ -347,16 +344,6 @@ export default function AdminInventoryPage() {
                                         min={1}
                                         value={form.pcs_per_dozen}
                                         onChange={(e) => setForm((f) => ({ ...f, pcs_per_dozen: e.target.value }))}
-                                        disabled={saving}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-sm font-medium text-gray-700 block mb-1">Pcs per Pack</label>
-                                    <Input
-                                        type="number"
-                                        min={1}
-                                        value={form.pcs_per_pack}
-                                        onChange={(e) => setForm((f) => ({ ...f, pcs_per_pack: e.target.value }))}
                                         disabled={saving}
                                     />
                                 </div>

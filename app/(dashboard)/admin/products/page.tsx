@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
     Card,
-    CardContent,
     CardHeader,
     CardTitle,
 } from "@/components/ui/card";
@@ -27,6 +26,8 @@ type Product = {
     name: string;
     category: string;
     unit_price: string | number;
+    pcs_per_dozen: string | number;
+    pcs_per_box: string | number;
     photo_url: string;
     inventory?: { quantity: number } | null;
     is_active: boolean;
@@ -37,6 +38,7 @@ function formatCurrency(amount: number) {
         style: "currency",
         currency: "MMK",
         minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
     }).format(amount);
 }
 
@@ -230,13 +232,7 @@ export default function ProductsPage() {
         return customers.find(c => c.id === selectedCustomer);
     }, [selectedCustomer]);
 
-    // Local add to cart function that uses global context
-    const localAddToCart = (productId: number) => {
-        const product = products.find(p => p.id === productId);
-        if (!product) return;
-        const price = Number(product.unit_price);
-        addToCart(productId, 1, INVENTORY_UNITS.PIECES, undefined, product.name, price);
-    };
+
 
     return (
         <div className="min-h-screen bg-[#FFCDC9] p-6">
@@ -467,7 +463,6 @@ export default function ProductsPage() {
                             <ProductCard
                                 key={product.id}
                                 product={product}
-                                onAddToCart={localAddToCart}
                             />
                         ))
                     )}
@@ -492,20 +487,11 @@ export default function ProductsPage() {
 // Product Card Component
 interface ProductCardProps {
     product: Product;
-    onAddToCart: (productId: number) => void;
 }
 
-function ProductCard({ product, onAddToCart }: ProductCardProps) {
-    const [added, setAdded] = useState(false);
-
-    const handleAdd = () => {
-        onAddToCart(product.id);
-        setAdded(true);
-        setTimeout(() => setAdded(false), 1200);
-    };
-
+function ProductCard({ product }: ProductCardProps) {
     return (
-        <Card className="overflow-hidden hover:shadow-lg transition-shadow flex flex-col">
+        <Card className="overflow-hidden hover:shadow-lg transition-shadow">
             <Link href={`/admin/products/${product.id}`} className="block">
                 <div className="aspect-square bg-gray-100 relative">
                     <img
@@ -525,32 +511,6 @@ function ProductCard({ product, onAddToCart }: ProductCardProps) {
                     </div>
                 </CardHeader>
             </Link>
-            <CardContent className="pt-0 pb-3 px-4">
-                <Button
-                    size="sm"
-                    className={`w-full text-xs transition-colors ${added
-                        ? "bg-green-500 hover:bg-green-600 text-white"
-                        : "bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white"
-                        }`}
-                    onClick={handleAdd}
-                >
-                    {added ? (
-                        <>
-                            <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            Added!
-                        </>
-                    ) : (
-                        <>
-                            <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-1.5 6H19" />
-                            </svg>
-                            Add to Cart
-                        </>
-                    )}
-                </Button>
-            </CardContent>
         </Card>
     );
 }
