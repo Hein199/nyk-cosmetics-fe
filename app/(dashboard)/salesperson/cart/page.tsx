@@ -267,6 +267,18 @@ export default function CartPage() {
                                     />
                                 </div>
 
+                                {/* Remark */}
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-900 mb-2">Remark</label>
+                                    <textarea
+                                        value={remark}
+                                        onChange={(e) => setRemark(e.target.value)}
+                                        rows={2}
+                                        placeholder="Add remark..."
+                                        className="w-full px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white resize-none"
+                                    />
+                                </div>
+
                                 {/* Cart Summary */}
                                 {cart.length > 0 && (
                                     <div className="border-t border-gray-200 pt-4">
@@ -289,7 +301,7 @@ export default function CartPage() {
                                                 disabled={!selectedCustomer || cart.length === 0}
                                                 className="w-full bg-green-600 hover:bg-green-700 text-white"
                                             >
-                                                Create Order
+                                                Place Order
                                             </Button>
                                             {orderError && (
                                                 <div className="text-sm text-red-600">

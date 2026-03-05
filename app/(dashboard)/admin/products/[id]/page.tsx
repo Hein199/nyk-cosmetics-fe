@@ -12,6 +12,7 @@ import { API_BASE_URL } from "@/lib/constants";
 type Product = {
     id: number;
     name: string;
+    description: string | null;
     category: string;
     unit_price: string | number;
     pcs_per_dozen: string | number;
@@ -254,9 +255,14 @@ export default function ProductDetailPage() {
 
                             <div className="space-y-1">
                                 <p className="text-2xl font-semibold text-gray-900">
-                                    {formatCurrency(pricePerSelectedUnit)}
+                                    {formatCurrency(pricePerSelectedUnit * quantity)}
                                 </p>
                                 <p className="text-xs text-gray-500">
+                                    {quantity > 1 && (
+                                        <span className="mr-1">
+                                            {formatCurrency(pricePerSelectedUnit)} ×{" "}{quantity} ={" "}
+                                        </span>
+                                    )}
                                     {unit === INVENTORY_UNITS.DOZEN
                                         ? "Price per Dozen"
                                         : unit === INVENTORY_UNITS.BOX
@@ -265,9 +271,11 @@ export default function ProductDetailPage() {
                                 </p>
                             </div>
 
-                            <p className="text-sm text-gray-600 leading-relaxed">
-                                {product.name}
-                            </p>
+                            {product.description && (
+                                <p className="text-sm text-gray-600 leading-relaxed">
+                                    {product.description}
+                                </p>
+                            )}
 
                             <div className="space-y-2">
                                 <p className="text-sm font-medium text-gray-700">Unit Type</p>
@@ -383,12 +391,11 @@ export default function ProductDetailPage() {
 
                             <div className="pt-6 border-t border-gray-200">
                                 <div className="flex items-center justify-between">
-                                    <p className="text-sm font-semibold text-gray-800">Detail</p>
+                                    <p className="text-sm font-semibold text-gray-800">Product Description</p>
                                     <span className="text-gray-300">—</span>
                                 </div>
                                 <p className="text-sm text-gray-600 mt-2 leading-relaxed">
-                                    A reliable bodyguard for your skin, with secret uses. This lightweight, long lasting
-                                    product provides dependable protection and a comfortable finish for everyday wear.
+                                    {product.description || "No description available."}
                                 </p>
                             </div>
                         </div>

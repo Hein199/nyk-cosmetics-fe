@@ -16,6 +16,7 @@ type Category = {
 type Product = {
     id: number;
     name: string;
+    description: string | null;
     category: string;
     unit_price: string | number;
     pcs_per_dozen: string | number;
@@ -27,8 +28,11 @@ type Product = {
 
 const emptyForm = {
     name: "",
+    description: "",
     category: "",
     unit_price: "",
+    stockQuantity: "",
+    stockUnit: "PCS" as "PCS" | "BOX",
     pcs_per_dozen: "12",
     pcs_per_box: "24",
     photo_url: "",
@@ -66,11 +70,8 @@ export default function AdminInventoryPage() {
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
 
-    // Inventory dialog
-    const [stockDialogOpen, setStockDialogOpen] = useState(false);
-    const [stockProduct, setStockProduct] = useState<Product | null>(null);
-    const [stockQty, setStockQty] = useState("");
-    const [savingStock, setSavingStock] = useState(false);
+    // Delete state
+    const [deletingId, setDeletingId] = useState<number | null>(null);
 
     // Add Category dialog
     const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
@@ -192,8 +193,11 @@ export default function AdminInventoryPage() {
         setEditingProduct(product);
         setForm({
             name: product.name,
+            description: product.description ?? "",
             category: product.category,
             unit_price: String(product.unit_price),
+            stockQuantity: String(product.inventory?.quantity ?? 0),
+            stockUnit: "PCS",
             pcs_per_dozen: String(product.pcs_per_dozen),
             pcs_per_box: String(product.pcs_per_box),
             photo_url: product.photo_url,
@@ -216,13 +220,31 @@ export default function AdminInventoryPage() {
                 ? `${API_BASE_URL}/_api/products/${editingProduct.id}`
                 : `${API_BASE_URL}/_api/products`;
             const method = editingProduct ? "PATCH" : "POST";
+
+            const body: Record<string, unknown> = {
+                name: form.name,
+                description: form.description || null,
+                category: form.category,
+                unit_price: form.unit_price,
+                pcs_per_dozen: form.pcs_per_dozen,
+                pcs_per_box: form.pcs_per_box,
+                photo_url: form.photo_url,
+                is_active: form.is_active,
+            };
+
+            // Include stock info
+            if (form.stockQuantity) {
+                body.stockQuantity = form.stockQuantity;
+                body.stockUnit = form.stockUnit;
+            }
+
             const res = await fetch(url, {
                 method,
                 headers: {
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${token}`,
                 },
-                body: JSON.stringify(form),
+                body: JSON.stringify(body),
             });
             if (!res.ok) throw new Error(await res.text());
             setDialogOpen(false);
@@ -234,31 +256,25 @@ export default function AdminInventoryPage() {
         }
     }
 
-    function openStockEdit(product: Product) {
-        setStockProduct(product);
-        setStockQty(String(product.inventory?.quantity ?? 0));
-        setStockDialogOpen(true);
-    }
-
-    async function handleSaveStock() {
-        if (!token || !stockProduct) return;
-        setSavingStock(true);
+    async function handleDelete(product: Product) {
+        if (!token) return;
+        const confirmed = window.confirm(`Are you sure you want to delete "${product.name}"? This cannot be undone.`);
+        if (!confirmed) return;
+        setDeletingId(product.id);
         try {
-            const res = await fetch(`${API_BASE_URL}/_api/inventory/${stockProduct.id}`, {
-                method: "PATCH",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({ quantity: Number(stockQty) }),
+            const res = await fetch(`${API_BASE_URL}/_api/products/${product.id}`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${token}` },
             });
-            if (!res.ok) throw new Error(await res.text());
-            setStockDialogOpen(false);
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ message: "Failed to delete product" }));
+                throw new Error(err.message ?? "Failed to delete product");
+            }
             await fetchProducts();
         } catch (err) {
-            console.error(err);
+            setError(err instanceof Error ? err.message : "Failed to delete product");
         } finally {
-            setSavingStock(false);
+            setDeletingId(null);
         }
     }
 
@@ -340,8 +356,14 @@ export default function AdminInventoryPage() {
                                     <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => openEdit(product)}>
                                         Edit
                                     </Button>
-                                    <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => openStockEdit(product)}>
-                                        Stock
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="flex-1 text-xs text-red-600 border-red-200 hover:bg-red-50"
+                                        onClick={() => handleDelete(product)}
+                                        disabled={deletingId === product.id}
+                                    >
+                                        {deletingId === product.id ? "…" : "Delete"}
                                     </Button>
                                 </div>
                             </CardContent>
@@ -468,6 +490,19 @@ export default function AdminInventoryPage() {
                                 />
                             </div>
 
+                            {/* Description */}
+                            <div>
+                                <label className="text-sm font-medium text-gray-700 block mb-1">Product Description</label>
+                                <textarea
+                                    className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm bg-white text-black resize-none focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                                    rows={3}
+                                    value={form.description}
+                                    onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                                    placeholder="Optional product description…"
+                                    disabled={saving}
+                                />
+                            </div>
+
                             {/* Category */}
                             <div>
                                 <label className="text-sm font-medium text-gray-700 block mb-1">Category *</label>
@@ -494,6 +529,36 @@ export default function AdminInventoryPage() {
                                     placeholder="e.g. 5000"
                                     disabled={saving}
                                 />
+                            </div>
+
+                            {/* Stock Quantity + Unit */}
+                            <div>
+                                <label className="text-sm font-medium text-gray-700 block mb-1">Stock Quantity</label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        className="flex-1"
+                                        value={form.stockQuantity}
+                                        onChange={(e) => setForm((f) => ({ ...f, stockQuantity: e.target.value }))}
+                                        placeholder="e.g. 100"
+                                        disabled={saving}
+                                    />
+                                    <select
+                                        className="w-24 border border-gray-200 rounded-md px-3 py-2 text-sm bg-white text-black"
+                                        value={form.stockUnit}
+                                        onChange={(e) => setForm((f) => ({ ...f, stockUnit: e.target.value as "PCS" | "BOX" }))}
+                                        disabled={saving}
+                                    >
+                                        <option value="PCS">PCS</option>
+                                        <option value="BOX">BOX</option>
+                                    </select>
+                                </div>
+                                {form.stockUnit === "BOX" && form.stockQuantity && (
+                                    <p className="text-xs text-gray-400 mt-1">
+                                        = {Math.round(Number(form.stockQuantity) * Number(form.pcs_per_box || 24))} PCS
+                                    </p>
+                                )}
                             </div>
 
                             {/* Dozen / Box */}
@@ -557,37 +622,6 @@ export default function AdminInventoryPage() {
                 </div>
             )}
 
-            {/* Stock Edit Dialog */}
-            {stockDialogOpen && stockProduct && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-xs p-6 space-y-4">
-                        <h2 className="text-lg font-semibold">Update Stock</h2>
-                        <p className="text-sm text-gray-600">{stockProduct.name}</p>
-                        <div>
-                            <label className="text-sm font-medium text-gray-700 block mb-1">Quantity</label>
-                            <Input
-                                type="number"
-                                min={0}
-                                value={stockQty}
-                                onChange={(e) => setStockQty(e.target.value)}
-                                disabled={savingStock}
-                            />
-                        </div>
-                        <div className="flex gap-3">
-                            <Button variant="outline" className="flex-1" onClick={() => setStockDialogOpen(false)} disabled={savingStock}>
-                                Cancel
-                            </Button>
-                            <Button
-                                className="flex-1 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700"
-                                onClick={handleSaveStock}
-                                disabled={savingStock}
-                            >
-                                {savingStock ? "Saving…" : "Save"}
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
