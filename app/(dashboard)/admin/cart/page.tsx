@@ -266,7 +266,7 @@ export default function AdminCartPage() {
                                                 disabled={!selectedCustomer || cart.length === 0 || submitting}
                                                 className="w-full bg-green-600 hover:bg-green-700 text-white"
                                             >
-                                                {submitting ? "Creating..." : "Create Order"}
+                                                {submitting ? "Placing..." : "Place Order"}
                                             </Button>
                                             {orderError && (
                                                 <div className="text-sm text-red-600">{orderError}</div>
@@ -278,11 +278,6 @@ export default function AdminCartPage() {
                                     </div>
                                 )}
 
-                                {cart.length === 0 && (
-                                    <div className="text-center py-4 text-gray-500 text-sm">
-                                        Cart is empty. Add products first.
-                                    </div>
-                                )}
                             </CardContent>
                         </Card>
                     </div>
@@ -312,13 +307,7 @@ export default function AdminCartPage() {
                                             </svg>
                                         </div>
                                         <h3 className="text-lg font-medium text-gray-900 mb-2">Your cart is empty</h3>
-                                        <p className="text-gray-600 mb-4">Go to Products to add items</p>
-                                        <Button
-                                            onClick={() => router.push("/admin/products")}
-                                            className="bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white"
-                                        >
-                                            Browse Products
-                                        </Button>
+                                        <p className="text-gray-600">Go to Products to add items</p>
                                     </div>
                                 ) : (
                                     <div className="space-y-4">

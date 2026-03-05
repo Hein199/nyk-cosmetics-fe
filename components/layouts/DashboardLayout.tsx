@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/lib/cart-context";
 import { useAuth } from "@/lib/auth-context";
+import { API_BASE_URL } from "@/lib/constants";
 
 interface DashboardLayoutProps {
     children: React.ReactNode;
@@ -129,19 +130,46 @@ export default function DashboardLayout({
     userName = "User",
 }: DashboardLayoutProps) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const [userMenuOpen, setUserMenuOpen] = useState(false);
     const pathname = usePathname();
     const router = useRouter();
     const { user, loading, logout } = useAuth();
 
     const resolvedRole = user?.role ?? userRole;
-    const resolvedName = user?.username ?? userName;
+    const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+    const [fullName, setFullName] = useState<string | null>(null);
+    const [systemName, setSystemName] = useState("NYK Cosmetics");
+    const [systemLogo, setSystemLogo] = useState<string | null>(null);
+    const resolvedName = fullName || user?.username || userName;
 
     useEffect(() => {
         if (!loading && !user) {
             router.replace("/login");
         }
     }, [loading, user, router]);
+
+    useEffect(() => {
+        if (!user) return;
+        const token = sessionStorage.getItem("nyk-auth-token") || localStorage.getItem("nyk-auth-token");
+        if (!token) return;
+        // Fetch user profile and system settings in parallel
+        Promise.all([
+            fetch(`${API_BASE_URL}/_api/users/me`, {
+                headers: { Authorization: `Bearer ${token}` },
+            }).then((r) => (r.ok ? r.json() : null)),
+            fetch(`${API_BASE_URL}/_api/settings`, {
+                headers: { Authorization: `Bearer ${token}` },
+            }).then((r) => (r.ok ? r.json() : null)),
+        ])
+            .then(([userData, settingsData]) => {
+                if (userData?.photo_url) setProfilePhoto(userData.photo_url);
+                else setProfilePhoto(null);
+                if (userData?.full_name) setFullName(userData.full_name);
+                if (settingsData?.system_name) setSystemName(settingsData.system_name);
+                if (settingsData?.system_logo) setSystemLogo(settingsData.system_logo);
+                else setSystemLogo(null);
+            })
+            .catch(() => {});
+    }, [user, pathname]);
 
     useEffect(() => {
         if (!loading && user) {
@@ -196,10 +224,14 @@ export default function DashboardLayout({
                 {/* Logo */}
                 <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200">
                     <Link href={resolvedRole === "admin" ? "/admin" : "/salesperson"} className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-gradient-to-br from-pink-500 to-rose-600 rounded-full flex items-center justify-center">
-                            <span className="text-white text-sm font-bold">NYK</span>
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden bg-gradient-to-br from-pink-500 to-rose-600">
+                            {systemLogo ? (
+                                <img src={systemLogo} alt="Logo" className="w-full h-full object-cover" />
+                            ) : (
+                                <span className="text-white text-sm font-bold">{systemName.charAt(0)}</span>
+                            )}
                         </div>
-                        <span className="font-semibold text-gray-900">NYK Cosmetics</span>
+                        <span className="font-semibold text-gray-900">{systemName}</span>
                     </Link>
                     <button
                         className="lg:hidden p-1 rounded-md hover:bg-gray-100"
@@ -295,8 +327,12 @@ export default function DashboardLayout({
 
                         {/* Mobile logo */}
                         <Link href={resolvedRole === "admin" ? "/admin" : "/salesperson"} className="lg:hidden flex items-center gap-2">
-                            <div className="w-8 h-8 bg-gradient-to-br from-pink-500 to-rose-600 rounded-full flex items-center justify-center">
-                                <span className="text-white text-sm font-bold">NYK</span>
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden bg-gradient-to-br from-pink-500 to-rose-600">
+                                {systemLogo ? (
+                                    <img src={systemLogo} alt="Logo" className="w-full h-full object-cover" />
+                                ) : (
+                                    <span className="text-white text-sm font-bold">{systemName.charAt(0)}</span>
+                                )}
                             </div>
                         </Link>
 
@@ -305,75 +341,24 @@ export default function DashboardLayout({
                             {/* Cart Button - for both admin and salesperson */}
                             <CartButton role={resolvedRole} />
 
-                            {/* User menu */}
-                            <div className="relative">
-                                <button
-                                    className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100"
-                                    onClick={() => setUserMenuOpen(!userMenuOpen)}
-                                >
-                                    <div className="w-8 h-8 bg-gradient-to-br from-pink-400 to-rose-500 rounded-full flex items-center justify-center">
+                            {/* User avatar - links to profile */}
+                            <Link
+                                href={`/${resolvedRole}/profile`}
+                                className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100"
+                            >
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden bg-gradient-to-br from-pink-400 to-rose-500">
+                                    {profilePhoto ? (
+                                        <img src={profilePhoto} alt="Profile" className="w-full h-full object-cover" />
+                                    ) : (
                                         <span className="text-white text-sm font-medium">
                                             {resolvedName.charAt(0).toUpperCase()}
                                         </span>
-                                    </div>
-                                    <span className="hidden sm:block text-sm font-medium text-gray-700">
-                                        {resolvedName}
-                                    </span>
-                                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </button>
-
-                                {/* Dropdown menu */}
-                                {userMenuOpen && (
-                                    <>
-                                        <div
-                                            className="fixed inset-0 z-40"
-                                            onClick={() => setUserMenuOpen(false)}
-                                        />
-                                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                                            <div className="px-4 py-2 border-b border-gray-100">
-                                                <p className="text-sm font-medium text-gray-900">{resolvedName}</p>
-                                                <p className="text-xs text-gray-500 capitalize">{resolvedRole}</p>
-                                            </div>
-                                            <Link
-                                                href="/profile"
-                                                className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                                onClick={() => setUserMenuOpen(false)}
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                                </svg>
-                                                Profile
-                                            </Link>
-                                            <Link
-                                                href="/settings"
-                                                className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                                onClick={() => setUserMenuOpen(false)}
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                </svg>
-                                                Settings
-                                            </Link>
-                                            <hr className="my-1" />
-                                            <button
-                                                onClick={() => {
-                                                    setUserMenuOpen(false);
-                                                    handleLogout();
-                                                }}
-                                                className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                                                </svg>
-                                                Logout
-                                            </button>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
+                                    )}
+                                </div>
+                                <span className="hidden sm:block text-sm font-medium text-gray-700">
+                                    {resolvedName}
+                                </span>
+                            </Link>
                         </div>
                     </div>
                 </header>
