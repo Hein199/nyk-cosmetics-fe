@@ -44,7 +44,11 @@ function formatCurrency(amount: number) {
 }
 
 function formatCategory(category: string) {
-    return category.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+    // Handle both legacy ENUM_STYLE and new free-text categories
+    if (category === category.toUpperCase() && category.includes("_")) {
+        return category.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+    return category;
 }
 
 export default function AdminInventoryPage() {
@@ -176,14 +180,9 @@ export default function AdminInventoryPage() {
         });
     }, [products, searchQuery, categoryFilter]);
 
-    // Derive enum-style key from a category display name: "Cosmetic" → "COSMETIC"
-    function toEnumKey(name: string) {
-        return name.toUpperCase().replace(/\s+/g, "_");
-    }
-
     function openCreate() {
         setEditingProduct(null);
-        const defaultCategory = categories[0] ? toEnumKey(categories[0].name) : "COSMETIC";
+        const defaultCategory = categories[0]?.name ?? "";
         setForm({ ...emptyForm, category: defaultCategory });
         setSaveError(null);
         setDialogOpen(true);
@@ -479,7 +478,7 @@ export default function AdminInventoryPage() {
                                     disabled={saving}
                                 >
                                     {categories.map((c) => (
-                                        <option key={c.id} value={toEnumKey(c.name)}>{c.name}</option>
+                                        <option key={c.id} value={c.name}>{c.name}</option>
                                     ))}
                                 </select>
                             </div>
