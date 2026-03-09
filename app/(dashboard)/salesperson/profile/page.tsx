@@ -2,29 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { useAuth } from "@/lib/auth-context";
 import { API_BASE_URL } from "@/lib/constants";
 
-type SalespersonInfo = {
-    id: number;
-    name: string;
-    region: string | null;
-    monthly_target: string;
-};
-
 type UserProfile = {
     id: number;
     username: string;
     role: string;
-    full_name: string | null;
-    email: string | null;
     phone_number: string | null;
     photo_url: string | null;
     created_at: string;
-    salesperson: SalespersonInfo | null;
 };
 
 export default function SalespersonProfilePage() {
@@ -37,8 +26,6 @@ export default function SalespersonProfilePage() {
     const [success, setSuccess] = useState<string | null>(null);
 
     const [form, setForm] = useState({
-        full_name: "",
-        phone_number: "",
         photo_url: "",
     });
 
@@ -54,8 +41,6 @@ export default function SalespersonProfilePage() {
                 const data = (await res.json()) as UserProfile;
                 setProfile(data);
                 setForm({
-                    full_name: data.full_name ?? "",
-                    phone_number: data.phone_number ?? "",
                     photo_url: data.photo_url ?? "",
                 });
             } catch (err) {
@@ -79,7 +64,7 @@ export default function SalespersonProfilePage() {
                     Authorization: `Bearer ${token}`,
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify(form),
+                body: JSON.stringify({ photo_url: form.photo_url }),
             });
             if (!res.ok) {
                 const msg = await res.text();
@@ -88,8 +73,6 @@ export default function SalespersonProfilePage() {
             const data = (await res.json()) as UserProfile;
             setProfile(data);
             setForm({
-                full_name: data.full_name ?? "",
-                phone_number: data.phone_number ?? "",
                 photo_url: data.photo_url ?? "",
             });
             setEditing(false);
@@ -158,61 +141,16 @@ export default function SalespersonProfilePage() {
                                     disabled={saving}
                                 />
                             ) : (
-                                <div className="flex items-center gap-4">
-                                    <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border-2 border-gray-200">
-                                        {profile.photo_url ? (
-                                            <img src={profile.photo_url} alt="Profile" className="w-full h-full object-cover" />
-                                        ) : (
-                                            <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                            </svg>
-                                        )}
-                                    </div>
+                                <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border-2 border-gray-200">
+                                    {profile.photo_url ? (
+                                        <img src={profile.photo_url} alt="Profile" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                        </svg>
+                                    )}
                                 </div>
                             )}
-                        </div>
-
-                        {/* Full Name */}
-                        <div>
-                            <label className="text-sm font-medium text-gray-700 block mb-1">Full Name</label>
-                            {editing ? (
-                                <Input
-                                    value={form.full_name}
-                                    onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
-                                    placeholder="Enter full name"
-                                    disabled={saving}
-                                />
-                            ) : (
-                                <p className="text-sm text-gray-900 py-2 px-3 bg-gray-50 rounded-lg">
-                                    {profile.full_name || "—"}
-                                </p>
-                            )}
-                        </div>
-
-                        {/* Phone Number */}
-                        <div>
-                            <label className="text-sm font-medium text-gray-700 block mb-1">Phone Number</label>
-                            {editing ? (
-                                <Input
-                                    type="tel"
-                                    value={form.phone_number}
-                                    onChange={(e) => setForm((f) => ({ ...f, phone_number: e.target.value }))}
-                                    placeholder="Enter phone number"
-                                    disabled={saving}
-                                />
-                            ) : (
-                                <p className="text-sm text-gray-900 py-2 px-3 bg-gray-50 rounded-lg">
-                                    {profile.phone_number || "—"}
-                                </p>
-                            )}
-                        </div>
-
-                        {/* Region / Assigned Area (read-only) */}
-                        <div>
-                            <label className="text-sm font-medium text-gray-700 block mb-1">Region / Assigned Area</label>
-                            <p className="text-sm text-gray-900 py-2 px-3 bg-gray-100 rounded-lg">
-                                {profile.salesperson?.region || "—"}
-                            </p>
                         </div>
 
                         {/* Username (read-only) */}
@@ -220,6 +158,14 @@ export default function SalespersonProfilePage() {
                             <label className="text-sm font-medium text-gray-700 block mb-1">Username</label>
                             <p className="text-sm text-gray-900 py-2 px-3 bg-gray-100 rounded-lg">
                                 {profile.username}
+                            </p>
+                        </div>
+
+                        {/* Phone Number (read-only) */}
+                        <div>
+                            <label className="text-sm font-medium text-gray-700 block mb-1">Phone Number</label>
+                            <p className="text-sm text-gray-900 py-2 px-3 bg-gray-100 rounded-lg">
+                                {profile.phone_number || "—"}
                             </p>
                         </div>
 
@@ -231,6 +177,20 @@ export default function SalespersonProfilePage() {
                             </p>
                         </div>
 
+                        {/* Account Created Date (read-only) */}
+                        <div>
+                            <label className="text-sm font-medium text-gray-700 block mb-1">Account Created</label>
+                            <p className="text-sm text-gray-900 py-2 px-3 bg-gray-100 rounded-lg">
+                                {new Date(profile.created_at).toLocaleDateString("en-US", {
+                                    year: "numeric",
+                                    month: "long",
+                                    day: "numeric",
+                                })}
+                            </p>
+                        </div>
+
+                        <p className="text-xs text-gray-400">To edit username, phone number, or role, contact your Admin.</p>
+
                         {/* Actions */}
                         <div className="flex gap-3 pt-2">
                             {editing ? (
@@ -240,7 +200,7 @@ export default function SalespersonProfilePage() {
                                         disabled={saving}
                                         className="bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white"
                                     >
-                                        {saving ? "Saving..." : "Save Changes"}
+                                        {saving ? "Saving..." : "Save Photo"}
                                     </Button>
                                     <Button
                                         variant="outline"
@@ -248,8 +208,6 @@ export default function SalespersonProfilePage() {
                                             setEditing(false);
                                             setError(null);
                                             setForm({
-                                                full_name: profile.full_name ?? "",
-                                                phone_number: profile.phone_number ?? "",
                                                 photo_url: profile.photo_url ?? "",
                                             });
                                         }}
@@ -263,7 +221,7 @@ export default function SalespersonProfilePage() {
                                     onClick={() => setEditing(true)}
                                     className="bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white"
                                 >
-                                    Edit Profile
+                                    Change Photo
                                 </Button>
                             )}
                         </div>
