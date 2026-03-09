@@ -620,11 +620,7 @@ export default function AdminPage() {
                                 ))}
                             </ul>
                         )}
-                        <Link href="/admin/products">
-                            <Button variant="outline" className="w-full mt-4" size="sm">
-                                View All Products
-                            </Button>
-                        </Link>
+
                     </div>
                 </Section>
             </div>

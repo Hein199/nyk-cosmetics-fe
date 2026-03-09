@@ -32,37 +32,6 @@ type DashboardOrder = {
     createdAt: string;
 };
 
-// Monthly target data (target only, achieved comes from API orders)
-const monthlyTargets: Record<string, number> = {
-    // 2024 data
-    "2024-01": 2800000,
-    "2024-02": 2900000,
-    "2024-03": 3100000,
-    "2024-04": 3200000,
-    "2024-05": 3300000,
-    "2024-06": 3400000,
-    "2024-07": 3500000,
-    "2024-08": 3600000,
-    "2024-09": 3700000,
-    "2024-10": 3800000,
-    "2024-11": 3900000,
-    "2024-12": 4000000,
-
-    // 2025 data
-    "2025-01": 4100000,
-    "2025-02": 4200000,
-    "2025-03": 4300000,
-    "2025-04": 4400000,
-    "2025-05": 4500000,
-    "2025-06": 4600000,
-    "2025-07": 4700000,
-    "2025-08": 4800000,
-    "2025-09": 4900000,
-    "2025-10": 5000000,
-    "2025-11": 5100000,
-    "2025-12": 5200000,
-};
-
 const statusColors: Record<string, string> = {
     delivered: "bg-green-100 text-green-800",
     confirmed: "bg-blue-100 text-blue-800",
@@ -135,6 +104,22 @@ export default function SalespersonPage() {
     // Monthly target state
     const [selectedYear, setSelectedYear] = useState("2025");
     const [selectedMonthNum, setSelectedMonthNum] = useState("12");
+    const [monthlyTarget, setMonthlyTarget] = useState<number>(0);
+
+    // Fetch salesperson's monthly target from backend
+    useEffect(() => {
+        if (!token) return;
+        fetch(`${API_BASE_URL}/_api/users/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+                if (data?.salesperson?.monthly_target != null) {
+                    setMonthlyTarget(Number(data.salesperson.monthly_target));
+                }
+            })
+            .catch(() => {});
+    }, [token]);
 
     const cacheKey = useMemo(() => `nyk-dashboard-orders-cache:${user?.id ?? "anon"}`, [user?.id]);
 
@@ -265,7 +250,7 @@ export default function SalespersonPage() {
 
     // Calculate monthly statistics
     const monthlyStats = useMemo(() => {
-        const target = monthlyTargets[selectedMonth] ?? 0;
+        const target = monthlyTarget;
         const achieved = orders
             .map((order) => ({
                 status: normalizeStatus(order.status),
@@ -283,7 +268,7 @@ export default function SalespersonPage() {
             achieved,
             progressPercentage
         };
-    }, [orders, selectedMonth]);
+    }, [orders, selectedMonth, monthlyTarget]);
 
     // Get recent orders for the table (limit to 5)
     const recentOrdersForDisplay = filteredOrders.slice(0, 5);

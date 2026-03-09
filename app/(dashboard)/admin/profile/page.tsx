@@ -12,8 +12,6 @@ type UserProfile = {
     id: number;
     username: string;
     role: string;
-    full_name: string | null;
-    email: string | null;
     phone_number: string | null;
     photo_url: string | null;
     created_at: string;
@@ -29,9 +27,6 @@ export default function AdminProfilePage() {
     const [success, setSuccess] = useState<string | null>(null);
 
     const [form, setForm] = useState({
-        full_name: "",
-        email: "",
-        phone_number: "",
         photo_url: "",
     });
 
@@ -58,9 +53,6 @@ export default function AdminProfilePage() {
                 const data = (await profileRes.json()) as UserProfile;
                 setProfile(data);
                 setForm({
-                    full_name: data.full_name ?? "",
-                    email: data.email ?? "",
-                    phone_number: data.phone_number ?? "",
                     photo_url: data.photo_url ?? "",
                 });
                 if (settingsRes.ok) {
@@ -91,7 +83,7 @@ export default function AdminProfilePage() {
                     Authorization: `Bearer ${token}`,
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify(form),
+                body: JSON.stringify({ photo_url: form.photo_url }),
             });
             if (!res.ok) {
                 const msg = await res.text();
@@ -100,13 +92,10 @@ export default function AdminProfilePage() {
             const data = (await res.json()) as UserProfile;
             setProfile(data);
             setForm({
-                full_name: data.full_name ?? "",
-                email: data.email ?? "",
-                phone_number: data.phone_number ?? "",
                 photo_url: data.photo_url ?? "",
             });
             setEditing(false);
-            setSuccess("Profile updated successfully.");
+            setSuccess("Profile photo updated successfully.");
             setTimeout(() => setSuccess(null), 3000);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to save profile");
@@ -203,34 +192,15 @@ export default function AdminProfilePage() {
                                     disabled={saving}
                                 />
                             ) : (
-                                <div className="flex items-center gap-4">
-                                    <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border-2 border-gray-200">
-                                        {profile.photo_url ? (
-                                            <img src={profile.photo_url} alt="Profile" className="w-full h-full object-cover" />
-                                        ) : (
-                                            <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                            </svg>
-                                        )}
-                                    </div>
+                                <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border-2 border-gray-200">
+                                    {profile.photo_url ? (
+                                        <img src={profile.photo_url} alt="Profile" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                        </svg>
+                                    )}
                                 </div>
-                            )}
-                        </div>
-
-                        {/* Full Name */}
-                        <div>
-                            <label className="text-sm font-medium text-gray-700 block mb-1">Full Name</label>
-                            {editing ? (
-                                <Input
-                                    value={form.full_name}
-                                    onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
-                                    placeholder="Enter full name"
-                                    disabled={saving}
-                                />
-                            ) : (
-                                <p className="text-sm text-gray-900 py-2 px-3 bg-gray-50 rounded-lg">
-                                    {profile.full_name || "—"}
-                                </p>
                             )}
                         </div>
 
@@ -242,40 +212,12 @@ export default function AdminProfilePage() {
                             </p>
                         </div>
 
-                        {/* Email */}
-                        <div>
-                            <label className="text-sm font-medium text-gray-700 block mb-1">Email</label>
-                            {editing ? (
-                                <Input
-                                    type="email"
-                                    value={form.email}
-                                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                                    placeholder="Enter email address"
-                                    disabled={saving}
-                                />
-                            ) : (
-                                <p className="text-sm text-gray-900 py-2 px-3 bg-gray-50 rounded-lg">
-                                    {profile.email || "—"}
-                                </p>
-                            )}
-                        </div>
-
-                        {/* Phone Number */}
+                        {/* Phone Number (read-only) */}
                         <div>
                             <label className="text-sm font-medium text-gray-700 block mb-1">Phone Number</label>
-                            {editing ? (
-                                <Input
-                                    type="tel"
-                                    value={form.phone_number}
-                                    onChange={(e) => setForm((f) => ({ ...f, phone_number: e.target.value }))}
-                                    placeholder="Enter phone number"
-                                    disabled={saving}
-                                />
-                            ) : (
-                                <p className="text-sm text-gray-900 py-2 px-3 bg-gray-50 rounded-lg">
-                                    {profile.phone_number || "—"}
-                                </p>
-                            )}
+                            <p className="text-sm text-gray-900 py-2 px-3 bg-gray-100 rounded-lg">
+                                {profile.phone_number || "—"}
+                            </p>
                         </div>
 
                         {/* Role (read-only) */}
@@ -298,6 +240,8 @@ export default function AdminProfilePage() {
                             </p>
                         </div>
 
+                        <p className="text-xs text-gray-400">To edit username, phone number, or role, go to Admin → Users page.</p>
+
                         {/* Actions */}
                         <div className="flex gap-3 pt-2">
                             {editing ? (
@@ -307,19 +251,14 @@ export default function AdminProfilePage() {
                                         disabled={saving}
                                         className="bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white"
                                     >
-                                        {saving ? "Saving..." : "Save Changes"}
+                                        {saving ? "Saving..." : "Save Photo"}
                                     </Button>
                                     <Button
                                         variant="outline"
                                         onClick={() => {
                                             setEditing(false);
                                             setError(null);
-                                            setForm({
-                                                full_name: profile.full_name ?? "",
-                                                email: profile.email ?? "",
-                                                phone_number: profile.phone_number ?? "",
-                                                photo_url: profile.photo_url ?? "",
-                                            });
+                                            setForm({ photo_url: profile.photo_url ?? "" });
                                         }}
                                         disabled={saving}
                                     >
@@ -331,7 +270,7 @@ export default function AdminProfilePage() {
                                     onClick={() => setEditing(true)}
                                     className="bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white"
                                 >
-                                    Edit Profile
+                                    Change Photo
                                 </Button>
                             )}
                         </div>

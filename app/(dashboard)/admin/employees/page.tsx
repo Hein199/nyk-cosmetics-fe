@@ -316,10 +316,14 @@ export default function EmployeesPage() {
         setEmpError(null);
         try {
             if (editingEmployee) {
+                // Strip empty strings so optional fields (e.g. start_date) pass backend validation
+                const patchBody = Object.fromEntries(
+                    Object.entries(empForm).filter(([, v]) => v !== "")
+                );
                 await apiFetch(`/employees/${editingEmployee.id}`, {
                     method: "PATCH",
                     token,
-                    body: empForm,
+                    body: patchBody,
                 });
             } else {
                 await apiFetch("/employees", {
@@ -842,10 +846,10 @@ export default function EmployeesPage() {
                                 Basic Salary (MMK)
                             </label>
                             <Input
-                                className="w-full"
-                                type="number"
-                                value={salBasic}
-                                onChange={(e) => setSalBasic(e.target.value)}
+                                className="w-full bg-gray-100 cursor-not-allowed text-gray-700"
+                                type="text"
+                                value={salBasic ? formatCurrency(Number(salBasic)) : ""}
+                                readOnly
                                 placeholder="Auto-filled from employee"
                             />
                         </div>

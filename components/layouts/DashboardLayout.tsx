@@ -17,7 +17,6 @@ interface DashboardLayoutProps {
 const adminNavItems = [
     { href: "/admin", label: "Dashboard", icon: "home" },
     { href: "/admin/orders", label: "Orders", icon: "orders" },
-    { href: "/admin/products", label: "Create Order", icon: "products" },
     { href: "/admin/outstanding", label: "Payment", icon: "outstanding" },
     { href: "/admin/payment-history", label: "Payment History", icon: "history" },
     { href: "/admin/expenses", label: "Expenses", icon: "expenses" },
@@ -136,10 +135,10 @@ export default function DashboardLayout({
 
     const resolvedRole = user?.role ?? userRole;
     const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
-    const [fullName, setFullName] = useState<string | null>(null);
+    const [profileUsername, setProfileUsername] = useState<string | null>(null);
     const [systemName, setSystemName] = useState("NYK Cosmetics");
     const [systemLogo, setSystemLogo] = useState<string | null>(null);
-    const resolvedName = fullName || user?.username || userName;
+    const resolvedName = profileUsername || user?.username || userName;
 
     useEffect(() => {
         if (!loading && !user) {
@@ -163,13 +162,13 @@ export default function DashboardLayout({
             .then(([userData, settingsData]) => {
                 if (userData?.photo_url) setProfilePhoto(userData.photo_url);
                 else setProfilePhoto(null);
-                if (userData?.full_name) setFullName(userData.full_name);
+                if (userData?.username) setProfileUsername(userData.username);
                 if (settingsData?.system_name) setSystemName(settingsData.system_name);
                 if (settingsData?.system_logo) setSystemLogo(settingsData.system_logo);
                 else setSystemLogo(null);
             })
             .catch(() => {});
-    }, [user, pathname]);
+    }, [user]);
 
     useEffect(() => {
         if (!loading && user) {
@@ -338,8 +337,8 @@ export default function DashboardLayout({
 
                         {/* Right side items */}
                         <div className="flex items-center gap-3 ml-auto">
-                            {/* Cart Button - for both admin and salesperson */}
-                            <CartButton role={resolvedRole} />
+                            {/* Cart Button - salesperson only */}
+                            {resolvedRole === "salesperson" && <CartButton />}
 
                             {/* User avatar - links to profile */}
                             <Link
@@ -373,9 +372,9 @@ export default function DashboardLayout({
 }
 
 // Cart Button Component
-function CartButton({ role }: { role: string }) {
+function CartButton() {
     const { cartSummary } = useCart();
-    const cartHref = role === "admin" ? "/admin/cart" : "/salesperson/cart";
+    const cartHref = "/salesperson/cart";
 
     return (
         <Link href={cartHref}>
