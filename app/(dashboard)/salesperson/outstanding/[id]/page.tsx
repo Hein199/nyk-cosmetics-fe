@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,30 +45,13 @@ export default function OutstandingDetailPage() {
     const params = useParams<{ id: string }>();
     const router = useRouter();
     const { token } = useAuth();
-    const [order, setOrder] = useState<OrderDetail | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
-    const fetchOrder = useCallback(async () => {
-        if (!token || !params.id) return;
-        setLoading(true);
-        try {
-            const data = await apiFetch<OrderDetail>(`/orders/${params.id}`, {
-                token,
-            });
-            setOrder(data);
-        } catch (err) {
-            setError(
-                err instanceof Error ? err.message : "Failed to load order"
-            );
-        } finally {
-            setLoading(false);
-        }
-    }, [token, params.id]);
-
-    useEffect(() => {
-        fetchOrder();
-    }, [fetchOrder]);
+    const { data: order = null, isLoading: loading, error: queryError } = useQuery({
+        queryKey: ["order", params.id],
+        queryFn: () => apiFetch<OrderDetail>(`/orders/${params.id}`, { token }),
+        enabled: !!token && !!params.id,
+    });
+    const error = queryError?.message ?? null;
 
     if (loading) {
         return (

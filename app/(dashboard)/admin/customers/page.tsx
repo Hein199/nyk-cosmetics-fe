@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth-context";
@@ -71,8 +72,8 @@ function CustomerModal({
 
     const set =
         (key: keyof CustomerForm) =>
-        (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-            setForm((prev) => ({ ...prev, [key]: e.target.value }));
+            (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+                setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
     async function handleSave() {
         if (!form.name.trim()) return setError("Name is required.");
@@ -182,10 +183,14 @@ function CustomerModal({
 
 export default function CustomersPage() {
     const { token } = useAuth();
+    const queryClient = useQueryClient();
 
-    const [customers, setCustomers] = useState<Customer[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [fetchError, setFetchError] = useState("");
+    const { data: customers = [], isLoading: loading, error: customersError } = useQuery({
+        queryKey: ["admin-customers"],
+        queryFn: () => apiFetch<Customer[]>("/customers", { token }),
+        enabled: !!token,
+    });
+    const fetchError = customersError?.message ?? "";
 
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState("");
@@ -194,30 +199,11 @@ export default function CustomersPage() {
     const [addOpen, setAddOpen] = useState(false);
     const [editingCustomer, setEditingCustomer] = useState(false);
     const [deletingCustomer, setDeletingCustomer] = useState(false);
-    const [deleteLoading, setDeleteLoading] = useState(false);
-
     const [notes, setNotes] = useState("");
     const [notesSaving, setNotesSaving] = useState(false);
     const [notesSaved, setNotesSaved] = useState(false);
     const [customerOrders, setCustomerOrders] = useState<CustomerOrder[]>([]);
     const [ordersLoading, setOrdersLoading] = useState(false);
-
-    const fetchCustomers = useCallback(async () => {
-        try {
-            setLoading(true);
-            setFetchError("");
-            const data = await apiFetch<Customer[]>("/customers", { token });
-            setCustomers(data);
-        } catch (e: unknown) {
-            setFetchError(e instanceof Error ? e.message : "Failed to load customers.");
-        } finally {
-            setLoading(false);
-        }
-    }, [token]);
-
-    useEffect(() => {
-        fetchCustomers();
-    }, [fetchCustomers]);
 
     const filtered = customers.filter((c) => {
         const q = search.toLowerCase();
@@ -364,9 +350,8 @@ export default function CustomersPage() {
                                 {["Date", "Order ID", "Total", "Paid", "Remaining", "Actions"].map((h, i) => (
                                     <th
                                         key={h}
-                                        className={`py-2.5 px-4 text-sm font-medium text-white bg-blue-600 ${
-                                            i !== 0 ? "border-l border-blue-500/40" : ""
-                                        } ${h === "Actions" ? "text-center" : "text-left"}`}
+                                        className={`py-2.5 px-4 text-sm font-medium text-white bg-blue-600 ${i !== 0 ? "border-l border-blue-500/40" : ""
+                                            } ${h === "Actions" ? "text-center" : "text-left"}`}
                                     >
                                         {h}
                                     </th>
@@ -420,7 +405,7 @@ export default function CustomersPage() {
                                 body: form,
                                 token,
                             });
-                            await fetchCustomers();
+                            queryClient.invalidateQueries({ queryKey: ["admin-customers"] });
                             setSelectedCustomer((prev) => (prev ? { ...prev, ...form } : prev));
                             setEditingCustomer(false);
                         }}
@@ -439,13 +424,11 @@ export default function CustomersPage() {
                                 <Button
                                     variant="outline"
                                     onClick={() => setDeletingCustomer(false)}
-                                    disabled={deleteLoading}
                                 >
                                     Cancel
                                 </Button>
                                 <Button
                                     className="bg-red-600 hover:bg-red-700 text-white"
-                                    disabled={deleteLoading}
                                     onClick={() => {
                                         setDeletingCustomer(false);
                                         setSelectedCustomer(null);
@@ -517,9 +500,8 @@ export default function CustomersPage() {
                             {["Customer", "Phone", "Address", "Status", "Outstanding", "Actions"].map((h, i) => (
                                 <th
                                     key={h}
-                                    className={`py-3 px-4 text-sm font-medium text-white bg-blue-600 first:rounded-tl last:rounded-tr ${
-                                        i !== 0 ? "border-l border-blue-500/40" : ""
-                                    } ${h === "Actions" ? "text-center" : "text-left"}`}
+                                    className={`py-3 px-4 text-sm font-medium text-white bg-blue-600 first:rounded-tl last:rounded-tr ${i !== 0 ? "border-l border-blue-500/40" : ""
+                                        } ${h === "Actions" ? "text-center" : "text-left"}`}
                                 >
                                     {h}
                                 </th>
@@ -595,7 +577,7 @@ export default function CustomersPage() {
                     onClose={() => setAddOpen(false)}
                     onSave={async (form) => {
                         await apiFetch("/customers", { method: "POST", body: form, token });
-                        await fetchCustomers();
+                        queryClient.invalidateQueries({ queryKey: ["admin-customers"] });
                         setAddOpen(false);
                     }}
                 />

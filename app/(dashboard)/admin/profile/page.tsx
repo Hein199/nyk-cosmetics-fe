@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { useAuth } from "@/lib/auth-context";
-import { API_BASE_URL } from "@/lib/constants";
+import { apiFetch } from "@/lib/api";
 
 type UserProfile = {
     id: number;
@@ -19,10 +20,8 @@ type UserProfile = {
 
 export default function AdminProfilePage() {
     const { token } = useAuth();
-    const [profile, setProfile] = useState<UserProfile | null>(null);
-    const [loading, setLoading] = useState(true);
+    const queryClient = useQueryClient();
     const [editing, setEditing] = useState(false);
-    const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
 
@@ -32,109 +31,80 @@ export default function AdminProfilePage() {
 
     // System branding state
     const [brandingForm, setBrandingForm] = useState({ system_name: "", system_logo: "" });
-    const [brandingSaving, setBrandingSaving] = useState(false);
     const [brandingSuccess, setBrandingSuccess] = useState<string | null>(null);
     const [brandingError, setBrandingError] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (!token) return;
-        const fetchProfile = async () => {
-            setLoading(true);
-            try {
-                const [profileRes, settingsRes] = await Promise.all([
-                    fetch(`${API_BASE_URL}/_api/users/me`, {
-                        headers: { Authorization: `Bearer ${token}` },
-                    }),
-                    fetch(`${API_BASE_URL}/_api/settings`, {
-                        headers: { Authorization: `Bearer ${token}` },
-                    }),
-                ]);
-                if (!profileRes.ok) throw new Error("Failed to load profile");
-                const data = (await profileRes.json()) as UserProfile;
-                setProfile(data);
-                setForm({
-                    photo_url: data.photo_url ?? "",
+    const { data: profile = null, isLoading: loading } = useQuery({
+        queryKey: ["admin-profile"],
+        queryFn: async () => {
+            const [profileData, settingsData] = await Promise.all([
+                apiFetch<UserProfile>("/users/me", { token }),
+                apiFetch<{ system_name?: string; system_logo?: string }>("/settings", { token }).catch(() => null),
+            ]);
+            setForm({ photo_url: profileData.photo_url ?? "" });
+            if (settingsData) {
+                setBrandingForm({
+                    system_name: settingsData.system_name ?? "NYK Cosmetics",
+                    system_logo: settingsData.system_logo ?? "",
                 });
-                if (settingsRes.ok) {
-                    const settings = await settingsRes.json();
-                    setBrandingForm({
-                        system_name: settings.system_name ?? "NYK Cosmetics",
-                        system_logo: settings.system_logo ?? "",
-                    });
-                }
-            } catch (err) {
-                setError(err instanceof Error ? err.message : "Failed to load profile");
-            } finally {
-                setLoading(false);
             }
-        };
-        fetchProfile();
-    }, [token]);
+            return profileData;
+        },
+        enabled: !!token,
+    });
 
-    const handleSave = async () => {
-        if (!token) return;
-        setSaving(true);
-        setError(null);
-        setSuccess(null);
-        try {
-            const res = await fetch(`${API_BASE_URL}/_api/users/me`, {
-                method: "PATCH",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ photo_url: form.photo_url }),
-            });
-            if (!res.ok) {
-                const msg = await res.text();
-                throw new Error(msg || "Failed to save profile");
-            }
-            const data = (await res.json()) as UserProfile;
-            setProfile(data);
-            setForm({
-                photo_url: data.photo_url ?? "",
-            });
+    const saveMutation = useMutation({
+        mutationFn: () => apiFetch<UserProfile>("/users/me", {
+            method: "PATCH",
+            token,
+            body: { photo_url: form.photo_url },
+        }),
+        onSuccess: (data) => {
+            queryClient.setQueryData(["admin-profile"], data);
+            setForm({ photo_url: data.photo_url ?? "" });
             setEditing(false);
             setSuccess("Profile photo updated successfully.");
             setTimeout(() => setSuccess(null), 3000);
-        } catch (err) {
+        },
+        onError: (err) => {
             setError(err instanceof Error ? err.message : "Failed to save profile");
-        } finally {
-            setSaving(false);
-        }
-    };
+        },
+    });
 
-    const handleBrandingSave = async () => {
+    const handleSave = () => {
         if (!token) return;
-        setBrandingSaving(true);
-        setBrandingError(null);
-        setBrandingSuccess(null);
-        try {
-            const res = await fetch(`${API_BASE_URL}/_api/settings`, {
-                method: "PATCH",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(brandingForm),
-            });
-            if (!res.ok) {
-                const msg = await res.text();
-                throw new Error(msg || "Failed to save branding");
-            }
-            const data = await res.json();
+        setError(null);
+        setSuccess(null);
+        saveMutation.mutate();
+    };
+    const saving = saveMutation.isPending;
+
+    const brandingMutation = useMutation({
+        mutationFn: () => apiFetch<{ system_name?: string; system_logo?: string }>("/settings", {
+            method: "PATCH",
+            token,
+            body: brandingForm,
+        }),
+        onSuccess: (data) => {
             setBrandingForm({
                 system_name: data.system_name ?? "NYK Cosmetics",
                 system_logo: data.system_logo ?? "",
             });
             setBrandingSuccess("System branding updated. Refresh to see changes in sidebar.");
             setTimeout(() => setBrandingSuccess(null), 4000);
-        } catch (err) {
+        },
+        onError: (err) => {
             setBrandingError(err instanceof Error ? err.message : "Failed to save branding");
-        } finally {
-            setBrandingSaving(false);
-        }
+        },
+    });
+
+    const handleBrandingSave = () => {
+        if (!token) return;
+        setBrandingError(null);
+        setBrandingSuccess(null);
+        brandingMutation.mutate();
     };
+    const brandingSaving = brandingMutation.isPending;
 
     if (loading) {
         return (

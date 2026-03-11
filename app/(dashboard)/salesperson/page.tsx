@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -11,7 +12,7 @@ import {
     CardDescription,
 } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
-import { API_BASE_URL } from "@/lib/constants";
+import { apiFetch } from "@/lib/api";
 import { formatId, thaiToday, thaiOffsetDay, formatThaiDate } from "@/lib/utils";
 
 type OrderListItem = {
@@ -92,10 +93,7 @@ function toDateKey(dateString: string) {
 export default function SalespersonPage() {
     const router = useRouter();
     const { token, user } = useAuth();
-    const [orders, setOrders] = useState<OrderListItem[]>([]);
-    const [ordersLoading, setOrdersLoading] = useState(true);
-    const [ordersError, setOrdersError] = useState<string | null>(null);
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const queryClient = useQueryClient();
 
     // Date range selection state
     const [fromDate, setFromDate] = useState("2025-12-01");
@@ -107,103 +105,24 @@ export default function SalespersonPage() {
     const [monthlyTarget, setMonthlyTarget] = useState<number>(0);
 
     // Fetch salesperson's monthly target from backend
+    const { data: meData } = useQuery({
+        queryKey: ["users-me"],
+        queryFn: () => apiFetch<{ salesperson?: { monthly_target?: number } }>("/users/me", { token }),
+        enabled: !!token,
+    });
     useEffect(() => {
-        if (!token) return;
-        fetch(`${API_BASE_URL}/_api/users/me`, {
-            headers: { Authorization: `Bearer ${token}` },
-        })
-            .then((r) => (r.ok ? r.json() : null))
-            .then((data) => {
-                if (data?.salesperson?.monthly_target != null) {
-                    setMonthlyTarget(Number(data.salesperson.monthly_target));
-                }
-            })
-            .catch(() => {});
-    }, [token]);
-
-    const cacheKey = useMemo(() => `nyk-dashboard-orders-cache:${user?.id ?? "anon"}`, [user?.id]);
-
-    const loadCachedOrders = () => {
-        if (typeof window === "undefined") {
-            return null;
+        if (meData?.salesperson?.monthly_target != null) {
+            setMonthlyTarget(Number(meData.salesperson.monthly_target));
         }
-        const raw = sessionStorage.getItem(cacheKey);
-        if (!raw) {
-            return null;
-        }
-        try {
-            const parsed = JSON.parse(raw) as { data: OrderListItem[]; updatedAt: string };
-            if (!Array.isArray(parsed.data)) {
-                return null;
-            }
-            return parsed;
-        } catch {
-            return null;
-        }
-    };
+    }, [meData]);
 
-    const saveCachedOrders = (data: OrderListItem[]) => {
-        if (typeof window === "undefined") {
-            return;
-        }
-        sessionStorage.setItem(
-            cacheKey,
-            JSON.stringify({ data, updatedAt: new Date().toISOString() })
-        );
-    };
-
-    const fetchOrders = useCallback(
-        async (force = false, signal?: AbortSignal) => {
-            if (!token) {
-                setOrdersLoading(false);
-                return;
-            }
-
-            if (!force) {
-                const cached = loadCachedOrders();
-                if (cached) {
-                    setOrders(cached.data);
-                    setLastUpdated(new Date(cached.updatedAt));
-                    setOrdersLoading(false);
-                    return;
-                }
-            }
-
-            setOrdersLoading(true);
-            setOrdersError(null);
-            try {
-                const response = await fetch(`${API_BASE_URL}/_api/orders`, {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                    signal,
-                });
-
-                if (!response.ok) {
-                    const message = await response.text();
-                    throw new Error(message || "Failed to load orders");
-                }
-
-                const data = (await response.json()) as OrderListItem[];
-                setOrders(data);
-                saveCachedOrders(data);
-                setLastUpdated(new Date());
-            } catch (error) {
-                if (error instanceof Error && error.name === "AbortError") return;
-                const message = error instanceof Error ? error.message : "Failed to load orders";
-                setOrdersError(message);
-            } finally {
-                setOrdersLoading(false);
-            }
-        },
-        [token, cacheKey]
-    );
-
-    useEffect(() => {
-        const controller = new AbortController();
-        fetchOrders(false, controller.signal);
-        return () => controller.abort();
-    }, [fetchOrders]);
+    // Orders data via React Query
+    const { data: orders = [], isLoading: ordersLoading, dataUpdatedAt, error: ordersQueryError } = useQuery({
+        queryKey: ["sp-orders"],
+        queryFn: () => apiFetch<OrderListItem[]>("/orders", { token }),
+        enabled: !!token,
+    });
+    const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
     // Combine year and month for monthly targets
     const selectedMonth = `${selectedYear}-${selectedMonthNum.padStart(2, '0')}`;
@@ -357,15 +276,15 @@ export default function SalespersonPage() {
                             Last updated {lastUpdated.toLocaleTimeString()}
                         </p>
                     )}
-                    {ordersError && (
-                        <p className="text-xs text-red-600 mt-2">{ordersError}</p>
+                    {ordersQueryError && (
+                        <p className="text-xs text-red-600 mt-2">{ordersQueryError.message}</p>
                     )}
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">
                     <Button
                         size="lg"
                         variant="outline"
-                        onClick={() => fetchOrders(true)}
+                        onClick={() => queryClient.invalidateQueries({ queryKey: ["sp-orders"] })}
                         aria-label="Refresh"
                         title="Refresh"
                         className="h-11 w-11 p-0"
@@ -622,9 +541,9 @@ export default function SalespersonPage() {
                             <div className="text-center py-8">
                                 <p className="text-gray-500">Loading orders...</p>
                             </div>
-                        ) : ordersError ? (
+                        ) : ordersQueryError ? (
                             <div className="text-center py-8">
-                                <p className="text-red-600">{ordersError}</p>
+                                <p className="text-red-600">{ordersQueryError.message}</p>
                             </div>
                         ) : recentOrdersForDisplay.length === 0 ? (
                             <div className="text-center py-8">
@@ -689,10 +608,10 @@ export default function SalespersonPage() {
                                                 Loading orders...
                                             </td>
                                         </tr>
-                                    ) : ordersError ? (
+                                    ) : ordersQueryError ? (
                                         <tr>
                                             <td colSpan={6} className="text-center py-8 text-red-600 border-r border-gray-300">
-                                                {ordersError}
+                                                {ordersQueryError.message}
                                             </td>
                                         </tr>
                                     ) : recentOrdersForDisplay.length === 0 ? (

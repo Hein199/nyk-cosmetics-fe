@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { useAuth } from "@/lib/auth-context";
-import { API_BASE_URL } from "@/lib/constants";
+import { apiFetch } from "@/lib/api";
 
 type Category = {
     id: number;
@@ -57,9 +58,21 @@ function formatCategory(category: string) {
 
 export default function AdminInventoryPage() {
     const { token } = useAuth();
-    const [products, setProducts] = useState<Product[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const queryClient = useQueryClient();
+
+    const { data: products = [], isLoading: loading, error: queryError } = useQuery({
+        queryKey: ["admin-products"],
+        queryFn: () => apiFetch<Product[]>("/products", { token }),
+        enabled: !!token,
+    });
+
+    const { data: categories = [] } = useQuery({
+        queryKey: ["categories"],
+        queryFn: () => apiFetch<Category[]>("/categories", { token }),
+        enabled: !!token,
+    });
+
+    const [error, setError] = useState<string | null>(queryError?.message ?? null);
     const [searchQuery, setSearchQuery] = useState("");
     const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
@@ -76,44 +89,21 @@ export default function AdminInventoryPage() {
     // Add Category dialog
     const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
     const [newCategoryName, setNewCategoryName] = useState("");
-    const [categories, setCategories] = useState<Category[]>([]);
     const [categorySaving, setCategorySaving] = useState(false);
     const [categoryError, setCategoryError] = useState<string | null>(null);
     const [deletingCategoryId, setDeletingCategoryId] = useState<number | null>(null);
-
-    const fetchCategories = useCallback(async () => {
-        if (!token) return;
-        try {
-            const res = await fetch(`${API_BASE_URL}/_api/categories`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (res.ok) setCategories(await res.json());
-        } catch {
-            // silently ignore
-        }
-    }, [token]);
-
-    useEffect(() => { fetchCategories(); }, [fetchCategories]);
 
     async function handleCreateCategory() {
         if (!token || !newCategoryName.trim()) return;
         setCategorySaving(true);
         setCategoryError(null);
         try {
-            const res = await fetch(`${API_BASE_URL}/_api/categories`, {
+            await apiFetch("/categories", {
                 method: "POST",
-                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ name: newCategoryName.trim() }),
+                token,
+                body: { name: newCategoryName.trim() },
             });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({ message: "Failed to create category" }));
-                throw new Error(err.message ?? "Failed to create category");
-            }
-            const created = (await res.json()) as Category;
-            // Optimistically update state — no refetch needed
-            setCategories((prev) =>
-                [...prev, created].sort((a, b) => a.name.localeCompare(b.name))
-            );
+            queryClient.invalidateQueries({ queryKey: ["categories"] });
             setNewCategoryName("");
         } catch (err) {
             setCategoryError(err instanceof Error ? err.message : "Failed to create category");
@@ -129,47 +119,14 @@ export default function AdminInventoryPage() {
         setDeletingCategoryId(id);
         setCategoryError(null);
         try {
-            const res = await fetch(`${API_BASE_URL}/_api/categories/${id}`, {
-                method: "DELETE",
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({ message: "Failed to delete category" }));
-                throw new Error(err.message ?? "Failed to delete category");
-            }
-            setCategories((prev) => prev.filter((c) => c.id !== id));
+            await apiFetch(`/categories/${id}`, { method: "DELETE", token });
+            queryClient.invalidateQueries({ queryKey: ["categories"] });
         } catch (err) {
             setCategoryError(err instanceof Error ? err.message : "Failed to delete category");
         } finally {
             setDeletingCategoryId(null);
         }
     }
-
-    const fetchProducts = useCallback(async (signal?: AbortSignal) => {
-        if (!token) return;
-        setLoading(true);
-        setError(null);
-        try {
-            const res = await fetch(`${API_BASE_URL}/_api/products`, {
-                headers: { Authorization: `Bearer ${token}` },
-                signal,
-            });
-            if (!res.ok) throw new Error(await res.text());
-            const data = (await res.json()) as Product[];
-            setProducts(data);
-        } catch (err) {
-            if (err instanceof Error && err.name === "AbortError") return;
-            setError(err instanceof Error ? err.message : "Failed to load products");
-        } finally {
-            setLoading(false);
-        }
-    }, [token]);
-
-    useEffect(() => {
-        const controller = new AbortController();
-        fetchProducts(controller.signal);
-        return () => controller.abort();
-    }, [fetchProducts]);
 
     const filteredProducts = useMemo(() => {
         return products.filter((p) => {
@@ -216,10 +173,8 @@ export default function AdminInventoryPage() {
         setSaving(true);
         setSaveError(null);
         try {
-            const url = editingProduct
-                ? `${API_BASE_URL}/_api/products/${editingProduct.id}`
-                : `${API_BASE_URL}/_api/products`;
             const method = editingProduct ? "PATCH" : "POST";
+            const path = editingProduct ? `/products/${editingProduct.id}` : "/products";
 
             const body: Record<string, unknown> = {
                 name: form.name,
@@ -238,17 +193,9 @@ export default function AdminInventoryPage() {
                 body.stockUnit = form.stockUnit;
             }
 
-            const res = await fetch(url, {
-                method,
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify(body),
-            });
-            if (!res.ok) throw new Error(await res.text());
+            await apiFetch(path, { method, token, body });
             setDialogOpen(false);
-            await fetchProducts();
+            queryClient.invalidateQueries({ queryKey: ["admin-products"] });
         } catch (err) {
             setSaveError(err instanceof Error ? err.message : "Failed to save product");
         } finally {
@@ -262,15 +209,8 @@ export default function AdminInventoryPage() {
         if (!confirmed) return;
         setDeletingId(product.id);
         try {
-            const res = await fetch(`${API_BASE_URL}/_api/products/${product.id}`, {
-                method: "DELETE",
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({ message: "Failed to delete product" }));
-                throw new Error(err.message ?? "Failed to delete product");
-            }
-            await fetchProducts();
+            await apiFetch(`/products/${product.id}`, { method: "DELETE", token });
+            queryClient.invalidateQueries({ queryKey: ["admin-products"] });
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to delete product");
         } finally {

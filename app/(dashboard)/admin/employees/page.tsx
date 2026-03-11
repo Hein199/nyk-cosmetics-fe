@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -174,14 +175,11 @@ const emptyDeductions: BonusItem[] = [
 
 export default function EmployeesPage() {
     const { token } = useAuth();
+    const queryClient = useQueryClient();
 
-    const [employees, setEmployees] = useState<Employee[]>([]);
-    const [salaryRecords, setSalaryRecords] = useState<SalaryRecord[]>([]);
-    const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [tab, setTab] = useState<"employees" | "salaries">("employees");
     const [search, setSearch] = useState("");
-    const [usingMockData, setUsingMockData] = useState(false);
     const [isLocalhost, setIsLocalhost] = useState(false);
 
     useEffect(() => {
@@ -190,13 +188,21 @@ export default function EmployeesPage() {
         }
     }, []);
 
-    const loadMockData = useCallback(() => {
-        setEmployees(MOCK_EMPLOYEES);
-        setSalaryRecords(MOCK_SALARIES);
-        setUsingMockData(true);
-        setError(null);
-        setLoading(false);
-    }, []);
+    const usingMockData = !token && isLocalhost;
+
+    const { data: employees = usingMockData ? MOCK_EMPLOYEES : [], isLoading: empLoading } = useQuery({
+        queryKey: ["employees"],
+        queryFn: () => apiFetch<Employee[]>("/employees", { token }),
+        enabled: !!token,
+    });
+
+    const { data: salaryRecords = usingMockData ? MOCK_SALARIES : [], isLoading: salLoading } = useQuery({
+        queryKey: ["salaries"],
+        queryFn: () => apiFetch<SalaryRecord[]>("/salaries", { token }),
+        enabled: !!token,
+    });
+
+    const loading = empLoading || salLoading;
 
     // ── Add / Edit employee modal ──────────────────────────────────────────────
     const [isEmployeeOpen, setIsEmployeeOpen] = useState(false);
@@ -219,49 +225,6 @@ export default function EmployeesPage() {
 
     // ── Delete confirm ────────────────────────────────────────────────────────
     const [deletingId, setDeletingId] = useState<number | null>(null);
-
-    // ─── Fetch ────────────────────────────────────────────────────────────────
-
-    const fetchData = useCallback(
-        async (signal?: AbortSignal) => {
-            if (!token) {
-                if (isLocalhost) {
-                    loadMockData();
-                } else {
-                    setLoading(false);
-                }
-                return;
-            }
-
-            setLoading(true);
-            try {
-                const [emps, sals] = await Promise.all([
-                    apiFetch<Employee[]>("/employees", { token, signal }),
-                    apiFetch<SalaryRecord[]>("/salaries", { token, signal }),
-                ]);
-                setEmployees(emps);
-                setSalaryRecords(sals);
-                setUsingMockData(false);
-                setError(null);
-            } catch (err) {
-                if (err instanceof Error && err.name === "AbortError") return;
-                if (isLocalhost) {
-                    loadMockData();
-                    return;
-                }
-                setError(err instanceof Error ? err.message : "Failed to load data");
-            } finally {
-                setLoading(false);
-            }
-        },
-        [token, isLocalhost, loadMockData]
-    );
-
-    useEffect(() => {
-        const controller = new AbortController();
-        fetchData(controller.signal);
-        return () => controller.abort();
-    }, [fetchData]);
 
     // ─── Filtered employees ────────────────────────────────────────────────────
 
@@ -333,7 +296,7 @@ export default function EmployeesPage() {
                 });
             }
             setIsEmployeeOpen(false);
-            await fetchData();
+            queryClient.invalidateQueries({ queryKey: ["employees"] });
         } catch (err) {
             setEmpError(err instanceof Error ? err.message : "Failed to save employee");
         } finally {
@@ -347,7 +310,7 @@ export default function EmployeesPage() {
         let success = false;
         try {
             await apiFetch(`/employees/${id}`, { method: "DELETE", token });
-            await fetchData();
+            queryClient.invalidateQueries({ queryKey: ["employees"] });
             success = true;
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to delete employee");
@@ -411,7 +374,7 @@ export default function EmployeesPage() {
                 },
             });
             setIsSalaryOpen(false);
-            await fetchData();
+            queryClient.invalidateQueries({ queryKey: ["salaries"] });
         } catch (err) {
             setSalError(err instanceof Error ? err.message : "Failed to pay salary");
         } finally {

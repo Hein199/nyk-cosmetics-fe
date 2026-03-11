@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -83,17 +84,26 @@ function referenceText(e: DisplayEntry): string {
 
 export default function CashLedgerPage() {
     const { token } = useAuth();
-
-    // Data
-    const [entries, setEntries] = useState<LedgerEntry[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const queryClient = useQueryClient();
 
     // Filters
     const [searchQuery, setSearchQuery] = useState("");
     const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
     const [fromDate, setFromDate] = useState("");
     const [toDate, setToDate] = useState("");
+
+    // Data via React Query
+    const { data: entries = [], isLoading: loading, error: queryError } = useQuery({
+        queryKey: ["ledger", fromDate, toDate],
+        queryFn: () => {
+            const params: Record<string, string> = {};
+            if (fromDate) params.from = fromDate;
+            if (toDate) params.to = toDate;
+            return apiFetch<LedgerEntry[]>("/ledger", { token, params });
+        },
+        enabled: !!token,
+    });
+    const error = queryError?.message ?? null;
 
     // Manual entry modal
     const [modalOpen, setModalOpen] = useState(false);
@@ -125,41 +135,6 @@ export default function CashLedgerPage() {
     );
 
     // ── Fetch ───────────────────────────────────────────────────────────────
-
-    const fetchEntries = useCallback(
-        async (signal?: AbortSignal) => {
-            if (!token) return;
-            setLoading(true);
-            setError(null);
-            try {
-                const params: Record<string, string> = {};
-                if (fromDate) params.from = fromDate;
-                if (toDate) params.to = toDate;
-                const data = await apiFetch<LedgerEntry[]>("/ledger", {
-                    token,
-                    params,
-                    signal,
-                });
-                setEntries(data);
-            } catch (err) {
-                if (signal?.aborted) return;
-                setError(
-                    err instanceof Error
-                        ? err.message
-                        : "Failed to load ledger"
-                );
-            } finally {
-                setLoading(false);
-            }
-        },
-        [token, fromDate, toDate]
-    );
-
-    useEffect(() => {
-        const controller = new AbortController();
-        fetchEntries(controller.signal);
-        return () => controller.abort();
-    }, [fetchEntries]);
 
     // ── Computed ─────────────────────────────────────────────────────────────
 
@@ -207,16 +182,6 @@ export default function CashLedgerPage() {
         setModalOpen(true);
     };
 
-    const openEditModal = (entry: DisplayEntry) => {
-        setEditingEntry(entry);
-        setModalDate(entry.entry_date.split("T")[0]);
-        setModalType(entry.type === "DEBIT" ? "INCOME" : "EXPENSE");
-        setModalAmount(String(Number(entry.amount)));
-        setModalDescription(entry.description ?? "");
-        setModalError(null);
-        setModalOpen(true);
-    };
-
     const handleSaveEntry = async () => {
         if (!token || !modalAmount || !modalDescription) return;
         const parsed = Number(modalAmount);
@@ -251,7 +216,7 @@ export default function CashLedgerPage() {
                 showToast("Manual entry saved successfully.");
             }
             setModalOpen(false);
-            await fetchEntries();
+            queryClient.invalidateQueries({ queryKey: ["ledger"] });
         } catch (err) {
             setModalError(
                 err instanceof Error ? err.message : "Failed to save entry"
@@ -271,7 +236,7 @@ export default function CashLedgerPage() {
             });
             setDeletingId(null);
             showToast("Entry deleted.");
-            await fetchEntries();
+            queryClient.invalidateQueries({ queryKey: ["ledger"] });
         } catch (err) {
             showToast(
                 err instanceof Error ? err.message : "Failed to delete entry"
@@ -376,7 +341,7 @@ export default function CashLedgerPage() {
                                 variant="outline"
                                 className="h-10 text-xs"
                                 disabled={loading}
-                                onClick={() => fetchEntries()}
+                                onClick={() => queryClient.invalidateQueries({ queryKey: ["ledger"] })}
                             >
                                 {loading ? (
                                     "Loading…"
@@ -498,15 +463,15 @@ export default function CashLedgerPage() {
                                                         <td className="py-3 px-4 text-sm text-right font-semibold text-green-600">
                                                             {e.income > 0
                                                                 ? formatCurrency(
-                                                                      e.income
-                                                                  )
+                                                                    e.income
+                                                                )
                                                                 : "—"}
                                                         </td>
                                                         <td className="py-3 px-4 text-sm text-right font-semibold text-red-600">
                                                             {e.expense > 0
                                                                 ? formatCurrency(
-                                                                      e.expense
-                                                                  )
+                                                                    e.expense
+                                                                )
                                                                 : "—"}
                                                         </td>
                                                     </tr>
@@ -599,8 +564,8 @@ export default function CashLedgerPage() {
                                     onChange={(e) =>
                                         setModalType(
                                             e.target.value as
-                                                | "INCOME"
-                                                | "EXPENSE"
+                                            | "INCOME"
+                                            | "EXPENSE"
                                         )
                                     }
                                     className="w-full h-10 px-3 text-sm text-black border border-gray-300 rounded-md bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
@@ -676,8 +641,8 @@ export default function CashLedgerPage() {
                             {modalSaving
                                 ? "Saving..."
                                 : editingEntry
-                                  ? "Update"
-                                  : "Save"}
+                                    ? "Update"
+                                    : "Save"}
                         </Button>
                     </div>
                 </DialogContent>

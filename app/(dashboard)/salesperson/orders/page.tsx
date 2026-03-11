@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -18,7 +19,7 @@ import {
     DialogClose,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
-import { API_BASE_URL } from "@/lib/constants";
+import { apiFetch } from "@/lib/api";
 import { formatId, thaiToday, formatThaiDate, toBangkokDateStr } from "@/lib/utils";
 
 type OrderListItem = {
@@ -92,59 +93,36 @@ function formatStatusLabel(status: string) {
     return normalized.replace("_", " ");
 }
 
-// Get number of days in a month
-function getDaysInMonth(year: string, month: string) {
-    return new Date(parseInt(year), parseInt(month), 0).getDate();
-}
-
 export default function OrdersPage() {
     const router = useRouter();
     const { token, user } = useAuth();
+    const queryClient = useQueryClient();
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
-    const [orders, setOrders] = useState<OrderListItem[]>([]);
-    const [ordersLoading, setOrdersLoading] = useState(true);
-    const [ordersError, setOrdersError] = useState<string | null>(null);
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [ordersError] = useState<string | null>(null);
 
     const dateRangeKey = useMemo(() => `nyk-orders-date-range:${user?.id ?? "anon"}`, [user?.id]);
 
     const loadDateRange = () => {
-        if (typeof window === "undefined") {
-            return null;
-        }
+        if (typeof window === "undefined") return null;
         const raw = sessionStorage.getItem(dateRangeKey);
-        if (!raw) {
-            return null;
-        }
+        if (!raw) return null;
         try {
             const parsed = JSON.parse(raw) as { fromDate: string; toDate: string };
-            if (!parsed.fromDate || !parsed.toDate) {
-                return null;
-            }
+            if (!parsed.fromDate || !parsed.toDate) return null;
             return parsed;
-        } catch {
-            return null;
-        }
+        } catch { return null; }
     };
     const getStatusBadgeClass = (status: string) => {
         const key = status.toLowerCase();
-        if (key === "delivered") {
-            return "bg-green-50 text-green-700 border-green-200";
-        }
-        if (key === "confirmed") {
-            return "bg-blue-50 text-blue-700 border-blue-200";
-        }
-        if (key === "pending_admin") {
-            return "bg-yellow-50 text-yellow-700 border-yellow-200";
-        }
+        if (key === "delivered") return "bg-green-50 text-green-700 border-green-200";
+        if (key === "confirmed") return "bg-blue-50 text-blue-700 border-blue-200";
+        if (key === "pending_admin") return "bg-yellow-50 text-yellow-700 border-yellow-200";
         return "bg-red-50 text-red-700 border-red-200";
     };
 
     const saveDateRange = (from: string, to: string) => {
-        if (typeof window === "undefined") {
-            return;
-        }
+        if (typeof window === "undefined") return;
         sessionStorage.setItem(dateRangeKey, JSON.stringify({ fromDate: from, toDate: to }));
     };
 
@@ -160,127 +138,33 @@ export default function OrdersPage() {
 
     // Dialog state for order details
     const [isDialogOpen, setIsDialogOpen] = useState(false);
-    const [selectedOrder, setSelectedOrder] = useState<number | null>(null);
+    const [, setSelectedOrder] = useState<number | null>(null);
     const [orderDetails, setOrderDetails] = useState<OrderDetail | null>(null);
     const [detailsLoading, setDetailsLoading] = useState(false);
     const [detailsError, setDetailsError] = useState<string | null>(null);
 
-    const cacheKey = useMemo(() => `nyk-orders-cache:${user?.id ?? "anon"}`, [user?.id]);
+    // Orders data via React Query
+    const { data: orders = [], isLoading: ordersLoading, dataUpdatedAt } = useQuery({
+        queryKey: ["sp-orders"],
+        queryFn: () => apiFetch<OrderListItem[]>("/orders", { token }),
+        enabled: !!token,
+    });
+    const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
-    const loadCachedOrders = () => {
-        if (typeof window === "undefined") {
-            return null;
-        }
-        const raw = sessionStorage.getItem(cacheKey);
-        if (!raw) {
-            return null;
-        }
-        try {
-            const parsed = JSON.parse(raw) as { data: OrderListItem[]; updatedAt: string };
-            if (!Array.isArray(parsed.data)) {
-                return null;
-            }
-            return parsed;
-        } catch {
-            return null;
-        }
-    };
-
-    const saveCachedOrders = (data: OrderListItem[]) => {
-        if (typeof window === "undefined") {
-            return;
-        }
-        sessionStorage.setItem(
-            cacheKey,
-            JSON.stringify({ data, updatedAt: new Date().toISOString() })
-        );
-    };
-
-    const fetchOrders = useCallback(async (force = false, signal?: AbortSignal) => {
-        if (!token) {
-            return;
-        }
-
-        if (!force) {
-            const cached = loadCachedOrders();
-            if (cached) {
-                setOrders(cached.data);
-                setLastUpdated(new Date(cached.updatedAt));
-                setOrdersLoading(false);
-                return;
-            }
-        }
-
-        setOrdersLoading(true);
-        setOrdersError(null);
-        try {
-            const response = await fetch(`${API_BASE_URL}/_api/orders`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-                signal,
-            });
-
-            if (!response.ok) {
-                const message = await response.text();
-                throw new Error(message || "Failed to load orders");
-            }
-
-            const data = (await response.json()) as OrderListItem[];
-            setOrders(data);
-            saveCachedOrders(data);
-            setLastUpdated(new Date());
-        } catch (error) {
-            if (error instanceof Error && error.name === "AbortError") return;
-            const message = error instanceof Error ? error.message : "Failed to load orders";
-            setOrdersError(message);
-        } finally {
-            setOrdersLoading(false);
-        }
-    }, [token, cacheKey]);
-
-    useEffect(() => {
-        const controller = new AbortController();
-        if (typeof window !== "undefined") {
-            const shouldRefresh = sessionStorage.getItem("nyk-orders-refresh") === "true";
-            if (shouldRefresh) {
-                sessionStorage.removeItem("nyk-orders-refresh");
-                fetchOrders(true, controller.signal);
-                return () => controller.abort();
-            }
-        }
-
-        fetchOrders(false, controller.signal);
-        return () => controller.abort();
-    }, [fetchOrders]);
-
-    useEffect(() => {
-        saveDateRange(fromDate, toDate);
-    }, [fromDate, toDate]);
+    // Save date range preference
+    const handleFromDate = (v: string) => { setFromDate(v); saveDateRange(v, toDate); };
+    const handleToDate = (v: string) => { setToDate(v); saveDateRange(fromDate, v); };
 
     // Handle view details click
     const handleViewDetails = async (orderId: number) => {
         setSelectedOrder(orderId);
         setIsDialogOpen(true);
-        if (!token) {
-            return;
-        }
+        if (!token) return;
 
         setDetailsLoading(true);
         setDetailsError(null);
         try {
-            const response = await fetch(`${API_BASE_URL}/_api/orders/${orderId}`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            });
-
-            if (!response.ok) {
-                const message = await response.text();
-                throw new Error(message || "Failed to load order details");
-            }
-
-            const data = (await response.json()) as OrderDetail;
+            const data = await apiFetch<OrderDetail>(`/orders/${orderId}`, { token });
             setOrderDetails(data);
         } catch (error) {
             const message = error instanceof Error ? error.message : "Failed to load order details";
@@ -310,15 +194,6 @@ export default function OrdersPage() {
         });
     }, [fromDate, toDate, searchQuery, statusFilter, orders]);
 
-    // Calculate summary stats
-    const orderStats = useMemo(() => {
-        const total = orders.length;
-        const completed = orders.filter(o => o.status === "delivered").length;
-        const processing = orders.filter(o => o.status === "confirmed").length;
-
-        return { total, completed, processing };
-    }, [orders]);
-
     // Format date range for display
     const formatDateRange = (from: string, to: string) => {
         if (from === to) {
@@ -346,7 +221,7 @@ export default function OrdersPage() {
                     <Button
                         size="lg"
                         variant="outline"
-                        onClick={() => fetchOrders(true)}
+                        onClick={() => queryClient.invalidateQueries({ queryKey: ["sp-orders"] })}
                         aria-label="Refresh"
                         title="Refresh"
                         className="h-11 w-11 p-0"
@@ -399,7 +274,7 @@ export default function OrdersPage() {
                                     id="from-date"
                                     type="date"
                                     value={fromDate}
-                                    onChange={(e) => setFromDate(e.target.value)}
+                                    onChange={(e) => handleFromDate(e.target.value)}
                                     className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
                                 />
                             </div>
@@ -411,7 +286,7 @@ export default function OrdersPage() {
                                     id="to-date"
                                     type="date"
                                     value={toDate}
-                                    onChange={(e) => setToDate(e.target.value)}
+                                    onChange={(e) => handleToDate(e.target.value)}
                                     className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
                                     min={fromDate}
                                 />
@@ -423,8 +298,8 @@ export default function OrdersPage() {
                                     variant="outline"
                                     onClick={() => {
                                         const today = thaiToday();
-                                        setFromDate(today);
-                                        setToDate(today);
+                                        handleFromDate(today);
+                                        handleToDate(today);
                                     }}
                                     className="text-xs h-10"
                                 >
