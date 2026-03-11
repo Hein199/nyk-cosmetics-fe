@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -70,9 +71,15 @@ function needsAction(p: Payment): boolean {
 
 export default function PaymentHistoryPage() {
     const { token } = useAuth();
-    const [payments, setPayments] = useState<Payment[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const queryClient = useQueryClient();
+
+    const { data: payments = [], isLoading: loading, error: queryError } = useQuery({
+        queryKey: ["admin-payments"],
+        queryFn: () => apiFetch<Payment[]>("/payments", { token }),
+        enabled: !!token,
+    });
+    const [error, setError] = useState<string | null>(queryError?.message ?? null);
+
     const [searchQuery, setSearchQuery] = useState("");
     const [fromDate, setFromDate] = useState("");
     const [toDate, setToDate] = useState("");
@@ -80,29 +87,6 @@ export default function PaymentHistoryPage() {
 
     // Per-row action loading: { [paymentId]: 'confirm' | 'reject' | null }
     const [actionLoading, setActionLoading] = useState<Record<number, "confirm" | "reject" | null>>({});
-
-    // ── Fetch ────────────────────────────────────────────────────────────────
-
-    const fetchPayments = useCallback(async (signal?: AbortSignal) => {
-        if (!token) return;
-        setLoading(true);
-        setError(null);
-        try {
-            const data = await apiFetch<Payment[]>("/payments", { token, signal });
-            setPayments(data);
-        } catch (err) {
-            if (err instanceof Error && err.name === "AbortError") return;
-            setError(err instanceof Error ? err.message : "Failed to load payments");
-        } finally {
-            setLoading(false);
-        }
-    }, [token]);
-
-    useEffect(() => {
-        const controller = new AbortController();
-        fetchPayments(controller.signal);
-        return () => controller.abort();
-    }, [fetchPayments]);
 
     // ── Actions ──────────────────────────────────────────────────────────────
 
@@ -114,9 +98,9 @@ export default function PaymentHistoryPage() {
                 token,
                 method: "POST",
             });
-            // Optimistically update local state
-            setPayments((prev) =>
-                prev.map((p) =>
+            // Optimistically update local cache
+            queryClient.setQueryData<Payment[]>(["admin-payments"], (old) =>
+                (old ?? []).map((p) =>
                     p.id === paymentId
                         ? { ...p, status: action === "confirm" ? "CONFIRMED" : "REJECTED" }
                         : p
@@ -411,11 +395,10 @@ export default function PaymentHistoryPage() {
                                                     {/* Created By */}
                                                     <td className="py-3 px-4 text-center text-sm text-gray-700 border-l border-gray-200">
                                                         <span
-                                                            className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                                                p.collected_by.role === "ADMIN"
-                                                                    ? "bg-blue-50 text-blue-600"
-                                                                    : "bg-purple-50 text-purple-600"
-                                                            }`}
+                                                            className={`px-2 py-0.5 rounded text-xs font-medium ${p.collected_by.role === "ADMIN"
+                                                                ? "bg-blue-50 text-blue-600"
+                                                                : "bg-purple-50 text-purple-600"
+                                                                }`}
                                                         >
                                                             {getCreatedByLabel(p.collected_by)}
                                                         </span>

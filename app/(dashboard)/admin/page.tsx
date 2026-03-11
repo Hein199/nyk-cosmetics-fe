@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
@@ -147,11 +148,10 @@ function Toggle<T extends string>({
                 <button
                     key={opt}
                     onClick={() => onChange(opt)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                        value === opt
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${value === opt
                             ? "bg-white text-gray-900 shadow-sm"
                             : "text-gray-500 hover:text-gray-700"
-                    }`}
+                        }`}
                 >
                     {labels?.[opt] ?? opt}
                 </button>
@@ -181,155 +181,57 @@ function ChartEmpty({ message }: { message: string }) {
 
 export default function AdminPage() {
     const { token } = useAuth();
+    const queryClient = useQueryClient();
 
-    // Main stats (recent orders + low stock)
-    const [stats, setStats] = useState<DashboardStats | null>(null);
-    const [statsLoading, setStatsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    // Sales chart
-    const [salesData, setSalesData] = useState<ChartPoint[]>([]);
-    const [salesLoading, setSalesLoading] = useState(true);
-    const [salesError, setSalesError] = useState<string | null>(null);
-
-    // Top products
+    // Top products toggles
     const [topMode, setTopMode] = useState<"daily" | "monthly">("daily");
     const [topMetric, setTopMetric] = useState<"revenue" | "qty">("revenue");
-    const [topProducts, setTopProducts] = useState<ProductPoint[]>([]);
-    const [topLoading, setTopLoading] = useState(true);
-    const [topError, setTopError] = useState<string | null>(null);
 
-    // Salesperson performance
-    const [salesperson, setSalesperson] = useState<SalespersonData>({ data: [], names: [] });
-    const [salespersonLoading, setSalespersonLoading] = useState(true);
-    const [salespersonError, setSalespersonError] = useState<string | null>(null);
+    // ── Queries ────────────────────────────────────────────────────────────────
 
-    // Cash flow
-    const [cashFlow, setCashFlow] = useState<CashFlowPoint[]>([]);
-    const [cashFlowLoading, setCashFlowLoading] = useState(true);
-    const [cashFlowError, setCashFlowError] = useState<string | null>(null);
+    const { data: stats = null, isLoading: statsLoading, error: statsError } = useQuery({
+        queryKey: ["dashboard-stats"],
+        queryFn: () => apiFetch<DashboardStats>("/dashboard/stats", { token }),
+        enabled: !!token,
+    });
+    const error = statsError?.message ?? null;
 
-    // ── Fetchers ────────────────────────────────────────────────────────────────
+    const { data: salesData = [], isLoading: salesLoading, error: salesQueryError } = useQuery({
+        queryKey: ["dashboard-sales-chart"],
+        queryFn: () => apiFetch<ChartPoint[]>("/dashboard/sales-chart", { token, params: { mode: "daily" } }),
+        enabled: !!token,
+    });
+    const salesError = salesQueryError?.message ?? null;
 
-    const fetchStats = useCallback(async (signal?: AbortSignal) => {
-        if (!token) return;
-        setStatsLoading(true);
-        setError(null);
-        try {
-            const data = await apiFetch<DashboardStats>("/dashboard/stats", { token, signal });
-            setStats(data);
-        } catch (err) {
-            if (err instanceof Error && err.name === "AbortError") return;
-            setError(err instanceof Error ? err.message : "Failed to load dashboard stats");
-        } finally {
-            setStatsLoading(false);
-        }
-    }, [token]);
+    const { data: topProducts = [], isLoading: topLoading, error: topQueryError } = useQuery({
+        queryKey: ["dashboard-top-products", topMode, topMetric],
+        queryFn: () => apiFetch<ProductPoint[]>("/dashboard/top-products", { token, params: { mode: topMode, metric: topMetric } }),
+        enabled: !!token,
+    });
+    const topError = topQueryError?.message ?? null;
 
-    const fetchSalesChart = useCallback(async (mode: "daily" | "monthly", signal?: AbortSignal) => {
-        if (!token) return;
-        setSalesLoading(true);
-        setSalesError(null);
-        try {
-            const data = await apiFetch<ChartPoint[]>("/dashboard/sales-chart", {
-                token,
-                signal,
-                params: { mode },
-            });
-            setSalesData(data);
-        } catch (err) {
-            if (err instanceof Error && err.name === "AbortError") return;
-            console.error("fetchSalesChart error:", err);
-            setSalesError(err instanceof Error ? err.message : "Failed to load sales data");
-        } finally {
-            setSalesLoading(false);
-        }
-    }, [token]);
+    const { data: salesperson = { data: [], names: [] }, isLoading: salespersonLoading, error: spQueryError } = useQuery({
+        queryKey: ["dashboard-salesperson"],
+        queryFn: () => apiFetch<SalespersonData>("/dashboard/salesperson-performance", { token }),
+        enabled: !!token,
+    });
+    const salespersonError = spQueryError?.message ?? null;
 
-    const fetchTopProducts = useCallback(async (
-        mode: "daily" | "monthly",
-        metric: "revenue" | "qty",
-        signal?: AbortSignal,
-    ) => {
-        if (!token) return;
-        setTopLoading(true);
-        setTopError(null);
-        try {
-            const data = await apiFetch<ProductPoint[]>("/dashboard/top-products", {
-                token,
-                signal,
-                params: { mode, metric },
-            });
-            setTopProducts(data);
-        } catch (err) {
-            if (err instanceof Error && err.name === "AbortError") return;
-            console.error("fetchTopProducts error:", err);
-            setTopError(err instanceof Error ? err.message : "Failed to load product data");
-        } finally {
-            setTopLoading(false);
-        }
-    }, [token]);
-
-    const fetchSalesperson = useCallback(async (signal?: AbortSignal) => {
-        if (!token) return;
-        setSalespersonLoading(true);
-        setSalespersonError(null);
-        try {
-            const data = await apiFetch<SalespersonData>("/dashboard/salesperson-performance", { token, signal });
-            setSalesperson(data);
-        } catch (err) {
-            if (err instanceof Error && err.name === "AbortError") return;
-            console.error("fetchSalesperson error:", err);
-            setSalespersonError(err instanceof Error ? err.message : "Failed to load salesperson data");
-        } finally {
-            setSalespersonLoading(false);
-        }
-    }, [token]);
-
-    const fetchCashFlow = useCallback(async (signal?: AbortSignal) => {
-        if (!token) return;
-        setCashFlowLoading(true);
-        setCashFlowError(null);
-        try {
-            const data = await apiFetch<CashFlowPoint[]>("/dashboard/cash-flow", { token, signal });
-            setCashFlow(data);
-        } catch (err) {
-            if (err instanceof Error && err.name === "AbortError") return;
-            console.error("fetchCashFlow error:", err);
-            setCashFlowError(err instanceof Error ? err.message : "Failed to load cash flow data");
-        } finally {
-            setCashFlowLoading(false);
-        }
-    }, [token]);
-
-    // ── Initial load ────────────────────────────────────────────────────────────
-
-    useEffect(() => {
-        const ctrl = new AbortController();
-        fetchStats(ctrl.signal);
-        fetchSalesChart('daily', ctrl.signal);
-        fetchTopProducts(topMode, topMetric, ctrl.signal);
-        fetchSalesperson(ctrl.signal);
-        fetchCashFlow(ctrl.signal);
-        return () => ctrl.abort();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [token]);
-
-    // Re-fetch top products when mode or metric changes
-    useEffect(() => {
-        const ctrl = new AbortController();
-        fetchTopProducts(topMode, topMetric, ctrl.signal);
-        return () => ctrl.abort();
-    }, [topMode, topMetric, fetchTopProducts]);
+    const { data: cashFlow = [], isLoading: cashFlowLoading, error: cfQueryError } = useQuery({
+        queryKey: ["dashboard-cash-flow"],
+        queryFn: () => apiFetch<CashFlowPoint[]>("/dashboard/cash-flow", { token }),
+        enabled: !!token,
+    });
+    const cashFlowError = cfQueryError?.message ?? null;
 
     // ── Refresh all ─────────────────────────────────────────────────────────────
 
     function refreshAll() {
-        fetchStats();
-        fetchSalesChart('daily');
-        fetchTopProducts(topMode, topMetric);
-        fetchSalesperson();
-        fetchCashFlow();
+        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-sales-chart"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-top-products"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-salesperson"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-cash-flow"] });
     }
 
     // ── Derived ─────────────────────────────────────────────────────────────────

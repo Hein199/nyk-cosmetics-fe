@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { INVENTORY_UNITS } from "@/lib/constants";
 import { useCart } from "@/lib/cart-context";
 import { useAuth } from "@/lib/auth-context";
-import { API_BASE_URL } from "@/lib/constants";
+import { apiFetch } from "@/lib/api";
 
 type Product = {
     id: number;
@@ -42,8 +43,16 @@ export default function ProductDetailPage() {
     const { addToCart, cart } = useCart();
     const { token } = useAuth();
     const [product, setProduct] = useState<Product | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+
+    const { isLoading: loading, error: queryError } = useQuery({
+        queryKey: ["sp-product", params.id],
+        queryFn: async () => {
+            const data = await apiFetch<Product>(`/products/${params.id}`, { token });
+            setProduct(data);
+            return data;
+        },
+        enabled: !!token && !!params.id,
+    });
 
     const [quantity, setQuantity] = useState(1);
     const [unit, setUnit] = useState<string>(INVENTORY_UNITS.PIECES);
@@ -150,48 +159,6 @@ export default function ProductDetailPage() {
         }, 650);
     };
 
-    useEffect(() => {
-        if (!token || !params.id) {
-            return;
-        }
-
-        let isMounted = true;
-        const fetchProduct = async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const response = await fetch(`${API_BASE_URL}/_api/products/${params.id}`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-
-                if (!response.ok) {
-                    const message = await response.text();
-                    throw new Error(message || "Failed to load product");
-                }
-
-                const data = (await response.json()) as Product;
-                if (isMounted) {
-                    setProduct(data);
-                }
-            } catch (err) {
-                if (isMounted) {
-                    const message = err instanceof Error ? err.message : "Failed to load product";
-                    setError(message);
-                }
-            } finally {
-                if (isMounted) {
-                    setLoading(false);
-                }
-            }
-        };
-
-        fetchProduct();
-
-        return () => {
-            isMounted = false;
-        };
-    }, [token, params.id]);
-
     if (loading) {
         return (
             <div className="min-h-screen bg-[#FFCDC9] p-6">
@@ -215,8 +182,8 @@ export default function ProductDetailPage() {
                             <CardTitle>Product not found</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            {error && (
-                                <p className="text-sm text-red-600 mb-4">{error}</p>
+                            {queryError && (
+                                <p className="text-sm text-red-600 mb-4">{queryError.message}</p>
                             )}
                             <Button variant="outline" onClick={() => router.push("/salesperson/products")}>
                                 Back

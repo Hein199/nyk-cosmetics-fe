@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -46,11 +47,16 @@ type FormState = typeof emptyForm;
 
 export default function UsersPage() {
     const { token } = useAuth();
-    const [users, setUsers] = useState<User[]>([]);
-    const [search, setSearch] = useState("");
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState("");
+    const queryClient = useQueryClient();
 
+    const { data: users = [], isLoading: loading, error: queryError } = useQuery({
+        queryKey: ["users"],
+        queryFn: () => apiFetch<User[]>("/users", { token }),
+        enabled: !!token,
+    });
+
+    const [search, setSearch] = useState("");
+    const error = queryError?.message ?? "";
     const [createOpen, setCreateOpen] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
@@ -59,24 +65,6 @@ export default function UsersPage() {
     const [form, setForm] = useState<FormState>(emptyForm);
     const [formError, setFormError] = useState("");
     const [submitting, setSubmitting] = useState(false);
-
-    const fetchUsers = useCallback(async () => {
-        if (!token) return;
-        setLoading(true);
-        setError("");
-        try {
-            const data = await apiFetch("/users", { token });
-            setUsers(data as User[]);
-        } catch {
-            setError("Failed to load users.");
-        } finally {
-            setLoading(false);
-        }
-    }, [token]);
-
-    useEffect(() => {
-        fetchUsers();
-    }, [fetchUsers]);
 
     const filteredUsers = users.filter((u) => {
         const q = search.toLowerCase();
@@ -156,7 +144,7 @@ export default function UsersPage() {
                     body: payload,
                 });
             }
-            await fetchUsers();
+            await queryClient.invalidateQueries({ queryKey: ["users"] });
             setCreateOpen(false);
             setEditOpen(false);
         } catch (e: unknown) {
@@ -175,7 +163,7 @@ export default function UsersPage() {
                 method: "DELETE",
                 token,
             });
-            setUsers((prev) => prev.filter((u) => u.id !== selectedUser.id));
+            queryClient.invalidateQueries({ queryKey: ["users"] });
             setDeleteOpen(false);
             setEditOpen(false);
         } catch (e: unknown) {
@@ -370,11 +358,10 @@ export default function UsersPage() {
                                         </td>
                                         <td className="py-3 px-4 text-sm text-gray-600 border-l border-gray-200">
                                             <span
-                                                className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                                    u.role === "ADMIN"
-                                                        ? "bg-purple-100 text-purple-700"
-                                                        : "bg-blue-100 text-blue-700"
-                                                }`}
+                                                className={`px-2 py-0.5 rounded-full text-xs font-semibold ${u.role === "ADMIN"
+                                                    ? "bg-purple-100 text-purple-700"
+                                                    : "bg-blue-100 text-blue-700"
+                                                    }`}
                                             >
                                                 {u.role === "ADMIN" ? "Admin" : "Salesperson"}
                                             </span>

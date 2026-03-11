@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
-import { API_BASE_URL } from "@/lib/constants";
+import { apiFetch } from "@/lib/api";
 
 type Customer = {
     id: number;
@@ -33,25 +34,12 @@ const getOutstandingColor = (amount: number) => {
     return "text-orange-600";
 };
 
-const getStatusColor = (status: Customer["status"]) => {
-    switch (status) {
-        case "ACTIVE":
-            return "bg-green-100 text-green-800";
-        case "INACTIVE":
-            return "bg-red-100 text-red-800";
-        default:
-            return "bg-gray-100 text-gray-800";
-    }
-};
-
 export default function CustomersPage() {
-    const { token, user } = useAuth();
+    const { token } = useAuth();
+    const queryClient = useQueryClient();
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState("All");
-    const [customers, setCustomers] = useState<Customer[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [fetchError, setFetchError] = useState<string | null>(null);
 
     // Add New Customer form state
     const [showAddCustomerForm, setShowAddCustomerForm] = useState(false);
@@ -61,85 +49,13 @@ export default function CustomersPage() {
         location: ""
     });
 
-    const cacheKey = useMemo(() => `nyk-customers-cache:${user?.id ?? "anon"}`, [user?.id]);
-
-    const loadCachedCustomers = () => {
-        if (typeof window === "undefined") {
-            return null;
-        }
-        const raw = sessionStorage.getItem(cacheKey);
-        if (!raw) {
-            return null;
-        }
-        try {
-            const parsed = JSON.parse(raw) as { data: Customer[]; updatedAt: string };
-            if (!Array.isArray(parsed.data)) {
-                return null;
-            }
-            return parsed;
-        } catch {
-            return null;
-        }
-    };
-
-    const saveCachedCustomers = (data: Customer[]) => {
-        if (typeof window === "undefined") {
-            return;
-        }
-        sessionStorage.setItem(
-            cacheKey,
-            JSON.stringify({ data, updatedAt: new Date().toISOString() })
-        );
-    };
-
-    const fetchCustomers = useCallback(async (force = false, signal?: AbortSignal) => {
-        if (!token) {
-            return;
-        }
-
-        if (!force) {
-            const cached = loadCachedCustomers();
-            if (cached) {
-                setCustomers(cached.data);
-                setLastUpdated(new Date(cached.updatedAt));
-                setLoading(false);
-                return;
-            }
-        }
-
-        setLoading(true);
-        setError(null);
-        try {
-            const response = await fetch(`${API_BASE_URL}/_api/customers`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-                signal,
-            });
-
-            if (!response.ok) {
-                const message = await response.text();
-                throw new Error(message || "Failed to load customers");
-            }
-
-            const data = (await response.json()) as Customer[];
-            setCustomers(data);
-            saveCachedCustomers(data);
-            setLastUpdated(new Date());
-        } catch (err) {
-            if (err instanceof Error && err.name === "AbortError") return;
-            const message = err instanceof Error ? err.message : "Failed to load customers";
-            setError(message);
-        } finally {
-            setLoading(false);
-        }
-    }, [token, cacheKey]);
-
-    useEffect(() => {
-        const controller = new AbortController();
-        fetchCustomers(false, controller.signal);
-        return () => controller.abort();
-    }, [fetchCustomers]);
+    const { data: customers = [], isLoading: loading, error: queryError, dataUpdatedAt } = useQuery({
+        queryKey: ["sp-customers"],
+        queryFn: () => apiFetch<Customer[]>("/customers", { token }),
+        enabled: !!token,
+    });
+    const error = fetchError ?? (queryError?.message ?? null);
+    const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
     const handleAddCustomer = async () => {
         if (!token) {
@@ -147,37 +63,23 @@ export default function CustomersPage() {
         }
 
         try {
-            const response = await fetch(`${API_BASE_URL}/_api/customers`, {
+            await apiFetch("/customers", {
                 method: "POST",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
+                token,
+                body: {
                     name: newCustomer.shopName,
                     phone_number: newCustomer.phoneNumber,
                     address: newCustomer.location,
                     status: "ACTIVE",
-                }),
+                },
             });
 
-            if (!response.ok) {
-                const message = await response.text();
-                throw new Error(message || "Failed to create customer");
-            }
-
-            const created = (await response.json()) as Customer;
-            setCustomers((prev) => {
-                const next = [created, ...prev];
-                saveCachedCustomers(next);
-                setLastUpdated(new Date());
-                return next;
-            });
+            queryClient.invalidateQueries({ queryKey: ["sp-customers"] });
             setNewCustomer({ shopName: "", phoneNumber: "", location: "" });
             setShowAddCustomerForm(false);
         } catch (err) {
             const message = err instanceof Error ? err.message : "Failed to create customer";
-            setError(message);
+            setFetchError(message);
         }
     };
 
@@ -213,7 +115,7 @@ export default function CustomersPage() {
                         <Button
                             size="md"
                             variant="outline"
-                            onClick={() => fetchCustomers(true)}
+                            onClick={() => queryClient.invalidateQueries({ queryKey: ["sp-customers"] })}
                             aria-label="Refresh"
                             title="Refresh"
                             className="h-10 w-10 p-0"

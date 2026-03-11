@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -76,8 +77,13 @@ function formatDate(dateString: string) {
 
 export default function OutstandingPage() {
     const { user, token } = useAuth();
-    const [orders, setOrders] = useState<OutstandingOrder[]>([]);
-    const [loading, setLoading] = useState(true);
+    const queryClient = useQueryClient();
+
+    const { data: orders = [], isLoading: loading } = useQuery({
+        queryKey: ["admin-outstanding"],
+        queryFn: () => apiFetch<OutstandingOrder[]>("/orders/outstanding", { token }),
+        enabled: !!token,
+    });
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
@@ -101,49 +107,6 @@ export default function OutstandingPage() {
     const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false);
     const [allPayments, setAllPayments] = useState<PaymentRecord[]>([]);
     const [loadingPayments, setLoadingPayments] = useState(false);
-
-    const fetchOrders = useCallback(async (signal?: AbortSignal) => {
-        if (!token) return;
-        setLoading(true);
-        setError(null);
-        try {
-            const data = await apiFetch<OutstandingOrder[]>(
-                "/orders/outstanding",
-                { token, signal }
-            );
-            setOrders(data);
-        } catch (err) {
-            if (err instanceof Error && err.name === 'AbortError') return;
-            setError(
-                err instanceof Error
-                    ? err.message
-                    : "Failed to load outstanding orders"
-            );
-        } finally {
-            setLoading(false);
-        }
-    }, [token]);
-
-    useEffect(() => {
-        const controller = new AbortController();
-        fetchOrders(controller.signal);
-        return () => controller.abort();
-    }, [fetchOrders]);
-
-    const fetchPayments = useCallback(async () => {
-        if (!token) return;
-        setLoadingPayments(true);
-        try {
-            const data = await apiFetch<PaymentRecord[]>("/payments", {
-                token,
-            });
-            setAllPayments(data);
-        } catch {
-            // silently ignore
-        } finally {
-            setLoadingPayments(false);
-        }
-    }, [token]);
 
     const filteredOrders = useMemo(() => {
         return orders.filter((order) => {
@@ -224,7 +187,7 @@ export default function OutstandingPage() {
                 },
             });
             setPaymentInputs((prev) => ({ ...prev, [String(order.id)]: "" }));
-            await fetchOrders();
+            queryClient.invalidateQueries({ queryKey: ["admin-outstanding"] });
         } catch (err) {
             setError(
                 err instanceof Error
@@ -257,7 +220,7 @@ export default function OutstandingPage() {
                     })
                 )
             );
-            await fetchOrders();
+            queryClient.invalidateQueries({ queryKey: ["admin-outstanding"] });
         } catch (err) {
             setError(
                 err instanceof Error
@@ -281,7 +244,7 @@ export default function OutstandingPage() {
         const rangeFrom = paymentDate || fromDate;
         const rangeTo = paymentDate || toDate;
         return allPayments.filter((p) => {
-        const pDate = toBangkokDateStr(p.created_at);
+            const pDate = toBangkokDateStr(p.created_at);
             return (
                 (!rangeFrom || pDate >= rangeFrom) &&
                 (!rangeTo || pDate <= rangeTo)
@@ -457,9 +420,15 @@ export default function OutstandingPage() {
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => {
+                                    onClick={async () => {
                                         setIsPrintDialogOpen(true);
-                                        fetchPayments();
+                                        if (!token) return;
+                                        setLoadingPayments(true);
+                                        try {
+                                            const data = await apiFetch<PaymentRecord[]>("/payments", { token });
+                                            setAllPayments(data);
+                                        } catch { /* silently ignore */ }
+                                        finally { setLoadingPayments(false); }
                                     }}
                                 >
                                     Payment List
@@ -556,7 +525,7 @@ export default function OutstandingPage() {
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            onClick={() => fetchOrders()}
+                                            onClick={() => queryClient.invalidateQueries({ queryKey: ["admin-outstanding"] })}
                                             className="h-10 w-10 p-0"
                                         >
                                             <svg
