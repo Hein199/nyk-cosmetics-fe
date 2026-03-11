@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth-context";
-import { API_BASE_URL } from "@/lib/constants";
+import { apiFetch } from "@/lib/api";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type Customer = {
     id: number;
@@ -14,420 +15,591 @@ type Customer = {
     address: string;
     status: "ACTIVE" | "INACTIVE";
     outstanding_amount: number;
+    notes?: string;
 };
 
-const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-MM", {
-        style: "currency",
-        currency: "MMK"
-    }).format(amount);
+type CustomerOrder = {
+    id: number;
+    date: string;
+    status: string;
+    total_amount: number;
+    paid_amount: number;
+    remaining_amount: number;
 };
 
-const getOutstandingColor = (amount: number) => {
-    if (amount > 1000000) {
-        return "text-red-600";
-    }
-    if (amount <= 10000) {
-        return "text-green-600";
-    }
-    return "text-orange-600";
+type CustomerForm = {
+    name: string;
+    phone_number: string;
+    address: string;
+    status: "ACTIVE" | "INACTIVE";
 };
 
-const getStatusColor = (status: Customer["status"]) => {
-    switch (status) {
-        case "ACTIVE":
-            return "bg-green-100 text-green-800";
-        case "INACTIVE":
-            return "bg-red-100 text-red-800";
-        default:
-            return "bg-gray-100 text-gray-800";
-    }
+const emptyForm: CustomerForm = {
+    name: "",
+    phone_number: "",
+    address: "",
+    status: "ACTIVE",
 };
 
-export default function CustomersPage() {
-    const { token, user } = useAuth();
-    const [searchTerm, setSearchTerm] = useState("");
-    const [statusFilter, setStatusFilter] = useState("All");
-    const [customers, setCustomers] = useState<Customer[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-    // Add New Customer form state
-    const [showAddCustomerForm, setShowAddCustomerForm] = useState(false);
-    const [newCustomer, setNewCustomer] = useState({
-        shopName: "",
-        phoneNumber: "",
-        location: ""
-    });
+const fmt = (n: number) =>
+    new Intl.NumberFormat("en-MM", { style: "currency", currency: "MMK", maximumFractionDigits: 0 }).format(n);
 
-    const cacheKey = useMemo(() => `nyk-customers-cache:${user?.id ?? "anon"}`, [user?.id]);
+const outstandingColor = (n: number) =>
+    n > 500000 ? "text-red-600" : n > 0 ? "text-orange-500" : "text-green-600";
 
-    const loadCachedCustomers = () => {
-        if (typeof window === "undefined") {
-            return null;
-        }
-        const raw = sessionStorage.getItem(cacheKey);
-        if (!raw) {
-            return null;
-        }
-        try {
-            const parsed = JSON.parse(raw) as { data: Customer[]; updatedAt: string };
-            if (!Array.isArray(parsed.data)) {
-                return null;
-            }
-            return parsed;
-        } catch {
-            return null;
-        }
-    };
+const statusBadge = (status: string) =>
+    status === "ACTIVE" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500";
 
-    const saveCachedCustomers = (data: Customer[]) => {
-        if (typeof window === "undefined") {
-            return;
-        }
-        sessionStorage.setItem(
-            cacheKey,
-            JSON.stringify({ data, updatedAt: new Date().toISOString() })
-        );
-    };
+// ─── Customer Modal (Add & Edit) ──────────────────────────────────────────────
 
-    const fetchCustomers = useCallback(async (force = false, signal?: AbortSignal) => {
-        if (!token) {
-            return;
-        }
+function CustomerModal({
+    initial,
+    title,
+    onClose,
+    onSave,
+}: {
+    initial?: Partial<CustomerForm>;
+    title: string;
+    onClose: () => void;
+    onSave: (form: CustomerForm) => Promise<void>;
+}) {
+    const [form, setForm] = useState<CustomerForm>({ ...emptyForm, ...initial });
+    const [error, setError] = useState("");
+    const [loading, setLoading] = useState(false);
 
-        if (!force) {
-            const cached = loadCachedCustomers();
-            if (cached) {
-                setCustomers(cached.data);
-                setLastUpdated(new Date(cached.updatedAt));
-                setLoading(false);
-                return;
-            }
-        }
+    const set =
+        (key: keyof CustomerForm) =>
+        (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+            setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
+    async function handleSave() {
+        if (!form.name.trim()) return setError("Name is required.");
+        if (!form.phone_number.trim()) return setError("Phone number is required.");
+        if (!form.address.trim()) return setError("Address is required.");
+        setError("");
         setLoading(true);
-        setError(null);
         try {
-            const response = await fetch(`${API_BASE_URL}/_api/customers`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-                signal,
-            });
-
-            if (!response.ok) {
-                const message = await response.text();
-                throw new Error(message || "Failed to load customers");
-            }
-
-            const data = (await response.json()) as Customer[];
-            setCustomers(data);
-            saveCachedCustomers(data);
-            setLastUpdated(new Date());
-        } catch (err) {
-            if (err instanceof Error && err.name === "AbortError") return;
-            const message = err instanceof Error ? err.message : "Failed to load customers";
-            setError(message);
+            await onSave(form);
+        } catch (e: unknown) {
+            setError(e instanceof Error ? e.message : "Something went wrong.");
         } finally {
             setLoading(false);
         }
-    }, [token, cacheKey]);
+    }
 
-    useEffect(() => {
-        const controller = new AbortController();
-        fetchCustomers(false, controller.signal);
-        return () => controller.abort();
-    }, [fetchCustomers]);
-
-    const handleAddCustomer = async () => {
-        if (!token) {
-            return;
-        }
-
-        try {
-            const response = await fetch(`${API_BASE_URL}/_api/customers`, {
-                method: "POST",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    name: newCustomer.shopName,
-                    phone_number: newCustomer.phoneNumber,
-                    address: newCustomer.location,
-                    status: "ACTIVE",
-                }),
-            });
-
-            if (!response.ok) {
-                const message = await response.text();
-                throw new Error(message || "Failed to create customer");
-            }
-
-            const created = (await response.json()) as Customer;
-            setCustomers((prev) => {
-                const next = [created, ...prev];
-                saveCachedCustomers(next);
-                setLastUpdated(new Date());
-                return next;
-            });
-            setNewCustomer({ shopName: "", phoneNumber: "", location: "" });
-            setShowAddCustomerForm(false);
-        } catch (err) {
-            const message = err instanceof Error ? err.message : "Failed to create customer";
-            setError(message);
-        }
-    };
-
-    const filteredCustomers = useMemo(() => {
-        return customers.filter(customer => {
-            const matchesSearch = customer.name.toLowerCase().includes(searchTerm.toLowerCase());
-
-            const matchesStatus = statusFilter === "All" || customer.status === statusFilter;
-
-            return matchesSearch && matchesStatus;
-        });
-    }, [customers, searchTerm, statusFilter]);
-
-    const customerStats = useMemo(() => {
-        const total = customers.length;
-        const active = customers.filter(c => c.status === "ACTIVE").length;
-        const inactive = customers.filter(c => c.status === "INACTIVE").length;
-        const totalOutstanding = customers.reduce((sum, customer) => sum + customer.outstanding_amount, 0);
-
-        return { total, active, inactive, totalOutstanding };
-    }, [customers]);
+    const labelCls = "block text-xs font-medium text-gray-600 mb-1";
+    const inputCls =
+        "w-full border border-gray-300 rounded-md px-3 py-2 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500";
 
     return (
-        <div className="min-h-screen bg-[#FFCDC9] p-6">
-            <div className="max-w-7xl mx-auto space-y-6">
-                {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                    <h2 className="text-base font-semibold text-gray-900">{title}</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-lg leading-none">
+                        ✕
+                    </button>
+                </div>
+
+                <div className="px-6 py-5 space-y-4">
+                    {error && (
+                        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                            {error}
+                        </p>
+                    )}
+
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Customer Management</h1>
-                        <p className="text-gray-500 mt-1">Manage and view customer information</p>
+                        <label className={labelCls}>
+                            Name <span className="text-red-500">*</span>
+                        </label>
+                        <Input
+                            className={inputCls}
+                            placeholder="e.g. Beauty Corner Shop"
+                            value={form.name}
+                            onChange={set("name")}
+                        />
                     </div>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                        <Button
-                            size="md"
-                            variant="outline"
-                            onClick={() => fetchCustomers(true)}
-                            aria-label="Refresh"
-                            title="Refresh"
-                            className="h-10 w-10 p-0"
-                        >
-                            <svg
-                                aria-hidden="true"
-                                viewBox="0 0 24 24"
-                                className="h-4 w-4"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className={labelCls}>
+                                Phone Number <span className="text-red-500">*</span>
+                            </label>
+                            <Input
+                                className={inputCls}
+                                placeholder="09xxxxxxxxx"
+                                value={form.phone_number}
+                                onChange={set("phone_number")}
+                            />
+                        </div>
+                        <div>
+                            <label className={labelCls}>Status</label>
+                            <select
+                                className={inputCls}
+                                value={form.status}
+                                onChange={set("status")}
+                                style={{ color: "#111827" }}
                             >
-                                <path d="M21 12a9 9 0 1 1-3-6.7" />
-                                <path d="M21 3v6h-6" />
-                            </svg>
+                                <option value="ACTIVE">Active</option>
+                                <option value="INACTIVE">Inactive</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className={labelCls}>
+                            Address <span className="text-red-500">*</span>
+                        </label>
+                        <Input
+                            className={inputCls}
+                            placeholder="Street, Township, City..."
+                            value={form.address}
+                            onChange={set("address")}
+                        />
+                    </div>
+                </div>
+
+                <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200">
+                    <Button variant="outline" onClick={onClose} disabled={loading}>
+                        Cancel
+                    </Button>
+                    <Button
+                        className="bg-pink-600 hover:bg-pink-700 text-white"
+                        onClick={handleSave}
+                        disabled={loading}
+                    >
+                        {loading ? "Saving..." : "Save Customer"}
+                    </Button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export default function CustomersPage() {
+    const { token } = useAuth();
+
+    const [customers, setCustomers] = useState<Customer[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState("");
+
+    const [search, setSearch] = useState("");
+    const [statusFilter, setStatusFilter] = useState("");
+    const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+
+    const [addOpen, setAddOpen] = useState(false);
+    const [editingCustomer, setEditingCustomer] = useState(false);
+    const [deletingCustomer, setDeletingCustomer] = useState(false);
+    const [deleteLoading, setDeleteLoading] = useState(false);
+
+    const [notes, setNotes] = useState("");
+    const [notesSaving, setNotesSaving] = useState(false);
+    const [notesSaved, setNotesSaved] = useState(false);
+    const [customerOrders, setCustomerOrders] = useState<CustomerOrder[]>([]);
+    const [ordersLoading, setOrdersLoading] = useState(false);
+
+    const fetchCustomers = useCallback(async () => {
+        try {
+            setLoading(true);
+            setFetchError("");
+            const data = await apiFetch<Customer[]>("/customers", { token });
+            setCustomers(data);
+        } catch (e: unknown) {
+            setFetchError(e instanceof Error ? e.message : "Failed to load customers.");
+        } finally {
+            setLoading(false);
+        }
+    }, [token]);
+
+    useEffect(() => {
+        fetchCustomers();
+    }, [fetchCustomers]);
+
+    const filtered = customers.filter((c) => {
+        const q = search.toLowerCase();
+        const matchesSearch =
+            c.name.toLowerCase().includes(q) ||
+            c.phone_number.includes(q) ||
+            c.address.toLowerCase().includes(q);
+        const matchesStatus = !statusFilter || c.status === statusFilter;
+        return matchesSearch && matchesStatus;
+    });
+
+    const totalOutstanding = customers.reduce((s, c) => s + c.outstanding_amount, 0);
+
+    // Fetch orders + seed notes whenever a customer is selected
+    useEffect(() => {
+        if (!selectedCustomer) {
+            setCustomerOrders([]);
+            return;
+        }
+        setNotes(selectedCustomer.notes ?? "");
+        setNotesSaved(false);
+        let cancelled = false;
+        setOrdersLoading(true);
+        apiFetch<CustomerOrder[]>(`/customers/${selectedCustomer.id}/orders`, { token })
+            .then((data) => { if (!cancelled) setCustomerOrders(data); })
+            .catch(() => { if (!cancelled) setCustomerOrders([]); })
+            .finally(() => { if (!cancelled) setOrdersLoading(false); });
+        return () => { cancelled = true; };
+    }, [selectedCustomer, token]);
+
+    // ── Customer Profile View ─────────────────────────────────────────────────
+    if (selectedCustomer) {
+        const c = selectedCustomer;
+        return (
+            <div className="p-6 space-y-6">
+                <button
+                    onClick={() => setSelectedCustomer(null)}
+                    className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                >
+                    ← Back to Customers
+                </button>
+
+                <div className="flex items-start justify-between">
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900">{c.name}</h1>
+                        <p className="text-sm text-gray-500 mt-0.5">{c.address}</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setEditingCustomer(true)}>
+                            Edit
                         </Button>
                         <Button
-                            size="md"
-                            className="bg-pink-600 hover:bg-pink-700 text-white"
-                            onClick={() => setShowAddCustomerForm(true)}
+                            size="sm"
+                            className="bg-red-600 hover:bg-red-700 text-white"
+                            onClick={() => setDeletingCustomer(true)}
                         >
-                            Add New Customer
+                            Delete
                         </Button>
                     </div>
                 </div>
 
-                {/* Stats Cards */}
-                <Card className="bg-white p-6">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <div className="text-sm text-gray-500 mb-1">Total Outstanding to Collect</div>
-                            <div className={`text-3xl font-bold ${getOutstandingColor(customerStats.totalOutstanding)}`}>
-                                {formatCurrency(customerStats.totalOutstanding)}
+                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
+                        <h2 className="text-sm font-semibold text-gray-700">Customer Info</h2>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 divide-x divide-y divide-gray-100">
+                        {[
+                            { label: "Name", value: c.name },
+                            { label: "Phone", value: c.phone_number },
+                            { label: "Address", value: c.address },
+                            {
+                                label: "Status",
+                                value: c.status === "ACTIVE" ? "Active" : "Inactive",
+                                cls: c.status === "ACTIVE" ? "text-green-600" : "text-gray-400",
+                            },
+                            {
+                                label: "Outstanding",
+                                value: fmt(c.outstanding_amount),
+                                cls: outstandingColor(c.outstanding_amount),
+                            },
+                        ].map((item) => (
+                            <div key={item.label} className="px-4 py-3">
+                                <p className="text-xs text-gray-400 mb-0.5">{item.label}</p>
+                                <p className={`text-sm font-medium ${item.cls ?? "text-gray-900"}`}>{item.value}</p>
                             </div>
-                            {lastUpdated && (
-                                <div className="mt-2 text-xs text-gray-400">
-                                    Last updated {lastUpdated.toLocaleTimeString()}
-                                </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Notes Card */}
+                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
+                        <h2 className="text-sm font-semibold text-gray-700">Notes</h2>
+                    </div>
+                    <div className="p-4 space-y-3">
+                        <textarea
+                            value={notes}
+                            onChange={(e) => { setNotes(e.target.value); setNotesSaved(false); }}
+                            rows={4}
+                            className="w-full text-sm text-gray-700 border border-gray-200 rounded-md p-3 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-400"
+                            placeholder="Add notes about this customer (e.g. payment behavior, special requests)…"
+                        />
+                        <div className="flex items-center gap-3">
+                            <Button
+                                size="sm"
+                                className="bg-pink-600 hover:bg-pink-700 text-white"
+                                disabled={notesSaving}
+                                onClick={async () => {
+                                    setNotesSaving(true);
+                                    try {
+                                        await apiFetch(`/customers/${c.id}/notes`, {
+                                            method: "PATCH",
+                                            body: { notes },
+                                            token,
+                                        });
+                                        setNotesSaved(true);
+                                        setSelectedCustomer((prev) => (prev ? { ...prev, notes } : prev));
+                                    } finally {
+                                        setNotesSaving(false);
+                                    }
+                                }}
+                            >
+                                {notesSaving ? "Saving…" : "Save Notes"}
+                            </Button>
+                            {notesSaved && <span className="text-xs text-green-600">Saved</span>}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Customer Orders */}
+                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+                        <h2 className="text-sm font-semibold text-gray-700">Customer Orders</h2>
+                        <span className="text-sm text-gray-600">
+                            Total Outstanding:{" "}
+                            <span className={`font-semibold ${outstandingColor(c.outstanding_amount)}`}>
+                                {fmt(c.outstanding_amount)}
+                            </span>
+                        </span>
+                    </div>
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr>
+                                {["Date", "Order ID", "Total", "Paid", "Remaining", "Actions"].map((h, i) => (
+                                    <th
+                                        key={h}
+                                        className={`py-2.5 px-4 text-sm font-medium text-white bg-blue-600 ${
+                                            i !== 0 ? "border-l border-blue-500/40" : ""
+                                        } ${h === "Actions" ? "text-center" : "text-left"}`}
+                                    >
+                                        {h}
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {ordersLoading ? (
+                                <tr>
+                                    <td colSpan={6} className="py-8 text-center text-gray-400">Loading orders…</td>
+                                </tr>
+                            ) : customerOrders.length === 0 ? (
+                                <tr>
+                                    <td colSpan={6} className="py-8 text-center text-gray-400">No orders found.</td>
+                                </tr>
+                            ) : (
+                                customerOrders.map((o) => (
+                                    <tr key={o.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                        <td className="py-2.5 px-4 text-gray-600">{o.date}</td>
+                                        <td className="py-2.5 px-4 font-mono text-gray-700 border-l border-gray-200">OR-{o.id}</td>
+                                        <td className="py-2.5 px-4 text-gray-900 border-l border-gray-200">{fmt(o.total_amount)}</td>
+                                        <td className="py-2.5 px-4 text-green-600 border-l border-gray-200">{fmt(o.paid_amount)}</td>
+                                        <td className={`py-2.5 px-4 border-l border-gray-200 font-medium ${outstandingColor(o.remaining_amount)}`}>
+                                            {fmt(o.remaining_amount)}
+                                        </td>
+                                        <td className="py-2.5 px-4 border-l border-gray-200 text-center">
+                                            <Button size="sm" variant="outline">
+                                                View
+                                            </Button>
+                                        </td>
+                                    </tr>
+                                ))
                             )}
-                        </div>
-                        <div className="text-right text-sm text-gray-500">
-                            <div>From {customerStats.total} customers</div>
-                            <div>{customerStats.active} Active • {customerStats.inactive} Inactive</div>
-                        </div>
-                    </div>
-                </Card>
+                        </tbody>
+                    </table>
+                </div>
 
-                {/* Customer List */}
-                <Card className="bg-white">
-                    <div className="p-6">
-                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
-                            <h2 className="text-lg font-semibold text-gray-900">
-                                Customer List ({filteredCustomers.length})
-                            </h2>
-                            <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
-                                <div className="flex-1 min-w-[260px]">
-                                    <Input
-                                        type="text"
-                                        placeholder="Search by name"
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full h-10"
-                                    />
-                                </div>
-                                <div className="sm:w-48">
-                                    <select
-                                        value={statusFilter}
-                                        onChange={(e) => setStatusFilter(e.target.value)}
-                                        className="w-full h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
-                                    >
-                                        <option value="All">All Status</option>
-                                        <option value="ACTIVE">Active</option>
-                                        <option value="INACTIVE">Inactive</option>
-                                    </select>
-                                </div>
+                {editingCustomer && (
+                    <CustomerModal
+                        title="Edit Customer"
+                        initial={{
+                            name: c.name,
+                            phone_number: c.phone_number,
+                            address: c.address,
+                            status: c.status,
+                        }}
+                        onClose={() => setEditingCustomer(false)}
+                        onSave={async (form) => {
+                            await apiFetch(`/customers/${c.id}`, {
+                                method: "PATCH",
+                                body: form,
+                                token,
+                            });
+                            await fetchCustomers();
+                            setSelectedCustomer((prev) => (prev ? { ...prev, ...form } : prev));
+                            setEditingCustomer(false);
+                        }}
+                    />
+                )}
+
+                {deletingCustomer && (
+                    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+                        <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm space-y-4">
+                            <h2 className="text-base font-semibold text-gray-900">Delete Customer</h2>
+                            <p className="text-sm text-gray-600">
+                                Are you sure you want to delete{" "}
+                                <span className="font-semibold">{c.name}</span>? This action cannot be undone.
+                            </p>
+                            <div className="flex justify-end gap-2 mt-4">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setDeletingCustomer(false)}
+                                    disabled={deleteLoading}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    className="bg-red-600 hover:bg-red-700 text-white"
+                                    disabled={deleteLoading}
+                                    onClick={() => {
+                                        setDeletingCustomer(false);
+                                        setSelectedCustomer(null);
+                                    }}
+                                >
+                                    Delete
+                                </Button>
                             </div>
                         </div>
-                        {error && (
-                            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-                                {error}
-                            </div>
-                        )}
-
-                        {loading ? (
-                            <div className="text-center py-8 text-gray-500">Loading customers...</div>
-                        ) : filteredCustomers.length === 0 ? (
-                            <div className="text-center py-8 text-gray-500">
-                                No customers found matching your criteria.
-                            </div>
-                        ) : (
-                            <div className="border-2 border-gray-300 rounded-lg overflow-hidden shadow-sm">
-                                <table className="w-full border-collapse text-sm">
-                                    <thead className="bg-blue-600 text-white">
-                                        <tr>
-                                            <th className="text-left py-3 px-4 font-bold border-r border-blue-500">Customer</th>
-                                            <th className="text-left py-3 px-4 font-bold border-r border-blue-500">Contact</th>
-                                            <th className="text-center py-3 px-4 font-bold border-r border-blue-500">Status</th>
-                                            <th className="text-center py-3 px-4 font-bold">Outstanding</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {filteredCustomers.map((customer, index) => (
-                                            <tr key={customer.id} className={`border-b border-gray-300 ${index % 2 === 0 ? "bg-blue-50 hover:bg-blue-100" : "bg-white hover:bg-gray-50"
-                                                } transition-colors`}>
-                                                <td className="py-3 px-4 border-r border-gray-300">
-                                                    <div>
-                                                        <div className="font-semibold text-gray-900">{customer.name}</div>
-                                                        <div className="text-xs text-gray-600">{customer.address}</div>
-                                                    </div>
-                                                </td>
-                                                <td className="py-3 px-4 text-gray-900 font-medium border-r border-gray-300">
-                                                    {customer.phone_number}
-                                                </td>
-                                                <td className="py-3 px-4 text-center border-r border-gray-300">
-                                                    <span className={`inline-block px-2 py-1 rounded text-xs font-bold border ${customer.status === 'ACTIVE' ? 'bg-green-50 text-green-700 border-green-200' :
-                                                        'bg-red-50 text-red-700 border-red-200'
-                                                        }`}>
-                                                        {customer.status}
-                                                    </span>
-                                                </td>
-                                                <td className="py-3 px-4 text-center">
-                                                    <div className={`font-bold ${customer.outstanding_amount > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                                        {formatCurrency(customer.outstanding_amount)}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </div>
-                </Card>
-
-                {/* Add New Customer Popup */}
-                {showAddCustomerForm && (
-                    <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50">
-                        <Card className="bg-white p-6 w-full max-w-md mx-4">
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <h2 className="text-xl font-bold text-gray-900">Add New Customer</h2>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setShowAddCustomerForm(false)}
-                                    >
-                                        ✕
-                                    </Button>
-                                </div>
-
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Customer Shop Name
-                                        </label>
-                                        <Input
-                                            type="text"
-                                            value={newCustomer.shopName}
-                                            onChange={(e) => setNewCustomer({ ...newCustomer, shopName: e.target.value })}
-                                            placeholder="Enter shop name"
-                                            className="w-full text-black"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Phone Number
-                                        </label>
-                                        <Input
-                                            type="tel"
-                                            value={newCustomer.phoneNumber}
-                                            onChange={(e) => setNewCustomer({ ...newCustomer, phoneNumber: e.target.value })}
-                                            placeholder="Enter phone number"
-                                            className="w-full text-black"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Location
-                                        </label>
-                                        <Input
-                                            type="text"
-                                            value={newCustomer.location}
-                                            onChange={(e) => setNewCustomer({ ...newCustomer, location: e.target.value })}
-                                            placeholder="Enter location"
-                                            className="w-full text-black"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-3 pt-4">
-                                    <Button
-                                        variant="outline"
-                                        onClick={() => setShowAddCustomerForm(false)}
-                                        className="flex-1"
-                                    >
-                                        Cancel
-                                    </Button>
-                                    <Button
-                                        onClick={handleAddCustomer}
-                                        className="flex-1 bg-pink-600 hover:bg-pink-700 text-white"
-                                        disabled={!newCustomer.shopName || !newCustomer.phoneNumber || !newCustomer.location}
-                                    >
-                                        Add Customer
-                                    </Button>
-                                </div>
-                            </div>
-                        </Card>
                     </div>
                 )}
             </div>
+        );
+    }
+
+    // ── All Customers View ────────────────────────────────────────────────────
+    return (
+        <div className="p-6 space-y-6">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
+                    <p className="text-sm text-gray-500 mt-1">Manage customer accounts and orders</p>
+                </div>
+                <Button className="bg-pink-600 hover:bg-pink-700 text-white" onClick={() => setAddOpen(true)}>
+                    + Add Customer
+                </Button>
+            </div>
+
+            {!loading && !fetchError && (
+                <p className="text-sm text-gray-600">
+                    Customers: <span className="font-semibold text-gray-900">{customers.length}</span>
+                    <span className="mx-2 text-gray-300">|</span>
+                    Total Outstanding:{" "}
+                    <span className={`font-semibold ${outstandingColor(totalOutstanding)}`}>
+                        {fmt(totalOutstanding)}
+                    </span>
+                </p>
+            )}
+
+            <div className="flex gap-3">
+                <Input
+                    placeholder="Search by name, phone, or address..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="flex-1 bg-white"
+                />
+                <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="border border-gray-300 rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[150px]"
+                    style={{ color: statusFilter ? "#111827" : "#6b7280" }}
+                >
+                    <option value="" style={{ color: "#6b7280" }}>All Statuses</option>
+                    <option value="ACTIVE" style={{ color: "#111827" }}>Active</option>
+                    <option value="INACTIVE" style={{ color: "#111827" }}>Inactive</option>
+                </select>
+            </div>
+
+            {fetchError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-4 py-3">
+                    {fetchError}
+                </p>
+            )}
+
+            <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+                <table className="w-full text-sm">
+                    <thead>
+                        <tr>
+                            {["Customer", "Phone", "Address", "Status", "Outstanding", "Actions"].map((h, i) => (
+                                <th
+                                    key={h}
+                                    className={`py-3 px-4 text-sm font-medium text-white bg-blue-600 first:rounded-tl last:rounded-tr ${
+                                        i !== 0 ? "border-l border-blue-500/40" : ""
+                                    } ${h === "Actions" ? "text-center" : "text-left"}`}
+                                >
+                                    {h}
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {loading ? (
+                            <tr>
+                                <td colSpan={6} className="py-10 text-center text-gray-400">
+                                    Loading customers...
+                                </td>
+                            </tr>
+                        ) : filtered.length === 0 ? (
+                            <tr>
+                                <td colSpan={6} className="py-10 text-center text-gray-400">
+                                    No customers found.
+                                </td>
+                            </tr>
+                        ) : (
+                            filtered.map((c) => (
+                                <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                    <td className="py-3 px-4">
+                                        <button
+                                            onClick={() => setSelectedCustomer(c)}
+                                            className="font-medium text-blue-600 hover:underline text-left"
+                                        >
+                                            {c.name}
+                                        </button>
+                                    </td>
+                                    <td className="py-3 px-4 text-gray-600 border-l border-gray-200">
+                                        {c.phone_number}
+                                    </td>
+                                    <td className="py-3 px-4 text-gray-600 border-l border-gray-200 max-w-[220px] truncate">
+                                        {c.address}
+                                    </td>
+                                    <td className="py-3 px-4 border-l border-gray-200">
+                                        <span
+                                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusBadge(
+                                                c.status
+                                            )}`}
+                                        >
+                                            {c.status === "ACTIVE" ? "Active" : "Inactive"}
+                                        </span>
+                                    </td>
+                                    <td
+                                        className={`py-3 px-4 font-semibold border-l border-gray-200 ${outstandingColor(
+                                            c.outstanding_amount
+                                        )}`}
+                                    >
+                                        {fmt(c.outstanding_amount)}
+                                    </td>
+                                    <td className="py-3 px-4 border-l border-gray-200 text-center">
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="w-full sm:w-auto"
+                                            onClick={() => setSelectedCustomer(c)}
+                                        >
+                                            View
+                                        </Button>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            {addOpen && (
+                <CustomerModal
+                    title="Add Customer"
+                    onClose={() => setAddOpen(false)}
+                    onSave={async (form) => {
+                        await apiFetch("/customers", { method: "POST", body: form, token });
+                        await fetchCustomers();
+                        setAddOpen(false);
+                    }}
+                />
+            )}
         </div>
     );
 }
