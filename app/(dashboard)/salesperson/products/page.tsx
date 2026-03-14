@@ -1,19 +1,18 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
     Card,
-    CardContent,
     CardHeader,
     CardTitle,
 } from "@/components/ui/card";
-import { INVENTORY_UNITS } from "@/lib/constants";
-import { useCart } from "@/lib/cart-context";
-import { API_BASE_URL } from "@/lib/constants";
 import { useAuth } from "@/lib/auth-context";
+import { useCart } from "@/lib/cart-context";
+import { apiFetch } from "@/lib/api";
 
 type Customer = {
     id: number;
@@ -46,42 +45,28 @@ function formatCategory(category: string) {
 }
 
 export default function ProductsPage() {
-    const { token, user } = useAuth();
+    const { token } = useAuth();
+    const queryClient = useQueryClient();
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("all");
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-    const [products, setProducts] = useState<Product[]>([]);
-    const [customers, setCustomers] = useState<Customer[]>([]);
-    const [loadingProducts, setLoadingProducts] = useState(true);
-    const [loadingCustomers, setLoadingCustomers] = useState(true);
-    const [productError, setProductError] = useState<string | null>(null);
-    const [customerError, setCustomerError] = useState<string | null>(null);
     const customerDropdownRef = useRef<HTMLDivElement>(null);
 
-    const productsCacheKey = useMemo(() => `nyk-products-cache:${user?.id ?? "anon"}`, [user?.id]);
-    const customersCacheKey = useMemo(() => `nyk-products-customers-cache:${user?.id ?? "anon"}`, [user?.id]);
+    const { data: allProducts = [], isLoading: loadingProducts, error: productQueryError } = useQuery({
+        queryKey: ["sp-products"],
+        queryFn: () => apiFetch<Product[]>("/products", { token }),
+        enabled: !!token,
+        select: (data) => data.filter((product) => product.is_active),
+    });
+    const products = allProducts;
+    const productError = productQueryError?.message ?? null;
 
-    const loadCache = <T,>(key: string) => {
-        if (typeof window === "undefined") {
-            return null;
-        }
-        const raw = sessionStorage.getItem(key);
-        if (!raw) return null;
-        try {
-            const parsed = JSON.parse(raw) as { data: T[] };
-            if (!Array.isArray(parsed.data)) return null;
-            return parsed.data;
-        } catch {
-            return null;
-        }
-    };
-
-    const saveCache = <T,>(key: string, data: T[]) => {
-        if (typeof window === "undefined") {
-            return;
-        }
-        sessionStorage.setItem(key, JSON.stringify({ data }));
-    };
+    const { data: customers = [], isLoading: loadingCustomers, error: customerQueryError } = useQuery({
+        queryKey: ["sp-customers"],
+        queryFn: () => apiFetch<Customer[]>("/customers", { token }),
+        enabled: !!token,
+    });
+    const customerError = customerQueryError?.message ?? null;
 
     // Use global cart context
     const {
@@ -91,7 +76,6 @@ export default function ProductsPage() {
         orderDate,
         paymentType,
         remark,
-        addToCart,
         setSelectedCustomer,
         setCustomerSearch,
         setOrderDate,
@@ -111,93 +95,6 @@ export default function ProductsPage() {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
-
-    const fetchProducts = useCallback(async (force = false, signal?: AbortSignal) => {
-        if (!token) {
-            return;
-        }
-
-        if (!force) {
-            const cached = loadCache<Product>(productsCacheKey);
-            if (cached) {
-                setProducts(cached.filter((product) => product.is_active));
-                setLoadingProducts(false);
-                return;
-            }
-        }
-
-        setLoadingProducts(true);
-        setProductError(null);
-        try {
-            const response = await fetch(`${API_BASE_URL}/_api/products`, {
-                headers: { Authorization: `Bearer ${token}` },
-                signal,
-            });
-            if (!response.ok) {
-                const message = await response.text();
-                throw new Error(message || "Failed to load products");
-            }
-            const data = (await response.json()) as Product[];
-            const activeProducts = data.filter((product) => product.is_active);
-            setProducts(activeProducts);
-            saveCache(productsCacheKey, activeProducts);
-        } catch (err) {
-            if (err instanceof Error && err.name === "AbortError") return;
-            const message = err instanceof Error ? err.message : "Failed to load products";
-            setProductError(message);
-        } finally {
-            setLoadingProducts(false);
-        }
-    }, [token, productsCacheKey]);
-
-    useEffect(() => {
-        const controller = new AbortController();
-        fetchProducts(false, controller.signal);
-        return () => controller.abort();
-    }, [fetchProducts]);
-
-    const fetchCustomers = useCallback(async (force = false, signal?: AbortSignal) => {
-        if (!token) {
-            return;
-        }
-
-        if (!force) {
-            const cached = loadCache<Customer>(customersCacheKey);
-            if (cached) {
-                setCustomers(cached);
-                setLoadingCustomers(false);
-                return;
-            }
-        }
-
-        setLoadingCustomers(true);
-        setCustomerError(null);
-        try {
-            const response = await fetch(`${API_BASE_URL}/_api/customers`, {
-                headers: { Authorization: `Bearer ${token}` },
-                signal,
-            });
-            if (!response.ok) {
-                const message = await response.text();
-                throw new Error(message || "Failed to load customers");
-            }
-            const data = (await response.json()) as Customer[];
-            setCustomers(data);
-            saveCache(customersCacheKey, data);
-        } catch (err) {
-            if (err instanceof Error && err.name === "AbortError") return;
-            const message = err instanceof Error ? err.message : "Failed to load customers";
-            setCustomerError(message);
-        } finally {
-            setLoadingCustomers(false);
-        }
-    }, [token, customersCacheKey]);
-
-    useEffect(() => {
-        const controller = new AbortController();
-        fetchCustomers(false, controller.signal);
-        return () => controller.abort();
-    }, [fetchCustomers]);
 
     // Product filtering
     const filteredProducts = useMemo(() => {
@@ -231,14 +128,6 @@ export default function ProductsPage() {
         return customers.find(c => String(c.id) === selectedCustomer);
     }, [selectedCustomer, customers]);
 
-    // Local add to cart function that uses global context
-    const localAddToCart = (productId: number) => {
-        const product = products.find(p => p.id === productId);
-        if (!product) return;
-        const price = Number(product.unit_price);
-        addToCart(productId, 1, INVENTORY_UNITS.PIECES, undefined, product.name, price);
-    };
-
     return (
         <div className="min-h-screen bg-[#FFCDC9] p-6">
             <div className="max-w-7xl mx-auto space-y-6">
@@ -253,8 +142,8 @@ export default function ProductsPage() {
                             size="lg"
                             variant="outline"
                             onClick={() => {
-                                fetchProducts(true);
-                                fetchCustomers(true);
+                                queryClient.invalidateQueries({ queryKey: ["sp-products"] });
+                                queryClient.invalidateQueries({ queryKey: ["sp-customers"] });
                             }}
                             aria-label="Refresh"
                             title="Refresh"
@@ -455,7 +344,6 @@ export default function ProductsPage() {
                             <ProductCard
                                 key={product.id}
                                 product={product}
-                                onAddToCart={localAddToCart}
                             />
                         ))
                     )}
@@ -480,10 +368,9 @@ export default function ProductsPage() {
 // Product Card Component
 interface ProductCardProps {
     product: Product;
-    onAddToCart: (productId: number) => void;
 }
 
-function ProductCard({ product, onAddToCart }: ProductCardProps) {
+function ProductCard({ product }: ProductCardProps) {
     return (
         <Card className="overflow-hidden hover:shadow-lg transition-shadow">
             <Link href={`/salesperson/products/${product.id}`} className="block">

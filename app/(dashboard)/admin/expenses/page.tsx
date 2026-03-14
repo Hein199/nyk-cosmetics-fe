@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -43,11 +44,16 @@ function formatCurrency(amount: number) {
 
 export default function ExpensesPage() {
     const { token } = useAuth();
-    const [expenses, setExpenses] = useState<Expense[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const queryClient = useQueryClient();
+
+    const { data: expenses = [], isLoading: loading, error: queryError } = useQuery({
+        queryKey: ["expenses"],
+        queryFn: () => apiFetch<Expense[]>("/expenses", { token }),
+        enabled: !!token,
+    });
+
+    const [error, setError] = useState<string | null>(queryError?.message ?? null);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
-    const [saving, setSaving] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [fromDate, setFromDate] = useState("");
     const [toDate, setToDate] = useState("");
@@ -60,30 +66,6 @@ export default function ExpensesPage() {
         "CASH"
     );
     const [expenseDate, setExpenseDate] = useState(todayStr());
-
-    const fetchExpenses = useCallback(async (signal?: AbortSignal) => {
-        if (!token) return;
-        setLoading(true);
-        try {
-            const data = await apiFetch<Expense[]>("/expenses", { token, signal });
-            setExpenses(data);
-        } catch (err) {
-            if (err instanceof Error && err.name === 'AbortError') return;
-            setError(
-                err instanceof Error
-                    ? err.message
-                    : "Failed to load expenses"
-            );
-        } finally {
-            setLoading(false);
-        }
-    }, [token]);
-
-    useEffect(() => {
-        const controller = new AbortController();
-        fetchExpenses(controller.signal);
-        return () => controller.abort();
-    }, [fetchExpenses]);
 
     const filtered = useMemo(() => {
         return expenses.filter((e) => {
@@ -103,39 +85,38 @@ export default function ExpensesPage() {
         [filtered]
     );
 
-    const handleCreate = async () => {
-        if (!token || !description || !amount) return;
-        setSaving(true);
-        setError(null);
-        try {
-            await apiFetch("/expenses", {
-                method: "POST",
-                token,
-                body: {
-                    description,
-                    amount,
-                    payment_method: paymentMethod,
-                    remark: remark || undefined,
-                    expense_date: expenseDate,
-                },
-            });
+    const createMutation = useMutation({
+        mutationFn: () => apiFetch("/expenses", {
+            method: "POST",
+            token,
+            body: {
+                description,
+                amount,
+                payment_method: paymentMethod,
+                remark: remark || undefined,
+                expense_date: expenseDate,
+            },
+        }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["expenses"] });
             setIsCreateOpen(false);
             setDescription("");
             setAmount("");
             setRemark("");
             setPaymentMethod("CASH");
             setExpenseDate(todayStr());
-            await fetchExpenses();
-        } catch (err) {
-            setError(
-                err instanceof Error
-                    ? err.message
-                    : "Failed to create expense"
-            );
-        } finally {
-            setSaving(false);
-        }
+        },
+        onError: (err) => {
+            setError(err instanceof Error ? err.message : "Failed to create expense");
+        },
+    });
+
+    const handleCreate = () => {
+        if (!token || !description || !amount) return;
+        setError(null);
+        createMutation.mutate();
     };
+    const saving = createMutation.isPending;
 
     return (
         <div className="space-y-6">
@@ -272,7 +253,7 @@ export default function ExpensesPage() {
                                     {filtered.length === 0 ? (
                                         <tr className="divide-x divide-gray-200">
                                             <td
-                                                    colSpan={6}
+                                                colSpan={6}
                                                 className="text-center py-8 text-gray-500"
                                             >
                                                 No expenses found.

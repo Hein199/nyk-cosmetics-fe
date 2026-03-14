@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { useAuth } from "@/lib/auth-context";
-import { API_BASE_URL } from "@/lib/constants";
+import { apiFetch } from "@/lib/api";
 
 type UserProfile = {
     id: number;
@@ -18,10 +19,8 @@ type UserProfile = {
 
 export default function SalespersonProfilePage() {
     const { token } = useAuth();
-    const [profile, setProfile] = useState<UserProfile | null>(null);
-    const [loading, setLoading] = useState(true);
+    const queryClient = useQueryClient();
     const [editing, setEditing] = useState(false);
-    const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
 
@@ -29,61 +28,41 @@ export default function SalespersonProfilePage() {
         photo_url: "",
     });
 
-    useEffect(() => {
-        if (!token) return;
-        const fetchProfile = async () => {
-            setLoading(true);
-            try {
-                const res = await fetch(`${API_BASE_URL}/_api/users/me`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                if (!res.ok) throw new Error("Failed to load profile");
-                const data = (await res.json()) as UserProfile;
-                setProfile(data);
-                setForm({
-                    photo_url: data.photo_url ?? "",
-                });
-            } catch (err) {
-                setError(err instanceof Error ? err.message : "Failed to load profile");
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchProfile();
-    }, [token]);
+    const { data: profile = null, isLoading: loading } = useQuery({
+        queryKey: ["profile"],
+        queryFn: async () => {
+            const data = await apiFetch<UserProfile>("/users/me", { token });
+            setForm({ photo_url: data.photo_url ?? "" });
+            return data;
+        },
+        enabled: !!token,
+    });
 
-    const handleSave = async () => {
-        if (!token) return;
-        setSaving(true);
-        setError(null);
-        setSuccess(null);
-        try {
-            const res = await fetch(`${API_BASE_URL}/_api/users/me`, {
-                method: "PATCH",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ photo_url: form.photo_url }),
-            });
-            if (!res.ok) {
-                const msg = await res.text();
-                throw new Error(msg || "Failed to save profile");
-            }
-            const data = (await res.json()) as UserProfile;
-            setProfile(data);
-            setForm({
-                photo_url: data.photo_url ?? "",
-            });
+    const saveMutation = useMutation({
+        mutationFn: () => apiFetch<UserProfile>("/users/me", {
+            method: "PATCH",
+            token,
+            body: { photo_url: form.photo_url },
+        }),
+        onSuccess: (data) => {
+            queryClient.setQueryData(["profile"], data);
+            setForm({ photo_url: data.photo_url ?? "" });
             setEditing(false);
             setSuccess("Profile updated successfully.");
             setTimeout(() => setSuccess(null), 3000);
-        } catch (err) {
+        },
+        onError: (err) => {
             setError(err instanceof Error ? err.message : "Failed to save profile");
-        } finally {
-            setSaving(false);
-        }
+        },
+    });
+
+    const handleSave = () => {
+        if (!token) return;
+        setError(null);
+        setSuccess(null);
+        saveMutation.mutate();
     };
+    const saving = saveMutation.isPending;
 
     if (loading) {
         return (

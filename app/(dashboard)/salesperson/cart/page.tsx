@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { useCart } from "@/lib/cart-context";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { API_BASE_URL, INVENTORY_UNITS } from "@/lib/constants";
+import { INVENTORY_UNITS } from "@/lib/constants";
+import { apiFetch } from "@/lib/api";
 
 type Customer = {
     id: number;
@@ -35,6 +37,7 @@ function unitLabel(unit: string) {
 export default function CartPage() {
     const router = useRouter();
     const { token } = useAuth();
+    const queryClient = useQueryClient();
     const {
         cart,
         cartSummary,
@@ -51,9 +54,6 @@ export default function CartPage() {
     } = useCart();
 
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-    const [customers, setCustomers] = useState<Customer[]>([]);
-    const [loadingCustomers, setLoadingCustomers] = useState(true);
-    const [customerError, setCustomerError] = useState<string | null>(null);
     const [orderError, setOrderError] = useState<string | null>(null);
     const customerDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -64,50 +64,16 @@ export default function CartPage() {
                 setShowCustomerDropdown(false);
             }
         };
-
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    useEffect(() => {
-        if (!token) {
-            return;
-        }
-
-        let isMounted = true;
-        const fetchCustomers = async () => {
-            setLoadingCustomers(true);
-            setCustomerError(null);
-            try {
-                const response = await fetch(`${API_BASE_URL}/_api/customers`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                if (!response.ok) {
-                    const message = await response.text();
-                    throw new Error(message || "Failed to load customers");
-                }
-                const data = (await response.json()) as Customer[];
-                if (isMounted) {
-                    setCustomers(data);
-                }
-            } catch (err) {
-                if (isMounted) {
-                    const message = err instanceof Error ? err.message : "Failed to load customers";
-                    setCustomerError(message);
-                }
-            } finally {
-                if (isMounted) {
-                    setLoadingCustomers(false);
-                }
-            }
-        };
-
-        fetchCustomers();
-
-        return () => {
-            isMounted = false;
-        };
-    }, [token]);
+    const { data: customers = [], isLoading: loadingCustomers, error: customersQueryError } = useQuery({
+        queryKey: ["sp-customers"],
+        queryFn: () => apiFetch<Customer[]>("/customers", { token }),
+        enabled: !!token,
+    });
+    const customerError = customersQueryError?.message ?? null;
 
     // Filter customers based on search
     const filteredCustomers = useMemo(() => {
@@ -127,13 +93,10 @@ export default function CartPage() {
 
         setOrderError(null);
         try {
-            const response = await fetch(`${API_BASE_URL}/_api/orders`, {
+            await apiFetch("/orders", {
                 method: "POST",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
+                token,
+                body: {
                     customer_id: parseInt(selectedCustomer),
                     order_date: orderDate,
                     payment_type: paymentType,
@@ -144,17 +107,11 @@ export default function CartPage() {
                         unit_type: item.unit,
                         unit_price: String(item.customPrice ?? item.price),
                     })),
-                }),
+                },
             });
 
-            if (!response.ok) {
-                const message = await response.text();
-                throw new Error(message || "Failed to create order");
-            }
-
-            if (typeof window !== "undefined") {
-                sessionStorage.setItem("nyk-orders-refresh", "true");
-            }
+            // Invalidate orders cache so it refreshes
+            queryClient.invalidateQueries({ queryKey: ["sp-orders"] });
 
             clearCart();
             setRemark("");

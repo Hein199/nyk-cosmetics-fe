@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -38,36 +39,18 @@ function formatDate(dateString: string) {
 
 export default function PaymentHistoryPage() {
     const { token } = useAuth();
-    const [payments, setPayments] = useState<Payment[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+
+    const { data: payments = [], isLoading: loading, error: queryError } = useQuery({
+        queryKey: ["payments"],
+        queryFn: () => apiFetch<Payment[]>("/payments", { token }),
+        enabled: !!token,
+    });
+    const error = queryError?.message ?? null;
+
     const [searchQuery, setSearchQuery] = useState("");
     const [fromDate, setFromDate] = useState("");
     const [toDate, setToDate] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
-
-    const fetchPayments = useCallback(async (signal?: AbortSignal) => {
-        if (!token) return;
-        setLoading(true);
-        setError(null);
-        try {
-            const data = await apiFetch<Payment[]>("/payments", { token, signal });
-            setPayments(data);
-        } catch (err) {
-            if (err instanceof Error && err.name === "AbortError") return;
-            setError(
-                err instanceof Error ? err.message : "Failed to load payments"
-            );
-        } finally {
-            setLoading(false);
-        }
-    }, [token]);
-
-    useEffect(() => {
-        const controller = new AbortController();
-        fetchPayments(controller.signal);
-        return () => controller.abort();
-    }, [fetchPayments]);
 
     const filteredPayments = useMemo(() => {
         return payments.filter((p) => {
