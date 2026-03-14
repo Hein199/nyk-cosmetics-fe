@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -108,10 +108,7 @@ export default function OrdersPage() {
 
     useEffect(() => {
         if (!token) return;
-        fetch(`${API_BASE_URL}/_api/settings`, {
-            headers: { Authorization: `Bearer ${token}` },
-        })
-            .then((r) => (r.ok ? r.json() : null))
+        apiFetch<{ system_name?: string; system_logo?: string }>("/settings", { token })
             .then((data) => {
                 if (data?.system_name) setSystemName(data.system_name);
                 if (data?.system_logo) setSystemLogo(data.system_logo);
