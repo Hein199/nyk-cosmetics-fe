@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -103,6 +103,18 @@ export default function OrdersPage() {
     const [editedItems, setEditedItems] = useState<Record<number, { quantity: number; unit_price: number }>>({});
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
+    const [systemName, setSystemName] = useState("NYK Cosmetics");
+    const [systemLogo, setSystemLogo] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!token) return;
+        apiFetch<{ system_name?: string; system_logo?: string }>("/settings", { token })
+            .then((data) => {
+                if (data?.system_name) setSystemName(data.system_name);
+                if (data?.system_logo) setSystemLogo(data.system_logo);
+            })
+            .catch(() => {});
+    }, [token]);
 
     const dateRangeKey = useMemo(() => `nyk-orders-date-range:${user?.id ?? "anon"}`, [user?.id]);
 
@@ -647,14 +659,18 @@ export default function OrdersPage() {
                     <DialogHeader>
                         <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-4">
-                                {/* NYK Cosmetics Logo */}
+                                {/* System Branding Logo */}
                                 <div className="flex items-center space-x-3">
-                                    <div className="w-16 h-16 bg-gradient-to-br from-pink-500 to-rose-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">
-                                        NYK
+                                    <div className="w-16 h-16 bg-gradient-to-br from-pink-500 to-rose-600 rounded-lg flex items-center justify-center text-white font-bold text-xl overflow-hidden">
+                                        {systemLogo ? (
+                                            <img src={systemLogo} alt="Logo" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <span>{systemName.charAt(0)}</span>
+                                        )}
                                     </div>
                                     <div>
-                                        <h2 className="text-2xl font-bold text-gray-900">NYK Cosmetics</h2>
-                                        <p className="text-base text-gray-600">Beauty & Cosmetics</p>
+                                        <h2 className="text-2xl font-bold text-gray-900">{systemName}</h2>
+                                        <p className="text-base text-gray-600">Beauty &amp; Cosmetics</p>
                                     </div>
                                 </div>
                             </div>
