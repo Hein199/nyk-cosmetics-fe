@@ -39,7 +39,7 @@ export default function LoginPage() {
                 if (data?.system_name) setSystemName(data.system_name);
                 if (data?.system_logo) setSystemLogo(data.system_logo);
             })
-            .catch(() => {});
+            .catch(() => { });
     }, []);
 
     useEffect(() => {
@@ -200,15 +200,15 @@ export default function LoginPage() {
                                         e.currentTarget.style.border = "1.5px solid rgba(212,175,55,0.7)";
                                         e.currentTarget.style.boxShadow = "0 0 0 3px rgba(212,175,55,0.10)";
                                     }}
-                                    onBlur={(e) => {
-                                        e.currentTarget.style.border = errors.username
-                                            ? "1.5px solid rgba(220,80,100,0.5)"
-                                            : "1.5px solid rgba(212,175,55,0.25)";
-                                        e.currentTarget.style.boxShadow = "0 1px 4px rgba(212,175,55,0.07)";
-                                    }}
                                     {...register("username", {
                                         required: "Username is required",
                                         minLength: { value: 3, message: "Min 3 characters" },
+                                        onBlur: (e) => {
+                                            e.currentTarget.style.border = errors.username
+                                                ? "1.5px solid rgba(220,80,100,0.5)"
+                                                : "1.5px solid rgba(212,175,55,0.25)";
+                                            e.currentTarget.style.boxShadow = "0 1px 4px rgba(212,175,55,0.07)";
+                                        },
                                     })}
                                 />
                             </div>
@@ -253,15 +253,15 @@ export default function LoginPage() {
                                         e.currentTarget.style.border = "1.5px solid rgba(212,175,55,0.7)";
                                         e.currentTarget.style.boxShadow = "0 0 0 3px rgba(212,175,55,0.10)";
                                     }}
-                                    onBlur={(e) => {
-                                        e.currentTarget.style.border = errors.password
-                                            ? "1.5px solid rgba(220,80,100,0.5)"
-                                            : "1.5px solid rgba(212,175,55,0.25)";
-                                        e.currentTarget.style.boxShadow = "0 1px 4px rgba(212,175,55,0.07)";
-                                    }}
                                     {...register("password", {
                                         required: "Password is required",
                                         minLength: { value: 6, message: "Min 6 characters" },
+                                        onBlur: (e) => {
+                                            e.currentTarget.style.border = errors.password
+                                                ? "1.5px solid rgba(220,80,100,0.5)"
+                                                : "1.5px solid rgba(212,175,55,0.25)";
+                                            e.currentTarget.style.boxShadow = "0 1px 4px rgba(212,175,55,0.07)";
+                                        },
                                     })}
                                 />
                                 <button
