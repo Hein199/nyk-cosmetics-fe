@@ -42,16 +42,12 @@ export default function ProductDetailPage() {
     const router = useRouter();
     const { addToCart, cart } = useCart();
     const { token } = useAuth();
-    const [product, setProduct] = useState<Product | null>(null);
+    const canFetchProduct = !!token && !!params.id;
 
-    const { isLoading: loading, error: queryError } = useQuery({
+    const { data: product = null, isLoading: loading, error: queryError } = useQuery({
         queryKey: ["sp-product", params.id],
-        queryFn: async () => {
-            const data = await apiFetch<Product>(`/products/${params.id}`, { token });
-            setProduct(data);
-            return data;
-        },
-        enabled: !!token && !!params.id,
+        queryFn: () => apiFetch<Product>(`/products/${params.id}`, { token }),
+        enabled: canFetchProduct,
     });
 
     const [quantity, setQuantity] = useState(1);
@@ -159,7 +155,7 @@ export default function ProductDetailPage() {
         }, 650);
     };
 
-    if (loading) {
+    if (!canFetchProduct || loading) {
         return (
             <div className="min-h-screen bg-[#FFCDC9] p-6">
                 <div className="max-w-3xl mx-auto">

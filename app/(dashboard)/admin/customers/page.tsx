@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogClose, DialogContent, DialogHeader } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 
@@ -26,6 +27,24 @@ type CustomerOrder = {
     total_amount: number;
     paid_amount: number;
     remaining_amount: number;
+};
+
+type CustomerOrderDetail = {
+    id: number;
+    created_at: string;
+    status: string;
+    total_amount: string | number;
+    payment_type?: string | null;
+    remark?: string | null;
+    customer: { name: string; phone_number: string; address: string };
+    items: Array<{
+        id: number;
+        quantity: number;
+        unit_type: string;
+        unit_price: string | number;
+        product?: { name: string; category?: string | null } | null;
+    }>;
+    salesperson?: { id: number; username: string } | null;
 };
 
 type CustomerForm = {
@@ -52,6 +71,15 @@ const outstandingColor = (n: number) =>
 
 const statusBadge = (status: string) =>
     status === "ACTIVE" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500";
+
+const orderStatusLabel = (status: string) =>
+    status.toLowerCase() === "pending_admin" ? "pending" : status.toLowerCase().replace("_", " ");
+
+const unitTypeLabel = (unit: string) => {
+    if (unit === "D") return "Dozen";
+    if (unit === "P") return "Box";
+    return "Pcs";
+};
 
 // ─── Customer Modal (Add & Edit) ──────────────────────────────────────────────
 
@@ -204,6 +232,10 @@ export default function CustomersPage() {
     const [notesSaved, setNotesSaved] = useState(false);
     const [customerOrders, setCustomerOrders] = useState<CustomerOrder[]>([]);
     const [ordersLoading, setOrdersLoading] = useState(false);
+    const [orderDialogOpen, setOrderDialogOpen] = useState(false);
+    const [orderDetailsLoading, setOrderDetailsLoading] = useState(false);
+    const [orderDetailsError, setOrderDetailsError] = useState<string | null>(null);
+    const [selectedOrderDetails, setSelectedOrderDetails] = useState<CustomerOrderDetail | null>(null);
 
     const filtered = customers.filter((c) => {
         const q = search.toLowerCase();
@@ -221,6 +253,9 @@ export default function CustomersPage() {
     useEffect(() => {
         if (!selectedCustomer) {
             setCustomerOrders([]);
+            setOrderDialogOpen(false);
+            setOrderDetailsError(null);
+            setSelectedOrderDetails(null);
             return;
         }
         setNotes(selectedCustomer.notes ?? "");
@@ -233,6 +268,26 @@ export default function CustomersPage() {
             .finally(() => { if (!cancelled) setOrdersLoading(false); });
         return () => { cancelled = true; };
     }, [selectedCustomer, token]);
+
+    const handleViewOrderDetails = async (orderId: number) => {
+        if (!token) {
+            return;
+        }
+
+        setOrderDialogOpen(true);
+        setOrderDetailsLoading(true);
+        setOrderDetailsError(null);
+        setSelectedOrderDetails(null);
+
+        try {
+            const data = await apiFetch<CustomerOrderDetail>(`/orders/${orderId}`, { token });
+            setSelectedOrderDetails(data);
+        } catch (error) {
+            setOrderDetailsError(error instanceof Error ? error.message : "Failed to load order details");
+        } finally {
+            setOrderDetailsLoading(false);
+        }
+    };
 
     // ── Customer Profile View ─────────────────────────────────────────────────
     if (selectedCustomer) {
@@ -378,7 +433,7 @@ export default function CustomersPage() {
                                             {fmt(o.remaining_amount)}
                                         </td>
                                         <td className="py-2.5 px-4 border-l border-gray-200 text-center">
-                                            <Button size="sm" variant="outline">
+                                            <Button size="sm" variant="outline" onClick={() => handleViewOrderDetails(o.id)}>
                                                 View
                                             </Button>
                                         </td>
@@ -388,6 +443,94 @@ export default function CustomersPage() {
                         </tbody>
                     </table>
                 </div>
+
+                <Dialog open={orderDialogOpen} onOpenChange={setOrderDialogOpen}>
+                    <DialogContent className="relative max-w-4xl max-h-[90vh] overflow-y-auto">
+                        <DialogHeader>
+                            <div className="flex items-center justify-between pr-8">
+                                <h3 className="text-lg font-semibold text-gray-900">Order Details</h3>
+                            </div>
+                            <DialogClose onClick={() => setOrderDialogOpen(false)} className="text-gray-500 hover:text-gray-700">
+                                ✕
+                            </DialogClose>
+                        </DialogHeader>
+
+                        <div className="p-6 space-y-4">
+                            {orderDetailsLoading && (
+                                <p className="text-sm text-gray-500">Loading order details...</p>
+                            )}
+
+                            {orderDetailsError && (
+                                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                                    {orderDetailsError}
+                                </p>
+                            )}
+
+                            {selectedOrderDetails && (
+                                <>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                                        <div className="rounded-md border border-gray-200 p-3 bg-gray-50">
+                                            <p className="text-xs text-gray-500 mb-1">Order ID</p>
+                                            <p className="font-semibold text-gray-900">OR-{selectedOrderDetails.id}</p>
+                                        </div>
+                                        <div className="rounded-md border border-gray-200 p-3 bg-gray-50">
+                                            <p className="text-xs text-gray-500 mb-1">Status</p>
+                                            <p className="font-semibold text-gray-900 capitalize">{orderStatusLabel(selectedOrderDetails.status)}</p>
+                                        </div>
+                                        <div className="rounded-md border border-gray-200 p-3 bg-gray-50">
+                                            <p className="text-xs text-gray-500 mb-1">Date</p>
+                                            <p className="font-semibold text-gray-900">
+                                                {new Date(selectedOrderDetails.created_at).toLocaleDateString()}
+                                            </p>
+                                        </div>
+                                        <div className="rounded-md border border-gray-200 p-3 bg-gray-50">
+                                            <p className="text-xs text-gray-500 mb-1">Total Amount</p>
+                                            <p className="font-semibold text-gray-900">{fmt(Number(selectedOrderDetails.total_amount))}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="rounded-md border border-gray-200 overflow-hidden">
+                                        <table className="w-full text-sm">
+                                            <thead>
+                                                <tr>
+                                                    {["Product", "Qty", "Unit", "Unit Price", "Line Total"].map((header, index) => (
+                                                        <th
+                                                            key={header}
+                                                            className={`py-2.5 px-3 text-sm font-medium text-white bg-blue-600 ${index !== 0 ? "border-l border-blue-500/40" : ""} text-left`}
+                                                        >
+                                                            {header}
+                                                        </th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {selectedOrderDetails.items.map((item) => {
+                                                    const lineTotal = Number(item.unit_price) * item.quantity;
+                                                    return (
+                                                        <tr key={item.id} className="border-b border-gray-100">
+                                                            <td className="py-2.5 px-3 text-gray-900">{item.product?.name ?? "-"}</td>
+                                                            <td className="py-2.5 px-3 text-gray-700 border-l border-gray-200">{item.quantity}</td>
+                                                            <td className="py-2.5 px-3 text-gray-700 border-l border-gray-200">{unitTypeLabel(item.unit_type)}</td>
+                                                            <td className="py-2.5 px-3 text-gray-700 border-l border-gray-200">{fmt(Number(item.unit_price))}</td>
+                                                            <td className="py-2.5 px-3 text-gray-900 border-l border-gray-200 font-medium">{fmt(lineTotal)}</td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    {selectedOrderDetails.remark && (
+                                        <div className="rounded-md border border-gray-200 p-3 bg-gray-50">
+                                            <p className="text-xs text-gray-500 mb-1">Remark</p>
+                                            <p className="text-sm text-gray-800">{selectedOrderDetails.remark}</p>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    </DialogContent>
+                </Dialog>
 
                 {editingCustomer && (
                     <CustomerModal
