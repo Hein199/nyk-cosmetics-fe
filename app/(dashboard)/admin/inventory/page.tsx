@@ -44,7 +44,11 @@ const emptyForm = {
     category: "",
     unit_price: "",
     stockQuantity: "",
-    stockUnit: "PCS" as "PCS" | "BOX",
+    stockUnit: "PCS" as "PCS" | "DOZEN" | "BOX",
+    adjustQuantity: "",
+    adjustAction: "increase" as "increase" | "decrease",
+    adjustUnit: "PCS" as "PCS" | "DOZEN" | "BOX",
+    currentStockViewUnit: "PCS" as "PCS" | "DOZEN" | "BOX",
     pcs_per_dozen: "12",
     pcs_per_box: "24",
     photo_url: "",
@@ -186,6 +190,23 @@ export default function AdminInventoryPage() {
         });
     }, [products, searchQuery, categoryFilter]);
 
+    function convertToPcs(quantity: number, unit: "PCS" | "DOZEN" | "BOX", pcsPerDozen: number, pcsPerBox: number) {
+        if (unit === "DOZEN") return Math.round(quantity * pcsPerDozen);
+        if (unit === "BOX") return Math.round(quantity * pcsPerBox);
+        return Math.round(quantity);
+    }
+
+    function convertFromPcs(quantityInPcs: number, unit: "PCS" | "DOZEN" | "BOX", pcsPerDozen: number, pcsPerBox: number) {
+        if (unit === "DOZEN") return quantityInPcs / Math.max(pcsPerDozen, 1);
+        if (unit === "BOX") return quantityInPcs / Math.max(pcsPerBox, 1);
+        return quantityInPcs;
+    }
+
+    function formatStockValue(value: number) {
+        if (Number.isInteger(value)) return String(value);
+        return value.toFixed(2).replace(/\.?0+$/, "");
+    }
+
     function openCreate() {
         setEditingProduct(null);
         const defaultCategory = categories[0]?.name ?? "";
@@ -203,6 +224,10 @@ export default function AdminInventoryPage() {
             unit_price: String(product.unit_price),
             stockQuantity: String(product.inventory?.quantity ?? 0),
             stockUnit: "PCS",
+            adjustQuantity: "",
+            adjustAction: "increase",
+            adjustUnit: "PCS",
+            currentStockViewUnit: "PCS",
             pcs_per_dozen: String(product.pcs_per_dozen),
             pcs_per_box: String(product.pcs_per_box),
             photo_url: product.photo_url,
@@ -218,6 +243,10 @@ export default function AdminInventoryPage() {
             setSaveError("Name and unit price are required.");
             return;
         }
+
+        const pcsPerDozen = Number(form.pcs_per_dozen || 12);
+        const pcsPerBox = Number(form.pcs_per_box || 24);
+
         setSaving(true);
         setSaveError(null);
         try {
@@ -235,8 +264,33 @@ export default function AdminInventoryPage() {
                 is_active: form.is_active,
             };
 
-            // Include stock info
-            if (form.stockQuantity) {
+            if (editingProduct) {
+                const currentStock = Number(form.stockQuantity || 0);
+                const adjustQty = Number(form.adjustQuantity || 0);
+
+                if (form.adjustQuantity) {
+                    if (Number.isNaN(adjustQty) || adjustQty <= 0) {
+                        setSaveError("Adjust quantity must be greater than 0.");
+                        setSaving(false);
+                        return;
+                    }
+
+                    const deltaPcs = convertToPcs(adjustQty, form.adjustUnit, pcsPerDozen, pcsPerBox);
+                    const signedDelta = form.adjustAction === "increase" ? deltaPcs : -deltaPcs;
+                    const nextStock = currentStock + signedDelta;
+
+                    if (nextStock < 0) {
+                        setSaveError("Adjustment would make stock negative.");
+                        setSaving(false);
+                        return;
+                    }
+
+                    body.stockQuantity = String(nextStock);
+                    body.stockUnit = "PCS";
+                    body.stockEvent = "adjustment";
+                    body.stockSource = "Admin";
+                }
+            } else if (form.stockQuantity) {
                 body.stockQuantity = form.stockQuantity;
                 body.stockUnit = form.stockUnit;
             }
@@ -244,6 +298,7 @@ export default function AdminInventoryPage() {
             await apiFetch(path, { method, token, body });
             setDialogOpen(false);
             queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+            queryClient.invalidateQueries({ queryKey: ["stock-history"] });
         } catch (err) {
             setSaveError(err instanceof Error ? err.message : "Failed to save product");
         } finally {
@@ -435,38 +490,51 @@ export default function AdminInventoryPage() {
                     </div>
                     <div className="px-4 pb-6 sm:px-6">
                         {historyLoading ? (
-                            <p className="text-gray-400 text-sm">Loading history…</p>
+                            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-6 text-sm text-gray-500 text-center">
+                                Loading history...
+                            </div>
                         ) : historyError ? (
-                            <p className="text-red-500 text-sm">{(historyError as Error).message}</p>
+                            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                {(historyError as Error).message}
+                            </div>
                         ) : filteredHistory.length === 0 ? (
-                            <p className="text-gray-400 text-sm text-center py-8">No stock changes recorded yet.</p>
+                            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-6 text-sm text-gray-500 text-center">
+                                No stock changes recorded yet.
+                            </div>
                         ) : (
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full text-left text-sm">
-                                    <thead>
-                                        <tr className="text-xs uppercase tracking-wide text-gray-500">
-                                            <th className="py-2 pr-4">Date</th>
-                                            <th className="py-2 pr-4">Product</th>
-                                            <th className="py-2 pr-4">Event</th>
-                                            <th className="py-2 pr-4">Change</th>
-                                            <th className="py-2 pr-4">Inventory After</th>
-                                            <th className="py-2 pr-4">Source</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100">
-                                        {filteredHistory.map((entry) => {
+                            <div className="border-2 border-gray-300 rounded-lg overflow-hidden shadow-sm bg-white">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full border-collapse text-sm">
+                                        <thead className="bg-blue-600 text-white">
+                                            <tr className="divide-x divide-blue-500/40">
+                                                <th className="text-left py-3 px-4 text-sm font-medium">Date</th>
+                                                <th className="text-left py-3 px-4 text-sm font-medium">Product</th>
+                                                <th className="text-center py-3 px-4 text-sm font-medium">Event</th>
+                                                <th className="text-right py-3 px-4 text-sm font-medium">Change</th>
+                                                <th className="text-right py-3 px-4 text-sm font-medium">Inventory After</th>
+                                                <th className="text-left py-3 px-4 text-sm font-medium">Source</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                        {filteredHistory.map((entry, index) => {
                                             const change = entry.change_quantity;
                                             const badgeClass = entry.event === "order"
-                                                ? "bg-red-50 text-red-700"
+                                                ? "bg-red-50 text-red-700 border-red-200"
                                                 : entry.event === "restock"
-                                                    ? "bg-green-50 text-green-700"
+                                                    ? "bg-green-50 text-green-700 border-green-200"
                                                     : entry.event === "return"
-                                                        ? "bg-blue-50 text-blue-700"
-                                                        : "bg-amber-50 text-amber-700";
+                                                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                                                        : "bg-amber-50 text-amber-700 border-amber-200";
 
                                             return (
-                                                <tr key={entry.id} className="text-gray-800">
-                                                    <td className="py-3 pr-4 whitespace-nowrap text-xs sm:text-sm text-gray-600">
+                                                <tr
+                                                    key={entry.id}
+                                                    className={`border-b border-gray-200 divide-x divide-gray-200 ${index % 2 === 0
+                                                        ? "bg-blue-50 hover:bg-blue-100"
+                                                        : "bg-white hover:bg-gray-50"
+                                                        }`}
+                                                >
+                                                    <td className="py-3 px-4 whitespace-nowrap text-xs sm:text-sm text-gray-600">
                                                         {new Date(entry.created_at).toLocaleString("en-MM", {
                                                             year: "numeric",
                                                             month: "short",
@@ -475,7 +543,7 @@ export default function AdminInventoryPage() {
                                                             minute: "2-digit",
                                                         })}
                                                     </td>
-                                                    <td className="py-3 pr-4 min-w-[200px]">
+                                                    <td className="py-3 px-4 min-w-[220px]">
                                                         <div className="flex items-center gap-3">
                                                             <div className="w-10 h-10 rounded-md bg-gray-100 overflow-hidden flex-shrink-0">
                                                                 <img
@@ -491,25 +559,30 @@ export default function AdminInventoryPage() {
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td className="py-3 pr-4 whitespace-nowrap">
-                                                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${badgeClass}`}>
+                                                    <td className="py-3 px-4 whitespace-nowrap text-center">
+                                                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold border ${badgeClass}`}>
                                                             {entry.event.charAt(0).toUpperCase() + entry.event.slice(1)}
                                                         </span>
                                                     </td>
-                                                    <td className={`py-3 pr-4 whitespace-nowrap font-semibold ${change >= 0 ? "text-green-700" : "text-red-700"}`}>
+                                                    <td className={`py-3 px-4 whitespace-nowrap font-semibold text-right ${change >= 0 ? "text-green-700" : "text-red-700"}`}>
                                                         {change > 0 ? `+${change}` : change}
                                                     </td>
-                                                    <td className="py-3 pr-4 whitespace-nowrap text-gray-800 font-medium">
+                                                    <td className="py-3 px-4 whitespace-nowrap text-gray-800 font-medium text-right">
                                                         {entry.inventory_after}
                                                     </td>
-                                                    <td className="py-3 pr-4 text-gray-600 text-xs sm:text-sm whitespace-nowrap">
-                                                        {entry.source || "—"}
+                                                    <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm whitespace-nowrap">
+                                                        {entry.source ? (
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-700">
+                                                                {entry.source}
+                                                            </span>
+                                                        ) : "—"}
                                                     </td>
                                                 </tr>
                                             );
                                         })}
-                                    </tbody>
-                                </table>
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -670,37 +743,101 @@ export default function AdminInventoryPage() {
                                 />
                             </div>
 
-                            {/* Stock Quantity + Unit */}
-                            <div>
-                                <label className="text-sm font-medium text-gray-700 block mb-1">
-                                    {editingProduct ? "Stock Quantity" : "Opening Stock"}
-                                </label>
-                                <div className="flex gap-2">
-                                    <Input
-                                        type="number"
-                                        min={0}
-                                        className="flex-1"
-                                        value={form.stockQuantity}
-                                        onChange={(e) => setForm((f) => ({ ...f, stockQuantity: e.target.value }))}
-                                        placeholder="e.g. 100"
-                                        disabled={saving}
-                                    />
-                                    <select
-                                        className="w-24 border border-gray-200 rounded-md px-3 py-2 text-sm bg-white text-black"
-                                        value={form.stockUnit}
-                                        onChange={(e) => setForm((f) => ({ ...f, stockUnit: e.target.value as "PCS" | "BOX" }))}
-                                        disabled={saving}
-                                    >
-                                        <option value="PCS">PCS</option>
-                                        <option value="BOX">BOX</option>
-                                    </select>
+                            {/* Stock */}
+                            {editingProduct ? (
+                                <>
+                                    <div>
+                                        <label className="text-sm font-medium text-gray-700 block mb-1">Current Stock</label>
+                                        <div className="flex gap-2">
+                                            <Input
+                                                className="flex-1 bg-gray-50"
+                                                value={formatStockValue(
+                                                    convertFromPcs(
+                                                        Number(form.stockQuantity || 0),
+                                                        form.currentStockViewUnit,
+                                                        Number(form.pcs_per_dozen || 12),
+                                                        Number(form.pcs_per_box || 24),
+                                                    ),
+                                                )}
+                                                readOnly
+                                                disabled
+                                            />
+                                            <select
+                                                className="w-28 border border-gray-200 rounded-md px-3 py-2 text-sm bg-white text-black"
+                                                value={form.currentStockViewUnit}
+                                                onChange={(e) => setForm((f) => ({ ...f, currentStockViewUnit: e.target.value as "PCS" | "DOZEN" | "BOX" }))}
+                                                disabled={saving}
+                                            >
+                                                <option value="PCS">PCS</option>
+                                                <option value="DOZEN">Dozen</option>
+                                                <option value="BOX">Box</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-sm font-medium text-gray-700 block mb-1">Adjust Stock</label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                            <Input
+                                                type="number"
+                                                min={0}
+                                                value={form.adjustQuantity}
+                                                onChange={(e) => setForm((f) => ({ ...f, adjustQuantity: e.target.value }))}
+                                                placeholder="Quantity"
+                                                disabled={saving}
+                                            />
+                                            <select
+                                                className="border border-gray-200 rounded-md px-3 py-2 text-sm bg-white text-black"
+                                                value={form.adjustAction}
+                                                onChange={(e) => setForm((f) => ({ ...f, adjustAction: e.target.value as "increase" | "decrease" }))}
+                                                disabled={saving}
+                                            >
+                                                <option value="increase">Increase</option>
+                                                <option value="decrease">Decrease</option>
+                                            </select>
+                                            <select
+                                                className="border border-gray-200 rounded-md px-3 py-2 text-sm bg-white text-black"
+                                                value={form.adjustUnit}
+                                                onChange={(e) => setForm((f) => ({ ...f, adjustUnit: e.target.value as "PCS" | "DOZEN" | "BOX" }))}
+                                                disabled={saving}
+                                            >
+                                                <option value="PCS">PCS</option>
+                                                <option value="DOZEN">Dozen</option>
+                                                <option value="BOX">Box</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <div>
+                                    <label className="text-sm font-medium text-gray-700 block mb-1">Opening Stock</label>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            type="number"
+                                            min={0}
+                                            className="flex-1"
+                                            value={form.stockQuantity}
+                                            onChange={(e) => setForm((f) => ({ ...f, stockQuantity: e.target.value }))}
+                                            placeholder="e.g. 100"
+                                            disabled={saving}
+                                        />
+                                        <select
+                                            className="w-24 border border-gray-200 rounded-md px-3 py-2 text-sm bg-white text-black"
+                                            value={form.stockUnit}
+                                            onChange={(e) => setForm((f) => ({ ...f, stockUnit: e.target.value as "PCS" | "DOZEN" | "BOX" }))}
+                                            disabled={saving}
+                                        >
+                                            <option value="PCS">PCS</option>
+                                            <option value="BOX">BOX</option>
+                                        </select>
+                                    </div>
+                                    {form.stockUnit === "BOX" && form.stockQuantity && (
+                                        <p className="text-xs text-gray-400 mt-1">
+                                            = {Math.round(Number(form.stockQuantity) * Number(form.pcs_per_box || 24))} PCS
+                                        </p>
+                                    )}
                                 </div>
-                                {form.stockUnit === "BOX" && form.stockQuantity && (
-                                    <p className="text-xs text-gray-400 mt-1">
-                                        = {Math.round(Number(form.stockQuantity) * Number(form.pcs_per_box || 24))} PCS
-                                    </p>
-                                )}
-                            </div>
+                            )}
 
                             {/* Dozen / Box */}
                             <div className="grid grid-cols-2 gap-3">

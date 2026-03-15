@@ -210,6 +210,7 @@ export default function AdminPurchasePage() {
 
             queryClient.invalidateQueries({ queryKey: ["purchase-products"] });
             queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+            queryClient.invalidateQueries({ queryKey: ["stock-history"] });
             queryClient.invalidateQueries({ queryKey: ["expenses"] });
             queryClient.invalidateQueries({ queryKey: ["ledger"] });
         },
