@@ -672,7 +672,9 @@ export default function AdminInventoryPage() {
 
                             {/* Stock Quantity + Unit */}
                             <div>
-                                <label className="text-sm font-medium text-gray-700 block mb-1">Stock Quantity</label>
+                                <label className="text-sm font-medium text-gray-700 block mb-1">
+                                    {editingProduct ? "Stock Quantity" : "Opening Stock"}
+                                </label>
                                 <div className="flex gap-2">
                                     <Input
                                         type="number"
