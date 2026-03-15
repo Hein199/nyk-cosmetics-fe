@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -93,7 +93,6 @@ function toDateKey(dateString: string) {
 export default function SalespersonPage() {
     const router = useRouter();
     const { token, user } = useAuth();
-    const queryClient = useQueryClient();
 
     // Date range selection state
     const [fromDate, setFromDate] = useState("2025-12-01");
@@ -218,8 +217,8 @@ export default function SalespersonPage() {
     // Helper function to set preset date ranges quickly
     const setPresetRange = (type: string) => {
         const todayStr = thaiToday();
-        // Bangkok today midnight as a UTC Date for reliable day-of-week arithmetic
-        const todayBkk = new Date(`${todayStr}T00:00:00+07:00`);
+        const todayLocal = new Date();
+        todayLocal.setHours(0, 0, 0, 0);
 
         switch (type) {
             case 'today':
@@ -233,8 +232,8 @@ export default function SalespersonPage() {
                 break;
             }
             case 'thisWeek': {
-                // Sunday = day 0; getUTCDay() is correct since todayBkk is Bangkok midnight in UTC
-                setFromDate(thaiOffsetDay(-todayBkk.getUTCDay()));
+                // Sunday = day 0 in local timezone.
+                setFromDate(thaiOffsetDay(-todayLocal.getDay()));
                 setToDate(todayStr);
                 break;
             }
@@ -281,28 +280,6 @@ export default function SalespersonPage() {
                     )}
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">
-                    <Button
-                        size="lg"
-                        variant="outline"
-                        onClick={() => queryClient.invalidateQueries({ queryKey: ["sp-orders"] })}
-                        aria-label="Refresh"
-                        title="Refresh"
-                        className="h-11 w-11 p-0"
-                    >
-                        <svg
-                            aria-hidden="true"
-                            viewBox="0 0 24 24"
-                            className="h-5 w-5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                        >
-                            <path d="M21 12a9 9 0 1 1-3-6.7" />
-                            <path d="M21 3v6h-6" />
-                        </svg>
-                    </Button>
                     <Button
                         size="sm"
                         className="bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-sm"

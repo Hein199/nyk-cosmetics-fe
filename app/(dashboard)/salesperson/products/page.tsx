@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,7 +46,6 @@ function formatCategory(category: string) {
 
 export default function ProductsPage() {
     const { token } = useAuth();
-    const queryClient = useQueryClient();
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("all");
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
@@ -138,31 +137,6 @@ export default function ProductsPage() {
                         <p className="text-gray-600 mt-1">Select products and customer to add to cart</p>
                     </div>
                     <div className="flex items-center gap-4">
-                        <Button
-                            size="lg"
-                            variant="outline"
-                            onClick={() => {
-                                queryClient.invalidateQueries({ queryKey: ["sp-products"] });
-                                queryClient.invalidateQueries({ queryKey: ["sp-customers"] });
-                            }}
-                            aria-label="Refresh"
-                            title="Refresh"
-                            className="h-11 w-11 p-0"
-                        >
-                            <svg
-                                aria-hidden="true"
-                                viewBox="0 0 24 24"
-                                className="h-5 w-5"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                            >
-                                <path d="M21 12a9 9 0 1 1-3-6.7" />
-                                <path d="M21 3v6h-6" />
-                            </svg>
-                        </Button>
                         {cart.length > 0 && (
                             <div className="text-right">
                                 <div className="text-sm text-gray-600">

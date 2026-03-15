@@ -18,6 +18,7 @@ import {
     DialogHeader,
     DialogClose,
 } from "@/components/ui/dialog";
+import { SystemLogo } from "@/components/ui/system-logo";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import { formatId, thaiToday, formatThaiDate, toBangkokDateStr } from "@/lib/utils";
@@ -91,6 +92,14 @@ function formatStatusLabel(status: string) {
         return "pending";
     }
     return normalized.replace("_", " ");
+}
+
+function formatOrderTime(dateString: string) {
+    return new Date(dateString).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+    });
 }
 
 export default function OrdersPage() {
@@ -215,7 +224,6 @@ export default function OrdersPage() {
             setOrderDetails(updated);
             setIsEditMode(false);
             setEditedItems({});
-            queryClient.invalidateQueries({ queryKey: ["sp-orders"] });
         } catch (error) {
             const message = error instanceof Error ? error.message : "Failed to save changes";
             setSaveError(message);
@@ -274,28 +282,6 @@ export default function OrdersPage() {
                     )}
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">
-                    <Button
-                        size="lg"
-                        variant="outline"
-                        onClick={() => queryClient.invalidateQueries({ queryKey: ["sp-orders"] })}
-                        aria-label="Refresh"
-                        title="Refresh"
-                        className="h-11 w-11 p-0"
-                    >
-                        <svg
-                            aria-hidden="true"
-                            viewBox="0 0 24 24"
-                            className="h-5 w-5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                        >
-                            <path d="M21 12a9 9 0 1 1-3-6.7" />
-                            <path d="M21 3v6h-6" />
-                        </svg>
-                    </Button>
                     <Button
                         size="sm"
                         className="bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-sm"
@@ -430,7 +416,7 @@ export default function OrdersPage() {
                                         <div>
                                             <p className="text-gray-500">{formatDate(order.created_at)}</p>
                                             <p className="text-gray-500">
-                                                {new Date(order.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                                {formatOrderTime(order.created_at)}
                                             </p>
                                         </div>
                                         <span className="font-semibold text-gray-900 text-lg">
@@ -534,7 +520,7 @@ export default function OrdersPage() {
                                                     {formatDate(order.created_at)}
                                                 </td>
                                                 <td className="py-3 px-4 text-center font-medium text-gray-900 border-r border-gray-300">
-                                                    {new Date(order.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                                    {formatOrderTime(order.created_at)}
                                                 </td>
                                                 <td className="py-3 px-4 text-center font-bold text-gray-900 border-r border-gray-300">
                                                     {formatCurrency(Number(order.total_amount))}
@@ -595,16 +581,13 @@ export default function OrdersPage() {
                     <DialogHeader>
                         <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-4">
-                                {/* NYK Cosmetics Logo */}
-                                <div className="flex items-center space-x-3">
-                                    <div className="w-16 h-16 bg-gradient-to-br from-pink-500 to-rose-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">
-                                        NYK
-                                    </div>
-                                    <div>
-                                        <h2 className="text-2xl font-bold text-gray-900">NYK Cosmetics</h2>
-                                        <p className="text-base text-gray-600">Beauty & Cosmetics</p>
-                                    </div>
-                                </div>
+                                <SystemLogo
+                                    size="lg"
+                                    showName
+                                    subtitle="Beauty & Cosmetics"
+                                    nameClassName="text-2xl font-bold text-gray-900"
+                                    subtitleClassName="text-base text-gray-600"
+                                />
                             </div>
                             <DialogClose
                                 onClick={() => setIsDialogOpen(false)}
@@ -644,7 +627,7 @@ export default function OrdersPage() {
                                                 <div className="flex">
                                                     <span className="w-24 text-gray-600">Time:</span>
                                                     <span className="text-gray-900">
-                                                        {new Date(orderDetails.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                                        {formatOrderTime(orderDetails.created_at)}
                                                     </span>
                                                 </div>
                                                 <div className="flex">

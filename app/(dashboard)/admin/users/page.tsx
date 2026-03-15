@@ -167,7 +167,31 @@ export default function UsersPage() {
             setDeleteOpen(false);
             setEditOpen(false);
         } catch (e: unknown) {
-            const msg = e instanceof Error ? e.message : "Delete failed.";
+            const msg = e instanceof Error
+                ? e.message
+                : selectedUser.role === "SALESPERSON"
+                    ? "Deactivate failed."
+                    : "Delete failed.";
+            setFormError(msg);
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    async function handleActivateSalesperson() {
+        if (!selectedUser || selectedUser.role !== "SALESPERSON") return;
+        setSubmitting(true);
+        setFormError("");
+        try {
+            await apiFetch(`/users/${selectedUser.id}`, {
+                method: "PATCH",
+                token,
+                body: { is_active: true },
+            });
+            await queryClient.invalidateQueries({ queryKey: ["users"] });
+            setEditOpen(false);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : "Activate failed.";
             setFormError(msg);
         } finally {
             setSubmitting(false);
@@ -324,6 +348,7 @@ export default function UsersPage() {
                                     "ID",
                                     "Username",
                                     "Role",
+                                    "Status",
                                     "Phone",
                                     "Region",
                                     "Actions",
@@ -340,7 +365,7 @@ export default function UsersPage() {
                         <tbody>
                             {filteredUsers.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="py-8 text-center text-gray-400 text-sm">
+                                    <td colSpan={7} className="py-8 text-center text-gray-400 text-sm">
                                         No users found.
                                     </td>
                                 </tr>
@@ -364,6 +389,16 @@ export default function UsersPage() {
                                                     }`}
                                             >
                                                 {u.role === "ADMIN" ? "Admin" : "Salesperson"}
+                                            </span>
+                                        </td>
+                                        <td className="py-3 px-4 text-sm text-gray-600 border-l border-gray-200">
+                                            <span
+                                                className={`px-2 py-0.5 rounded-full text-xs font-semibold ${u.is_active
+                                                    ? "bg-emerald-100 text-emerald-700"
+                                                    : "bg-gray-200 text-gray-700"
+                                                    }`}
+                                            >
+                                                {u.is_active ? "Active" : "Inactive"}
                                             </span>
                                         </td>
                                         <td className="py-3 px-4 text-sm text-gray-600 border-l border-gray-200">
@@ -433,14 +468,27 @@ export default function UsersPage() {
                     <div className="p-6 space-y-4">
                         {formFields(true)}
                         <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
-                            <Button
-                                variant="outline"
-                                className="text-red-600 border-red-200 hover:bg-red-50 w-full sm:w-auto"
-                                onClick={() => setDeleteOpen(true)}
-                                disabled={submitting}
-                            >
-                                Delete User
-                            </Button>
+                            {selectedUser?.role === "SALESPERSON" && !selectedUser.is_active ? (
+                                <Button
+                                    variant="outline"
+                                    className="text-emerald-700 border-emerald-300 hover:bg-emerald-50 w-full sm:w-auto"
+                                    onClick={handleActivateSalesperson}
+                                    disabled={submitting}
+                                >
+                                    {submitting ? "Activating..." : "Activate Salesperson"}
+                                </Button>
+                            ) : (
+                                <Button
+                                    variant="outline"
+                                    className="text-red-600 border-red-200 hover:bg-red-50 w-full sm:w-auto"
+                                    onClick={() => setDeleteOpen(true)}
+                                    disabled={submitting}
+                                >
+                                    {selectedUser?.role === "SALESPERSON"
+                                        ? "Deactivate Salesperson"
+                                        : "Delete User"}
+                                </Button>
+                            )}
                             <Button
                                 onClick={() => handleSubmit(true)}
                                 disabled={submitting}
@@ -458,17 +506,29 @@ export default function UsersPage() {
                 <DialogContent className="max-w-sm">
                     <DialogHeader className="px-6 pt-6">
                         <DialogTitle className="text-gray-900">
-                            Delete User
+                            {selectedUser?.role === "SALESPERSON"
+                                ? "Deactivate Salesperson"
+                                : "Delete User"}
                         </DialogTitle>
                     </DialogHeader>
                     <div className="px-6 pb-6">
-                        <p className="text-sm text-gray-600 mt-2">
-                            Are you sure you want to delete{" "}
-                            <span className="font-semibold">
-                                {selectedUser?.username}
-                            </span>
-                            ? This action cannot be undone.
-                        </p>
+                        {selectedUser?.role === "SALESPERSON" ? (
+                            <p className="text-sm text-gray-600 mt-2">
+                                Are you sure you want to deactivate{" "}
+                                <span className="font-semibold">
+                                    {selectedUser?.username}
+                                </span>
+                                ? The account will be set to inactive and all transaction history will be preserved.
+                            </p>
+                        ) : (
+                            <p className="text-sm text-gray-600 mt-2">
+                                Are you sure you want to delete{" "}
+                                <span className="font-semibold">
+                                    {selectedUser?.username}
+                                </span>
+                                ? This action cannot be undone.
+                            </p>
+                        )}
                         <div className="flex justify-end gap-2 mt-6">
                             <Button
                                 variant="outline"
@@ -481,7 +541,13 @@ export default function UsersPage() {
                                 onClick={handleDelete}
                                 disabled={submitting}
                             >
-                                {submitting ? "Deleting…" : "Yes, Delete"}
+                                {submitting
+                                    ? selectedUser?.role === "SALESPERSON"
+                                        ? "Deactivating…"
+                                        : "Deleting…"
+                                    : selectedUser?.role === "SALESPERSON"
+                                        ? "Yes, Deactivate"
+                                        : "Yes, Delete"}
                             </Button>
                         </div>
                     </div>

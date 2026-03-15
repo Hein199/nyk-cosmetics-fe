@@ -9,37 +9,36 @@ export function formatId(prefix: string, id: number): string {
     return `${prefix}#${String(id).padStart(2, "0")}`;
 }
 
-// ─── Thailand Timezone Helpers ────────────────────────────────────────────────
+// ─── Local Date/Time Helpers ─────────────────────────────────────────────────
 
-export const THAI_TZ = "Asia/Bangkok";
+function toLocalDateInputValue(date: Date): string {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+}
 
-/** Returns today's date string in Asia/Bangkok timezone as YYYY-MM-DD */
+/** Returns today's local date string as YYYY-MM-DD. */
 export function thaiToday(): string {
-    return new Intl.DateTimeFormat("en-CA", { timeZone: THAI_TZ }).format(new Date());
+    return toLocalDateInputValue(new Date());
 }
 
-/**
- * Returns a date string offset by `days` from Bangkok today (YYYY-MM-DD).
- * Thailand has no DST so +7h offset is constant — safe to use ms arithmetic.
- */
+/** Returns a local date string offset by `days` from today (YYYY-MM-DD). */
 export function thaiOffsetDay(days: number): string {
-    const todayBkk = new Date(`${thaiToday()}T00:00:00+07:00`);
-    const target = new Date(todayBkk.getTime() + days * 86_400_000);
-    return new Intl.DateTimeFormat("en-CA", { timeZone: THAI_TZ }).format(target);
+    const target = new Date();
+    target.setHours(0, 0, 0, 0);
+    target.setDate(target.getDate() + days);
+    return toLocalDateInputValue(target);
 }
 
-/** Extracts the YYYY-MM-DD date in Asia/Bangkok timezone from any ISO/UTC date string.
- *  Use this for date-range filter comparisons so UTC 17:00 = Bangkok next day, not same day. */
+/** Extracts local YYYY-MM-DD from any ISO/UTC date string. */
 export function toBangkokDateStr(isoString: string): string {
-    return new Intl.DateTimeFormat("en-CA", { timeZone: THAI_TZ }).format(
-        new Date(isoString)
-    );
+    return toLocalDateInputValue(new Date(isoString));
 }
 
-/** Formats any ISO/date string for display in Asia/Bangkok timezone */
+/** Formats any ISO/date string for display in local timezone. */
 export function formatThaiDate(dateString: string): string {
     return new Date(dateString).toLocaleDateString("en-US", {
-        timeZone: THAI_TZ,
         year: "numeric",
         month: "short",
         day: "numeric",

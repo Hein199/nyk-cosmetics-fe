@@ -417,7 +417,7 @@ export default function SuppliersPage() {
                                         <table className="w-full text-sm">
                                             <thead>
                                                 <tr>
-                                                    {["Product", "Qty", "Unit", "Unit Price", "Line Total"].map((header, index) => (
+                                                    {["Product", "Qty", "Unit", "Unit Price", "Total"].map((header, index) => (
                                                         <th
                                                             key={header}
                                                             className={`py-2.5 px-3 text-sm font-medium text-white bg-blue-600 ${index !== 0 ? "border-l border-blue-500/40" : ""} text-left`}

@@ -13,7 +13,6 @@ type Customer = {
     name: string;
     phone_number: string;
     address: string;
-    status: "ACTIVE" | "INACTIVE";
     outstanding_amount: number;
 };
 
@@ -38,7 +37,6 @@ export default function CustomersPage() {
     const { token } = useAuth();
     const queryClient = useQueryClient();
     const [searchTerm, setSearchTerm] = useState("");
-    const [statusFilter, setStatusFilter] = useState("All");
     const [fetchError, setFetchError] = useState<string | null>(null);
 
     // Add New Customer form state
@@ -85,21 +83,20 @@ export default function CustomersPage() {
 
     const filteredCustomers = useMemo(() => {
         return customers.filter(customer => {
-            const matchesSearch = customer.name.toLowerCase().includes(searchTerm.toLowerCase());
-
-            const matchesStatus = statusFilter === "All" || customer.status === statusFilter;
-
-            return matchesSearch && matchesStatus;
+            const q = searchTerm.toLowerCase();
+            return (
+                customer.name.toLowerCase().includes(q) ||
+                String(customer.id).includes(q) ||
+                customer.phone_number.toLowerCase().includes(q)
+            );
         });
-    }, [customers, searchTerm, statusFilter]);
+    }, [customers, searchTerm]);
 
     const customerStats = useMemo(() => {
         const total = customers.length;
-        const active = customers.filter(c => c.status === "ACTIVE").length;
-        const inactive = customers.filter(c => c.status === "INACTIVE").length;
         const totalOutstanding = customers.reduce((sum, customer) => sum + customer.outstanding_amount, 0);
 
-        return { total, active, inactive, totalOutstanding };
+        return { total, totalOutstanding };
     }, [customers]);
 
     return (
@@ -112,28 +109,6 @@ export default function CustomersPage() {
                         <p className="text-gray-500 mt-1">Manage and view customer information</p>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-2">
-                        <Button
-                            size="md"
-                            variant="outline"
-                            onClick={() => queryClient.invalidateQueries({ queryKey: ["sp-customers"] })}
-                            aria-label="Refresh"
-                            title="Refresh"
-                            className="h-10 w-10 p-0"
-                        >
-                            <svg
-                                aria-hidden="true"
-                                viewBox="0 0 24 24"
-                                className="h-4 w-4"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                            >
-                                <path d="M21 12a9 9 0 1 1-3-6.7" />
-                                <path d="M21 3v6h-6" />
-                            </svg>
-                        </Button>
                         <Button
                             size="md"
                             className="bg-pink-600 hover:bg-pink-700 text-white"
@@ -160,7 +135,6 @@ export default function CustomersPage() {
                         </div>
                         <div className="text-right text-sm text-gray-500">
                             <div>From {customerStats.total} customers</div>
-                            <div>{customerStats.active} Active • {customerStats.inactive} Inactive</div>
                         </div>
                     </div>
                 </Card>
@@ -176,22 +150,11 @@ export default function CustomersPage() {
                                 <div className="flex-1 min-w-[260px]">
                                     <Input
                                         type="text"
-                                        placeholder="Search by name"
+                                        placeholder="Search by ID, name, or contact"
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
                                         className="w-full h-10"
                                     />
-                                </div>
-                                <div className="sm:w-48">
-                                    <select
-                                        value={statusFilter}
-                                        onChange={(e) => setStatusFilter(e.target.value)}
-                                        className="w-full h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
-                                    >
-                                        <option value="All">All Status</option>
-                                        <option value="ACTIVE">Active</option>
-                                        <option value="INACTIVE">Inactive</option>
-                                    </select>
                                 </div>
                             </div>
                         </div>
@@ -212,31 +175,28 @@ export default function CustomersPage() {
                                 <table className="w-full border-collapse text-sm">
                                     <thead className="bg-blue-600 text-white">
                                         <tr>
-                                            <th className="text-left py-3 px-4 font-bold border-r border-blue-500">Customer</th>
+                                            <th className="text-left py-3 px-4 font-bold border-r border-blue-500">CustomerID</th>
+                                            <th className="text-left py-3 px-4 font-bold border-r border-blue-500">Customer Name</th>
                                             <th className="text-left py-3 px-4 font-bold border-r border-blue-500">Contact</th>
-                                            <th className="text-center py-3 px-4 font-bold border-r border-blue-500">Status</th>
-                                            <th className="text-center py-3 px-4 font-bold">Outstanding</th>
+                                            <th className="text-left py-3 px-4 font-bold border-r border-blue-500">Address</th>
+                                            <th className="text-center py-3 px-4 font-bold">Total Outstanding</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {filteredCustomers.map((customer, index) => (
                                             <tr key={customer.id} className={`border-b border-gray-300 ${index % 2 === 0 ? "bg-blue-50 hover:bg-blue-100" : "bg-white hover:bg-gray-50"
                                                 } transition-colors`}>
-                                                <td className="py-3 px-4 border-r border-gray-300">
-                                                    <div>
-                                                        <div className="font-semibold text-gray-900">{customer.name}</div>
-                                                        <div className="text-xs text-gray-600">{customer.address}</div>
-                                                    </div>
+                                                <td className="py-3 px-4 text-gray-900 font-medium border-r border-gray-300">
+                                                    {customer.id}
+                                                </td>
+                                                <td className="py-3 px-4 text-gray-900 font-semibold border-r border-gray-300">
+                                                    {customer.name}
                                                 </td>
                                                 <td className="py-3 px-4 text-gray-900 font-medium border-r border-gray-300">
                                                     {customer.phone_number}
                                                 </td>
-                                                <td className="py-3 px-4 text-center border-r border-gray-300">
-                                                    <span className={`inline-block px-2 py-1 rounded text-xs font-bold border ${customer.status === 'ACTIVE' ? 'bg-green-50 text-green-700 border-green-200' :
-                                                        'bg-red-50 text-red-700 border-red-200'
-                                                        }`}>
-                                                        {customer.status}
-                                                    </span>
+                                                <td className="py-3 px-4 text-gray-700 border-r border-gray-300">
+                                                    {customer.address}
                                                 </td>
                                                 <td className="py-3 px-4 text-center">
                                                     <div className={`font-bold ${customer.outstanding_amount > 0 ? 'text-red-600' : 'text-green-600'}`}>
