@@ -276,7 +276,7 @@ export default function ProductDetailPage() {
                                             ? "Custom price per Dozen"
                                             : unit === INVENTORY_UNITS.BOX
                                                 ? "Custom price per Box"
-                                                : "Custom price per Unit"}
+                                                : "Custom price per Pcs"}
                                     </label>
                                 </div>
                                 {useCustomPrice && (

@@ -36,11 +36,15 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
+function getLocalDateString() {
+    return new Date().toLocaleDateString("en-CA");
+}
+
 export function CartProvider({ children }: { children: ReactNode }) {
     const [cart, setCart] = useState<CartItem[]>([]);
     const [selectedCustomer, setSelectedCustomer] = useState("");
     const [customerSearch, setCustomerSearch] = useState("");
-    const [orderDate, setOrderDate] = useState(() => new Date().toISOString().split("T")[0]);
+    const [orderDate, setOrderDate] = useState(() => getLocalDateString());
     const [paymentType, setPaymentType] = useState("CASH");
     const [remark, setRemark] = useState("");
 
@@ -49,7 +53,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const savedCart = localStorage.getItem('salesperson-cart');
         const savedCustomer = localStorage.getItem('salesperson-selected-customer');
         const savedCustomerSearch = localStorage.getItem('salesperson-customer-search');
-        const savedOrderDate = localStorage.getItem('salesperson-order-date');
         const savedPaymentType = localStorage.getItem('salesperson-payment-type');
         const savedRemark = localStorage.getItem('salesperson-remark');
         if (savedCart) {
@@ -68,9 +71,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             setCustomerSearch(savedCustomerSearch);
         }
 
-        if (savedOrderDate) {
-            setOrderDate(savedOrderDate);
-        }
+        setOrderDate(getLocalDateString());
         if (savedPaymentType) {
             setPaymentType(savedPaymentType);
         }
@@ -133,6 +134,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setCart([]);
         setSelectedCustomer("");
         setCustomerSearch("");
+        setOrderDate(getLocalDateString());
         setRemark("");
     }, []);
 

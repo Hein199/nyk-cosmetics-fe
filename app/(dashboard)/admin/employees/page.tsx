@@ -149,6 +149,13 @@ function formatMonth(monthStr: string | undefined) {
     });
 }
 
+function toLocalDateInputValue(date: Date): string {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+}
+
 const emptyEmployee = {
     name: "",
     phone: "",
@@ -255,7 +262,7 @@ export default function EmployeesPage() {
             address: emp.address ?? "",
             position: emp.position ?? "",
             basic_salary: String(emp.basic_salary),
-            start_date: emp.start_date ? emp.start_date.split("T")[0] : "",
+            start_date: emp.start_date ? toLocalDateInputValue(new Date(emp.start_date)) : "",
             remark: emp.remark ?? "",
         });
         setEmpError(null);
@@ -334,7 +341,7 @@ export default function EmployeesPage() {
         setSalMonth("");
         setSalBonuses(emptyBonuses.map(b => ({ ...b })));
         setSalDeductions(emptyDeductions.map(d => ({ ...d })));
-        setSalPaymentDate(new Date().toISOString().split("T")[0]);
+        setSalPaymentDate(toLocalDateInputValue(new Date()));
         setSalRemark("");
         setSalError(null);
         setIsSalaryOpen(true);

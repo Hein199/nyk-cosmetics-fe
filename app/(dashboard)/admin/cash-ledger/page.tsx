@@ -26,6 +26,7 @@ import { thaiToday, formatThaiDate } from "@/lib/utils";
 interface LedgerEntry {
     id: number;
     entry_date: string;
+    display_date?: string;
     type: "DEBIT" | "CREDIT";
     category: "SALE" | "SALARY" | "EXPENSE" | "OTHER_INCOME";
     reference_id: number | null;
@@ -443,7 +444,7 @@ export default function CashLedgerPage() {
                                                     >
                                                         <td className="py-3 px-4 text-sm text-gray-500">
                                                             {formatDate(
-                                                                e.entry_date
+                                                                e.display_date ?? e.entry_date
                                                             )}
                                                         </td>
                                                         <td className="py-3 px-4 text-sm text-gray-700">
