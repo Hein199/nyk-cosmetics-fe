@@ -478,7 +478,7 @@ export default function AdminInventoryPage() {
                                     variant="outline"
                                     className="h-10"
                                     onClick={() => {
-                                        const today = new Date().toISOString().slice(0, 10);
+                                        const today = new Date().toLocaleDateString("en-CA");
                                         setStartDate(today);
                                         setEndDate(today);
                                     }}

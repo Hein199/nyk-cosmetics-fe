@@ -973,13 +973,22 @@ export default function OrdersPage() {
                                                         </>
                                                     )}
                                                     {orderDetails.status.toLowerCase() === "confirmed" && (
-                                                        <Button
-                                                            variant="outline"
-                                                            className="h-10 w-28 text-green-700 border-green-400 hover:bg-green-50"
-                                                            onClick={() => deliverOrder(orderDetails.id)}
-                                                        >
-                                                            Deliver
-                                                        </Button>
+                                                        <>
+                                                            <Button
+                                                                variant="outline"
+                                                                className="h-10 w-28"
+                                                                onClick={() => handleEditOrder(orderDetails.id)}
+                                                            >
+                                                                Edit
+                                                            </Button>
+                                                            <Button
+                                                                variant="outline"
+                                                                className="h-10 w-28 text-green-700 border-green-400 hover:bg-green-50"
+                                                                onClick={() => deliverOrder(orderDetails.id)}
+                                                            >
+                                                                Deliver
+                                                            </Button>
+                                                        </>
                                                     )}
                                                 </>
                                             )}
