@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogClose, DialogContent, DialogHeader } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 
@@ -20,11 +21,50 @@ type SupplierForm = {
     address: string;
 };
 
+type SupplierPurchase = {
+    id: number;
+    date: string;
+    expense_code: string;
+    category: string | null;
+    description: string;
+    amount: number;
+    payment_method: string;
+};
+
+type SupplierPurchaseDetailItem = {
+    id: number;
+    product_id: number;
+    product_name: string;
+    quantity: number;
+    unit_type: string;
+    quantity_pcs: number;
+    unit_price: number;
+    line_total: number;
+};
+
+type SupplierPurchaseDetail = SupplierPurchase & {
+    items: SupplierPurchaseDetailItem[];
+};
+
 const emptyForm: SupplierForm = {
     name: "",
     phone_number: "",
     address: "",
 };
+
+const fmt = (n: number) =>
+    new Intl.NumberFormat("en-MM", { style: "currency", currency: "MMK", maximumFractionDigits: 0 }).format(n);
+
+function formatPaymentMethod(value: string) {
+    const normalized = value.toLowerCase();
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+function unitTypeLabel(unit: string) {
+    if (unit === "D") return "Dozen";
+    if (unit === "P") return "Box";
+    return "Pcs";
+}
 
 function SupplierModal({
     title,
@@ -136,6 +176,12 @@ export default function SuppliersPage() {
     const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
     const [deletingSupplier, setDeletingSupplier] = useState<Supplier | null>(null);
     const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+    const [supplierPurchases, setSupplierPurchases] = useState<SupplierPurchase[]>([]);
+    const [purchasesLoading, setPurchasesLoading] = useState(false);
+    const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
+    const [selectedPurchase, setSelectedPurchase] = useState<SupplierPurchaseDetail | null>(null);
+    const [purchaseDetailLoading, setPurchaseDetailLoading] = useState(false);
+    const [purchaseDetailError, setPurchaseDetailError] = useState<string | null>(null);
 
     const { data: suppliers = [], isLoading: loading, error: suppliersError } = useQuery({
         queryKey: ["admin-suppliers"],
@@ -154,7 +200,63 @@ export default function SuppliersPage() {
         );
     }, [suppliers, search]);
 
+    useEffect(() => {
+        if (!selectedSupplier) {
+            setSupplierPurchases([]);
+            setPurchaseDialogOpen(false);
+            setSelectedPurchase(null);
+            return;
+        }
+
+        let cancelled = false;
+        setPurchasesLoading(true);
+        apiFetch<SupplierPurchase[]>(`/suppliers/${selectedSupplier.id}/purchases`, { token })
+            .then((data) => {
+                if (!cancelled) {
+                    setSupplierPurchases(data);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setSupplierPurchases([]);
+                }
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setPurchasesLoading(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedSupplier, token]);
+
+    const handleViewPurchaseDetails = (purchase: SupplierPurchase) => {
+        if (!selectedSupplier || !token) {
+            return;
+        }
+
+        setPurchaseDialogOpen(true);
+        setPurchaseDetailLoading(true);
+        setPurchaseDetailError(null);
+        setSelectedPurchase(null);
+
+        apiFetch<SupplierPurchaseDetail>(`/suppliers/${selectedSupplier.id}/purchases/${purchase.id}`, { token })
+            .then((data) => {
+                setSelectedPurchase(data);
+            })
+            .catch((error) => {
+                setPurchaseDetailError(error instanceof Error ? error.message : "Failed to load purchase details");
+            })
+            .finally(() => {
+                setPurchaseDetailLoading(false);
+            });
+    };
+
     if (selectedSupplier) {
+        const totalPurchasesAmount = supplierPurchases.reduce((sum, purchase) => sum + purchase.amount, 0);
+
         return (
             <div className="p-6 space-y-6">
                 <button
@@ -202,6 +304,153 @@ export default function SuppliersPage() {
                         </div>
                     </div>
                 </div>
+
+                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+                        <h2 className="text-sm font-semibold text-gray-700">Purchase History</h2>
+                        <span className="text-sm text-gray-600">
+                            Total Purchases: <span className="font-semibold text-gray-900">{fmt(totalPurchasesAmount)}</span>
+                        </span>
+                    </div>
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr>
+                                {["Date", "Purchase Code", "Category", "Description", "Amount", "Payment", "Actions"].map((header, index) => (
+                                    <th
+                                        key={header}
+                                        className={`py-2.5 px-4 text-sm font-medium text-white bg-blue-600 ${index !== 0 ? "border-l border-blue-500/40" : ""} ${header === "Actions" ? "text-center" : "text-left"}`}
+                                    >
+                                        {header}
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {purchasesLoading ? (
+                                <tr>
+                                    <td colSpan={7} className="py-8 text-center text-gray-400">Loading purchase history...</td>
+                                </tr>
+                            ) : supplierPurchases.length === 0 ? (
+                                <tr>
+                                    <td colSpan={7} className="py-8 text-center text-gray-400">No purchase history found.</td>
+                                </tr>
+                            ) : (
+                                supplierPurchases.map((purchase) => (
+                                    <tr key={purchase.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                        <td className="py-2.5 px-4 text-gray-600">{purchase.date}</td>
+                                        <td className="py-2.5 px-4 font-mono text-gray-700 border-l border-gray-200">{purchase.expense_code}</td>
+                                        <td className="py-2.5 px-4 text-gray-700 border-l border-gray-200">{purchase.category ?? "-"}</td>
+                                        <td className="py-2.5 px-4 text-gray-700 border-l border-gray-200 max-w-[320px] truncate" title={purchase.description}>
+                                            {purchase.description}
+                                        </td>
+                                        <td className="py-2.5 px-4 text-gray-900 border-l border-gray-200 font-medium">{fmt(purchase.amount)}</td>
+                                        <td className="py-2.5 px-4 text-gray-700 border-l border-gray-200">{formatPaymentMethod(purchase.payment_method)}</td>
+                                        <td className="py-2.5 px-4 border-l border-gray-200 text-center">
+                                            <Button size="sm" variant="outline" onClick={() => handleViewPurchaseDetails(purchase)}>
+                                                View
+                                            </Button>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+
+                <Dialog open={purchaseDialogOpen} onOpenChange={setPurchaseDialogOpen}>
+                    <DialogContent className="relative max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <DialogHeader>
+                            <div className="flex items-center justify-between pr-8">
+                                <h3 className="text-lg font-semibold text-gray-900">Purchase Details</h3>
+                            </div>
+                            <DialogClose onClick={() => setPurchaseDialogOpen(false)} className="text-gray-500 hover:text-gray-700">
+                                ✕
+                            </DialogClose>
+                        </DialogHeader>
+
+                        <div className="p-6 space-y-4">
+                            {purchaseDetailLoading && (
+                                <p className="text-sm text-gray-500">Loading purchase details...</p>
+                            )}
+
+                            {purchaseDetailError && (
+                                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                                    {purchaseDetailError}
+                                </p>
+                            )}
+
+                            {selectedPurchase && (
+                                <>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                                        <div className="rounded-md border border-gray-200 p-3 bg-gray-50">
+                                            <p className="text-xs text-gray-500 mb-1">Supplier</p>
+                                            <p className="font-semibold text-gray-900">{selectedSupplier.name}</p>
+                                        </div>
+                                        <div className="rounded-md border border-gray-200 p-3 bg-gray-50">
+                                            <p className="text-xs text-gray-500 mb-1">Purchase Code</p>
+                                            <p className="font-semibold text-gray-900">{selectedPurchase.expense_code}</p>
+                                        </div>
+                                        <div className="rounded-md border border-gray-200 p-3 bg-gray-50">
+                                            <p className="text-xs text-gray-500 mb-1">Date</p>
+                                            <p className="font-semibold text-gray-900">{selectedPurchase.date}</p>
+                                        </div>
+                                        <div className="rounded-md border border-gray-200 p-3 bg-gray-50">
+                                            <p className="text-xs text-gray-500 mb-1">Amount</p>
+                                            <p className="font-semibold text-gray-900">{fmt(selectedPurchase.amount)}</p>
+                                        </div>
+                                        <div className="rounded-md border border-gray-200 p-3 bg-gray-50">
+                                            <p className="text-xs text-gray-500 mb-1">Payment Method</p>
+                                            <p className="font-semibold text-gray-900">{formatPaymentMethod(selectedPurchase.payment_method)}</p>
+                                        </div>
+                                        <div className="rounded-md border border-gray-200 p-3 bg-gray-50">
+                                            <p className="text-xs text-gray-500 mb-1">Category</p>
+                                            <p className="font-semibold text-gray-900">{selectedPurchase.category ?? "-"}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="rounded-md border border-gray-200 p-3 bg-gray-50">
+                                        <p className="text-xs text-gray-500 mb-1">Description</p>
+                                        <p className="text-sm text-gray-800">{selectedPurchase.description}</p>
+                                    </div>
+
+                                    <div className="rounded-md border border-gray-200 overflow-hidden">
+                                        <table className="w-full text-sm">
+                                            <thead>
+                                                <tr>
+                                                    {["Product", "Qty", "Unit", "Unit Price", "Line Total"].map((header, index) => (
+                                                        <th
+                                                            key={header}
+                                                            className={`py-2.5 px-3 text-sm font-medium text-white bg-blue-600 ${index !== 0 ? "border-l border-blue-500/40" : ""} text-left`}
+                                                        >
+                                                            {header}
+                                                        </th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {selectedPurchase.items.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={5} className="py-6 text-center text-gray-400">No product lines found.</td>
+                                                    </tr>
+                                                ) : (
+                                                    selectedPurchase.items.map((item) => (
+                                                        <tr key={item.id} className="border-b border-gray-100">
+                                                            <td className="py-2.5 px-3 text-gray-900">{item.product_name}</td>
+                                                            <td className="py-2.5 px-3 text-gray-700 border-l border-gray-200">{item.quantity}</td>
+                                                            <td className="py-2.5 px-3 text-gray-700 border-l border-gray-200">{unitTypeLabel(item.unit_type)}</td>
+                                                            <td className="py-2.5 px-3 text-gray-700 border-l border-gray-200">{fmt(item.unit_price)}</td>
+                                                            <td className="py-2.5 px-3 text-gray-900 border-l border-gray-200 font-medium">{fmt(item.line_total)}</td>
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </DialogContent>
+                </Dialog>
 
                 {editingSupplier && (
                     <SupplierModal
