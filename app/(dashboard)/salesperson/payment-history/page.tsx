@@ -140,31 +140,18 @@ export default function PaymentHistoryPage() {
                                     <label className="text-xs text-transparent mb-1">
                                         .
                                     </label>
-                                    <div className="flex items-center gap-2">
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => {
-                                                const t = thaiToday();
-                                                setFromDate(t);
-                                                setToDate(t);
-                                            }}
-                                            className="text-xs h-10 w-16"
-                                        >
-                                            Today
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => {
-                                                setFromDate("");
-                                                setToDate("");
-                                            }}
-                                            className="text-xs h-10 w-16"
-                                        >
-                                            All
-                                        </Button>
-                                    </div>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                            const t = thaiToday();
+                                            setFromDate(t);
+                                            setToDate(t);
+                                        }}
+                                        className="text-xs h-10 w-16"
+                                    >
+                                        Today
+                                    </Button>
                                 </div>
                             </div>
                         </div>

@@ -100,6 +100,10 @@ export default function OrdersPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
     const [ordersError] = useState<string | null>(null);
+    const [isEditMode, setIsEditMode] = useState(false);
+    const [editedItems, setEditedItems] = useState<Record<number, { quantity: number; unit_price: number }>>({});
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
 
     const dateRangeKey = useMemo(() => `nyk-orders-date-range:${user?.id ?? "anon"}`, [user?.id]);
 
@@ -155,8 +159,10 @@ export default function OrdersPage() {
     const handleFromDate = (v: string) => { setFromDate(v); saveDateRange(v, toDate); };
     const handleToDate = (v: string) => { setToDate(v); saveDateRange(fromDate, v); };
 
-    // Handle view details click
-    const handleViewDetails = async (orderId: number) => {
+    const openOrderDetails = async (orderId: number, mode: "view" | "edit") => {
+        setIsEditMode(mode === "edit");
+        setEditedItems({});
+        setSaveError(null);
         setSelectedOrder(orderId);
         setIsDialogOpen(true);
         if (!token) return;
@@ -166,6 +172,13 @@ export default function OrdersPage() {
         try {
             const data = await apiFetch<OrderDetail>(`/orders/${orderId}`, { token });
             setOrderDetails(data);
+            if (mode === "edit") {
+                const initial: Record<number, { quantity: number; unit_price: number }> = {};
+                for (const item of data.items) {
+                    initial[item.id] = { quantity: item.quantity, unit_price: Number(item.unit_price) };
+                }
+                setEditedItems(initial);
+            }
         } catch (error) {
             const message = error instanceof Error ? error.message : "Failed to load order details";
             setDetailsError(message);
@@ -173,6 +186,49 @@ export default function OrdersPage() {
         } finally {
             setDetailsLoading(false);
         }
+    };
+
+    const handleViewDetails = (orderId: number) => openOrderDetails(orderId, "view");
+    const handleEditOrder = (orderId: number) => openOrderDetails(orderId, "edit");
+
+    const handleCancelEdit = () => {
+        setIsEditMode(false);
+        setEditedItems({});
+        setSaveError(null);
+    };
+
+    const handleSaveEdit = async () => {
+        if (!orderDetails || !token) return;
+        setIsSaving(true);
+        setSaveError(null);
+        try {
+            const items = Object.entries(editedItems).map(([id, vals]) => ({
+                id: Number(id),
+                quantity: vals.quantity,
+                unit_price: String(vals.unit_price),
+            }));
+            const updated = await apiFetch<OrderDetail>(`/orders/${orderDetails.id}/items`, {
+                method: "PATCH",
+                token,
+                body: { items },
+            });
+            setOrderDetails(updated);
+            setIsEditMode(false);
+            setEditedItems({});
+            queryClient.invalidateQueries({ queryKey: ["sp-orders"] });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Failed to save changes";
+            setSaveError(message);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const updateEditedItem = (itemId: number, field: "quantity" | "unit_price", value: number) => {
+        setEditedItems((prev) => ({
+            ...prev,
+            [itemId]: { ...prev[itemId], [field]: value },
+        }));
     };
 
     // Filter and search orders
@@ -382,14 +438,34 @@ export default function OrdersPage() {
                                         </span>
                                     </div>
                                     <div className="pt-3">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="w-full"
-                                            onClick={() => handleViewDetails(order.id)}
-                                        >
-                                            View Details
-                                        </Button>
+                                        {order.status.toLowerCase() === "pending_admin" ? (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="w-full"
+                                                onClick={() => handleEditOrder(order.id)}
+                                            >
+                                                Edit
+                                            </Button>
+                                        ) : order.status.toLowerCase() === "confirmed" ? (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="w-full"
+                                                onClick={() => handleViewDetails(order.id)}
+                                            >
+                                                View
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="w-full"
+                                                onClick={() => handleViewDetails(order.id)}
+                                            >
+                                                View
+                                            </Button>
+                                        )}
                                     </div>
                                 </div>
                             ))
@@ -474,14 +550,34 @@ export default function OrdersPage() {
                                                     </span>
                                                 </td>
                                                 <td className="py-3 px-4 text-center">
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() => handleViewDetails(order.id)}
-                                                        className="text-xs"
-                                                    >
-                                                        View Details
-                                                    </Button>
+                                                    {order.status.toLowerCase() === "pending_admin" ? (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => handleEditOrder(order.id)}
+                                                            className="text-xs"
+                                                        >
+                                                            Edit
+                                                        </Button>
+                                                    ) : order.status.toLowerCase() === "confirmed" ? (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => handleViewDetails(order.id)}
+                                                            className="text-xs"
+                                                        >
+                                                            View
+                                                        </Button>
+                                                    ) : (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => handleViewDetails(order.id)}
+                                                            className="text-xs"
+                                                        >
+                                                            View
+                                                        </Button>
+                                                    )}
                                                 </td>
                                             </tr>
                                         ))
@@ -565,6 +661,11 @@ export default function OrdersPage() {
                                                     {formatStatusLabel(orderDetails.status)}
                                                 </span>
                                             </div>
+                                            {isEditMode && (
+                                                <span className="px-3 py-1 text-xs font-semibold rounded-full border border-blue-200 bg-blue-50 text-blue-700">
+                                                    Edit Mode
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 )}
@@ -630,8 +731,10 @@ export default function OrdersPage() {
                                             </thead>
                                             <tbody>
                                                 {orderDetails.items.map((item, index) => {
-                                                    const unitPrice = Number(item.unit_price);
-                                                    const total = unitPrice * item.quantity;
+                                                    const edited = editedItems[item.id];
+                                                    const qty = isEditMode && edited ? edited.quantity : item.quantity;
+                                                    const unitPrice = isEditMode && edited ? edited.unit_price : Number(item.unit_price);
+                                                    const total = unitPrice * qty;
                                                     return (
                                                         <tr key={item.id} className={`border-b border-gray-300 ${index % 2 === 0
                                                             ? "bg-blue-50 hover:bg-blue-100"
@@ -653,10 +756,31 @@ export default function OrdersPage() {
                                                                 {unitTypeLabel(item.unit_type)}
                                                             </td>
                                                             <td className="py-3 px-4 text-center text-gray-900 font-semibold border-r border-gray-300">
-                                                                {item.quantity}
+                                                                {isEditMode ? (
+                                                                    <Input
+                                                                        type="number"
+                                                                        min={1}
+                                                                        value={qty}
+                                                                        onChange={(e) => updateEditedItem(item.id, "quantity", Math.max(1, parseInt(e.target.value) || 1))}
+                                                                        className="h-8 w-20 text-center mx-auto"
+                                                                    />
+                                                                ) : (
+                                                                    qty
+                                                                )}
                                                             </td>
                                                             <td className="py-3 px-4 text-right text-gray-900 font-medium border-r border-gray-300">
-                                                                {formatCurrency(unitPrice)}
+                                                                {isEditMode ? (
+                                                                    <Input
+                                                                        type="number"
+                                                                        min={0}
+                                                                        step="0.01"
+                                                                        value={unitPrice}
+                                                                        onChange={(e) => updateEditedItem(item.id, "unit_price", Math.max(0, parseFloat(e.target.value) || 0))}
+                                                                        className="h-8 w-28 text-right ml-auto"
+                                                                    />
+                                                                ) : (
+                                                                    formatCurrency(unitPrice)
+                                                                )}
                                                             </td>
                                                             <td className="py-3 px-4 text-right font-bold text-gray-900">
                                                                 {formatCurrency(total)}
@@ -685,7 +809,12 @@ export default function OrdersPage() {
                                                     <span className="text-gray-900 font-medium">
                                                         {formatCurrency(
                                                             orderDetails.items.reduce(
-                                                                (sum, item) => sum + Number(item.unit_price) * item.quantity,
+                                                                    (sum, item) => {
+                                                                        const edited = isEditMode ? editedItems[item.id] : undefined;
+                                                                        const qty = edited ? edited.quantity : item.quantity;
+                                                                        const up = edited ? edited.unit_price : Number(item.unit_price);
+                                                                        return sum + up * qty;
+                                                                    },
                                                                 0
                                                             )
                                                         )}
@@ -694,7 +823,18 @@ export default function OrdersPage() {
                                                 <div className="border-t border-gray-300 pt-2 mt-3">
                                                     <div className="flex justify-between text-base font-bold">
                                                         <span className="text-gray-900">Total Amount:</span>
-                                                        <span className="text-gray-900">{formatCurrency(Number(orderDetails.total_amount))}</span>
+                                                        <span className="text-gray-900">
+                                                            {formatCurrency(
+                                                                isEditMode
+                                                                    ? orderDetails.items.reduce((sum, item) => {
+                                                                        const edited = editedItems[item.id];
+                                                                        const qty = edited ? edited.quantity : item.quantity;
+                                                                        const up = edited ? edited.unit_price : Number(item.unit_price);
+                                                                        return sum + up * qty;
+                                                                    }, 0)
+                                                                    : Number(orderDetails.total_amount)
+                                                            )}
+                                                        </span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -713,6 +853,43 @@ export default function OrdersPage() {
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+                            )}
+
+                            {orderDetails && (
+                                <div className="mt-4 flex items-center justify-end gap-3">
+                                    {isEditMode ? (
+                                        <>
+                                            {saveError && (
+                                                <span className="text-sm text-red-600 mr-2">{saveError}</span>
+                                            )}
+                                            <Button
+                                                variant="outline"
+                                                className="h-10 w-28"
+                                                onClick={handleCancelEdit}
+                                                disabled={isSaving}
+                                            >
+                                                Cancel
+                                            </Button>
+                                            <Button
+                                                className="h-10 w-28 bg-blue-600 hover:bg-blue-700 text-white"
+                                                onClick={handleSaveEdit}
+                                                disabled={isSaving}
+                                            >
+                                                {isSaving ? "Saving..." : "Save"}
+                                            </Button>
+                                        </>
+                                    ) : (
+                                        orderDetails.status.toLowerCase() === "pending_admin" && (
+                                            <Button
+                                                variant="outline"
+                                                className="h-10 w-28"
+                                                onClick={() => handleEditOrder(orderDetails.id)}
+                                            >
+                                                Edit
+                                            </Button>
+                                        )
+                                    )}
                                 </div>
                             )}
 

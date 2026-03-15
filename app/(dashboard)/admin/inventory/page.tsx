@@ -27,13 +27,28 @@ type Product = {
     inventory: { quantity: number } | null;
 };
 
+type StockHistory = {
+    id: number;
+    product_id: number;
+    event: "order" | "restock" | "adjustment" | "return";
+    change_quantity: number;
+    inventory_after: number;
+    source: string | null;
+    created_at: string;
+    product: { id: number; name: string; photo_url: string };
+};
+
 const emptyForm = {
     name: "",
     description: "",
     category: "",
     unit_price: "",
     stockQuantity: "",
-    stockUnit: "PCS" as "PCS" | "BOX",
+    stockUnit: "PCS" as "PCS" | "DOZEN" | "BOX",
+    adjustQuantity: "",
+    adjustAction: "increase" as "increase" | "decrease",
+    adjustUnit: "PCS" as "PCS" | "DOZEN" | "BOX",
+    currentStockViewUnit: "PCS" as "PCS" | "DOZEN" | "BOX",
     pcs_per_dozen: "12",
     pcs_per_box: "24",
     photo_url: "",
@@ -60,6 +75,11 @@ export default function AdminInventoryPage() {
     const { token } = useAuth();
     const queryClient = useQueryClient();
 
+    const [activeTab, setActiveTab] = useState<"inventory" | "history">("inventory");
+    const [historySearch, setHistorySearch] = useState("");
+    const [startDate, setStartDate] = useState("");
+    const [endDate, setEndDate] = useState("");
+
     const { data: products = [], isLoading: loading, error: queryError } = useQuery({
         queryKey: ["admin-products"],
         queryFn: () => apiFetch<Product[]>("/products", { token }),
@@ -71,6 +91,38 @@ export default function AdminInventoryPage() {
         queryFn: () => apiFetch<Category[]>("/categories", { token }),
         enabled: !!token,
     });
+
+    const { data: stockHistory = [], isLoading: historyLoading, error: historyError } = useQuery({
+        queryKey: ["stock-history"],
+        queryFn: () => apiFetch<StockHistory[]>("/inventory/stock-history", { token }),
+        enabled: !!token,
+    });
+
+    const filteredHistory = useMemo(() => {
+        let list = stockHistory;
+
+        const q = historySearch.trim().toLowerCase();
+        if (q) {
+            list = list.filter((entry) =>
+                entry.product.name.toLowerCase().includes(q) || (entry.source ?? "").toLowerCase().includes(q)
+            );
+        }
+
+        const start = startDate ? new Date(startDate) : null;
+        const end = endDate ? new Date(endDate) : null;
+        const endInclusive = end ? new Date(end.getTime() + 24 * 60 * 60 * 1000) : null;
+
+        if (start || endInclusive) {
+            list = list.filter((entry) => {
+                const d = new Date(entry.created_at);
+                if (start && d < start) return false;
+                if (endInclusive && d >= endInclusive) return false;
+                return true;
+            });
+        }
+
+        return list;
+    }, [stockHistory, historySearch, startDate, endDate]);
 
     const [error, setError] = useState<string | null>(queryError?.message ?? null);
     const [searchQuery, setSearchQuery] = useState("");
@@ -138,6 +190,23 @@ export default function AdminInventoryPage() {
         });
     }, [products, searchQuery, categoryFilter]);
 
+    function convertToPcs(quantity: number, unit: "PCS" | "DOZEN" | "BOX", pcsPerDozen: number, pcsPerBox: number) {
+        if (unit === "DOZEN") return Math.round(quantity * pcsPerDozen);
+        if (unit === "BOX") return Math.round(quantity * pcsPerBox);
+        return Math.round(quantity);
+    }
+
+    function convertFromPcs(quantityInPcs: number, unit: "PCS" | "DOZEN" | "BOX", pcsPerDozen: number, pcsPerBox: number) {
+        if (unit === "DOZEN") return quantityInPcs / Math.max(pcsPerDozen, 1);
+        if (unit === "BOX") return quantityInPcs / Math.max(pcsPerBox, 1);
+        return quantityInPcs;
+    }
+
+    function formatStockValue(value: number) {
+        if (Number.isInteger(value)) return String(value);
+        return value.toFixed(2).replace(/\.?0+$/, "");
+    }
+
     function openCreate() {
         setEditingProduct(null);
         const defaultCategory = categories[0]?.name ?? "";
@@ -155,6 +224,10 @@ export default function AdminInventoryPage() {
             unit_price: String(product.unit_price),
             stockQuantity: String(product.inventory?.quantity ?? 0),
             stockUnit: "PCS",
+            adjustQuantity: "",
+            adjustAction: "increase",
+            adjustUnit: "PCS",
+            currentStockViewUnit: "PCS",
             pcs_per_dozen: String(product.pcs_per_dozen),
             pcs_per_box: String(product.pcs_per_box),
             photo_url: product.photo_url,
@@ -170,6 +243,10 @@ export default function AdminInventoryPage() {
             setSaveError("Name and unit price are required.");
             return;
         }
+
+        const pcsPerDozen = Number(form.pcs_per_dozen || 12);
+        const pcsPerBox = Number(form.pcs_per_box || 24);
+
         setSaving(true);
         setSaveError(null);
         try {
@@ -187,8 +264,33 @@ export default function AdminInventoryPage() {
                 is_active: form.is_active,
             };
 
-            // Include stock info
-            if (form.stockQuantity) {
+            if (editingProduct) {
+                const currentStock = Number(form.stockQuantity || 0);
+                const adjustQty = Number(form.adjustQuantity || 0);
+
+                if (form.adjustQuantity) {
+                    if (Number.isNaN(adjustQty) || adjustQty <= 0) {
+                        setSaveError("Adjust quantity must be greater than 0.");
+                        setSaving(false);
+                        return;
+                    }
+
+                    const deltaPcs = convertToPcs(adjustQty, form.adjustUnit, pcsPerDozen, pcsPerBox);
+                    const signedDelta = form.adjustAction === "increase" ? deltaPcs : -deltaPcs;
+                    const nextStock = currentStock + signedDelta;
+
+                    if (nextStock < 0) {
+                        setSaveError("Adjustment would make stock negative.");
+                        setSaving(false);
+                        return;
+                    }
+
+                    body.stockQuantity = String(nextStock);
+                    body.stockUnit = "PCS";
+                    body.stockEvent = "adjustment";
+                    body.stockSource = "Admin";
+                }
+            } else if (form.stockQuantity) {
                 body.stockQuantity = form.stockQuantity;
                 body.stockUnit = form.stockUnit;
             }
@@ -196,6 +298,7 @@ export default function AdminInventoryPage() {
             await apiFetch(path, { method, token, body });
             setDialogOpen(false);
             queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+            queryClient.invalidateQueries({ queryKey: ["stock-history"] });
         } catch (err) {
             setSaveError(err instanceof Error ? err.message : "Failed to save product");
         } finally {
@@ -226,94 +329,263 @@ export default function AdminInventoryPage() {
                 <p className="text-gray-500 mt-1">Manage product catalogue and inventory stock</p>
             </div>
 
-            {/* Filters + Actions */}
-            <div className="flex flex-col sm:flex-row items-center gap-4">
-                <Input
-                    placeholder="Search products…"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="flex-1 h-10 px-4 bg-white text-black placeholder:text-gray-400 border-gray-300 rounded-md"
-                />
-                <select
-                    className="h-10 px-4 rounded-md text-sm text-white font-medium bg-gradient-to-r from-pink-500 to-rose-600 border-0 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-pink-400 whitespace-nowrap"
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
-                >
-                    <option value="all" className="bg-white text-black">All Categories</option>
-                    {categories.map((c) => (
-                        <option key={c.id} value={c.name} className="bg-white text-black">{c.name}</option>
-                    ))}
-                </select>
-                <Button
-                    className="h-10 px-4 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 whitespace-nowrap"
-                    onClick={() => { setNewCategoryName(""); setCategoryError(null); setCategoryDialogOpen(true); }}
-                >
-                    + Add Category
-                </Button>
-                <Button
-                    className="h-10 px-4 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 whitespace-nowrap"
-                    onClick={openCreate}
-                >
-                    + Add Product
-                </Button>
+            {/* Tabs */}
+            <div className="flex items-center gap-2 border-b border-gray-200">
+                {[
+                    { key: "inventory", label: "Inventory" },
+                    { key: "history", label: "Stock History" },
+                ].map((tab) => (
+                    <button
+                        key={tab.key}
+                        onClick={() => setActiveTab(tab.key as typeof activeTab)}
+                        className={`px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === tab.key
+                            ? "text-rose-600 border-rose-500"
+                            : "text-gray-500 border-transparent hover:text-gray-700"}`}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
             </div>
 
-            {/* Content */}
-            {loading ? (
-                <p className="text-gray-400 text-sm">Loading products…</p>
-            ) : error ? (
-                <p className="text-red-500 text-sm">{error}</p>
-            ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {filteredProducts.map((product) => (
-                        <Card key={product.id} className={`overflow-hidden ${!product.is_active ? "opacity-50" : ""}`}>
-                            {/* Image */}
-                            <div className="aspect-square bg-gray-100">
-                                <img
-                                    src={product.photo_url || "/mock/product-1.svg"}
-                                    alt={product.name}
-                                    className="w-full h-full object-cover"
-                                    onError={(e) => { e.currentTarget.src = "/mock/product-1.svg"; }}
-                                />
-                            </div>
-                            <CardContent className="p-3 space-y-2">
-                                <div>
-                                    <p className="font-medium text-sm text-black line-clamp-1">{product.name}</p>
-                                    <p className="text-xs text-black">{formatCategory(product.category)}</p>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <span className="text-sm font-semibold text-black">{formatCurrency(Number(product.unit_price))}</span>
-                                    <span className={`text-xs px-2 py-0.5 rounded-full ${(product.inventory?.quantity ?? 0) > 10
-                                        ? "bg-green-100 text-green-700"
-                                        : (product.inventory?.quantity ?? 0) > 0
-                                            ? "bg-yellow-100 text-yellow-700"
-                                            : "bg-red-100 text-red-700"
-                                        }`}>
-                                        Stock: {product.inventory?.quantity ?? 0}
-                                    </span>
-                                </div>
-                                <div className="flex gap-2 pt-1">
-                                    <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => openEdit(product)}>
-                                        Edit
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="flex-1 text-xs text-red-600 border-red-200 hover:bg-red-50"
-                                        onClick={() => handleDelete(product)}
-                                        disabled={deletingId === product.id}
-                                    >
-                                        {deletingId === product.id ? "…" : "Delete"}
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
-                    {filteredProducts.length === 0 && (
-                        <p className="text-gray-400 text-sm col-span-full text-center py-12">
-                            No products found.
-                        </p>
+            {activeTab === "inventory" && (
+                <>
+                    {/* Filters + Actions */}
+                    <div className="flex flex-col sm:flex-row items-center gap-4">
+                        <Input
+                            placeholder="Search products…"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="flex-1 h-10 px-4 bg-white text-black placeholder:text-gray-400 border-gray-300 rounded-md"
+                        />
+                        <select
+                            className="h-10 px-4 rounded-md text-sm text-white font-medium bg-gradient-to-r from-pink-500 to-rose-600 border-0 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-pink-400 whitespace-nowrap"
+                            value={categoryFilter}
+                            onChange={(e) => setCategoryFilter(e.target.value)}
+                        >
+                            <option value="all" className="bg-white text-black">All Categories</option>
+                            {categories.map((c) => (
+                                <option key={c.id} value={c.name} className="bg-white text-black">{c.name}</option>
+                            ))}
+                        </select>
+                        <Button
+                            className="h-10 px-4 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 whitespace-nowrap"
+                            onClick={() => { setNewCategoryName(""); setCategoryError(null); setCategoryDialogOpen(true); }}
+                        >
+                            + Add Category
+                        </Button>
+                        <Button
+                            className="h-10 px-4 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 whitespace-nowrap"
+                            onClick={openCreate}
+                        >
+                            + Add Product
+                        </Button>
+                    </div>
+
+                    {/* Content */}
+                    {loading ? (
+                        <p className="text-gray-400 text-sm">Loading products…</p>
+                    ) : error ? (
+                        <p className="text-red-500 text-sm">{error}</p>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                            {filteredProducts.map((product) => (
+                                <Card key={product.id} className={`overflow-hidden ${!product.is_active ? "opacity-50" : ""}`}>
+                                    {/* Image */}
+                                    <div className="aspect-square bg-gray-100">
+                                        <img
+                                            src={product.photo_url || "/mock/product-1.svg"}
+                                            alt={product.name}
+                                            className="w-full h-full object-cover"
+                                            onError={(e) => { e.currentTarget.src = "/mock/product-1.svg"; }}
+                                        />
+                                    </div>
+                                    <CardContent className="p-3 space-y-2">
+                                        <div>
+                                            <p className="font-medium text-sm text-black line-clamp-1">{product.name}</p>
+                                            <p className="text-xs text-black">{formatCategory(product.category)}</p>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sm font-semibold text-black">{formatCurrency(Number(product.unit_price))}</span>
+                                            <span className={`text-xs px-2 py-0.5 rounded-full ${(product.inventory?.quantity ?? 0) > 10
+                                                ? "bg-green-100 text-green-700"
+                                                : (product.inventory?.quantity ?? 0) > 0
+                                                    ? "bg-yellow-100 text-yellow-700"
+                                                    : "bg-red-100 text-red-700"
+                                                }`}>
+                                                Stock: {product.inventory?.quantity ?? 0}
+                                            </span>
+                                        </div>
+                                        <div className="flex gap-2 pt-1">
+                                            <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => openEdit(product)}>
+                                                Edit
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="flex-1 text-xs text-red-600 border-red-200 hover:bg-red-50"
+                                                onClick={() => handleDelete(product)}
+                                                disabled={deletingId === product.id}
+                                            >
+                                                {deletingId === product.id ? "…" : "Delete"}
+                                            </Button>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                            {filteredProducts.length === 0 && (
+                                <p className="text-gray-400 text-sm col-span-full text-center py-12">
+                                    No products found.
+                                </p>
+                            )}
+                        </div>
                     )}
+                </>
+            )}
+
+            {activeTab === "history" && (
+                <div className="bg-white border border-gray-100 rounded-xl shadow-sm">
+                    <div className="p-4 sm:p-6 flex flex-col gap-3">
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <h2 className="text-lg font-semibold text-gray-900">Stock History</h2>
+                                <p className="text-sm text-gray-500">Newest changes first</p>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
+                            <Input
+                                placeholder="Search inventory history..."
+                                value={historySearch}
+                                onChange={(e) => setHistorySearch(e.target.value)}
+                                className="flex-1 min-w-[240px]"
+                            />
+
+                            <div className="flex items-center gap-2 flex-nowrap">
+                                <Input
+                                    type="date"
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    className="h-10 min-w-[140px]"
+                                />
+                                <span className="text-gray-400 text-sm">→</span>
+                                <Input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    className="h-10 min-w-[140px]"
+                                />
+                                <Button
+                                    variant="outline"
+                                    className="h-10"
+                                    onClick={() => {
+                                        const today = new Date().toLocaleDateString("en-CA");
+                                        setStartDate(today);
+                                        setEndDate(today);
+                                    }}
+                                >
+                                    Today
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="px-4 pb-6 sm:px-6">
+                        {historyLoading ? (
+                            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-6 text-sm text-gray-500 text-center">
+                                Loading history...
+                            </div>
+                        ) : historyError ? (
+                            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                {(historyError as Error).message}
+                            </div>
+                        ) : filteredHistory.length === 0 ? (
+                            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-6 text-sm text-gray-500 text-center">
+                                No stock changes recorded yet.
+                            </div>
+                        ) : (
+                            <div className="border-2 border-gray-300 rounded-lg overflow-hidden shadow-sm bg-white">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full border-collapse text-sm">
+                                        <thead className="bg-blue-600 text-white">
+                                            <tr className="divide-x divide-blue-500/40">
+                                                <th className="text-left py-3 px-4 text-sm font-medium">Date</th>
+                                                <th className="text-left py-3 px-4 text-sm font-medium">Product</th>
+                                                <th className="text-center py-3 px-4 text-sm font-medium">Event</th>
+                                                <th className="text-right py-3 px-4 text-sm font-medium">Change</th>
+                                                <th className="text-right py-3 px-4 text-sm font-medium">Inventory After</th>
+                                                <th className="text-left py-3 px-4 text-sm font-medium">Source</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                        {filteredHistory.map((entry, index) => {
+                                            const change = entry.change_quantity;
+                                            const badgeClass = entry.event === "order"
+                                                ? "bg-red-50 text-red-700 border-red-200"
+                                                : entry.event === "restock"
+                                                    ? "bg-green-50 text-green-700 border-green-200"
+                                                    : entry.event === "return"
+                                                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                                                        : "bg-amber-50 text-amber-700 border-amber-200";
+
+                                            return (
+                                                <tr
+                                                    key={entry.id}
+                                                    className={`border-b border-gray-200 divide-x divide-gray-200 ${index % 2 === 0
+                                                        ? "bg-blue-50 hover:bg-blue-100"
+                                                        : "bg-white hover:bg-gray-50"
+                                                        }`}
+                                                >
+                                                    <td className="py-3 px-4 whitespace-nowrap text-xs sm:text-sm text-gray-600">
+                                                        {new Date(entry.created_at).toLocaleString("en-MM", {
+                                                            year: "numeric",
+                                                            month: "short",
+                                                            day: "numeric",
+                                                            hour: "2-digit",
+                                                            minute: "2-digit",
+                                                        })}
+                                                    </td>
+                                                    <td className="py-3 px-4 min-w-[220px]">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-10 h-10 rounded-md bg-gray-100 overflow-hidden flex-shrink-0">
+                                                                <img
+                                                                    src={entry.product.photo_url || "/mock/product-1.svg"}
+                                                                    alt={entry.product.name}
+                                                                    className="w-full h-full object-cover"
+                                                                    onError={(e) => { e.currentTarget.src = "/mock/product-1.svg"; }}
+                                                                />
+                                                            </div>
+                                                            <div className="flex flex-col">
+                                                                <span className="text-sm font-medium text-gray-900 line-clamp-1">{entry.product.name}</span>
+                                                                <span className="text-xs text-gray-500">ID #{entry.product_id}</span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3 px-4 whitespace-nowrap text-center">
+                                                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold border ${badgeClass}`}>
+                                                            {entry.event.charAt(0).toUpperCase() + entry.event.slice(1)}
+                                                        </span>
+                                                    </td>
+                                                    <td className={`py-3 px-4 whitespace-nowrap font-semibold text-right ${change >= 0 ? "text-green-700" : "text-red-700"}`}>
+                                                        {change > 0 ? `+${change}` : change}
+                                                    </td>
+                                                    <td className="py-3 px-4 whitespace-nowrap text-gray-800 font-medium text-right">
+                                                        {entry.inventory_after}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm whitespace-nowrap">
+                                                        {entry.source ? (
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-700">
+                                                                {entry.source}
+                                                            </span>
+                                                        ) : "—"}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
 
@@ -471,37 +743,101 @@ export default function AdminInventoryPage() {
                                 />
                             </div>
 
-                            {/* Stock Quantity + Unit */}
-                            <div>
-                                <label className="text-sm font-medium text-gray-700 block mb-1">
-                                    {editingProduct ? "Stock Quantity" : "Opening Stock"}
-                                </label>
-                                <div className="flex gap-2">
-                                    <Input
-                                        type="number"
-                                        min={0}
-                                        className="flex-1"
-                                        value={form.stockQuantity}
-                                        onChange={(e) => setForm((f) => ({ ...f, stockQuantity: e.target.value }))}
-                                        placeholder="e.g. 100"
-                                        disabled={saving}
-                                    />
-                                    <select
-                                        className="w-24 border border-gray-200 rounded-md px-3 py-2 text-sm bg-white text-black"
-                                        value={form.stockUnit}
-                                        onChange={(e) => setForm((f) => ({ ...f, stockUnit: e.target.value as "PCS" | "BOX" }))}
-                                        disabled={saving}
-                                    >
-                                        <option value="PCS">PCS</option>
-                                        <option value="BOX">BOX</option>
-                                    </select>
+                            {/* Stock */}
+                            {editingProduct ? (
+                                <>
+                                    <div>
+                                        <label className="text-sm font-medium text-gray-700 block mb-1">Current Stock</label>
+                                        <div className="flex gap-2">
+                                            <Input
+                                                className="flex-1 bg-gray-50"
+                                                value={formatStockValue(
+                                                    convertFromPcs(
+                                                        Number(form.stockQuantity || 0),
+                                                        form.currentStockViewUnit,
+                                                        Number(form.pcs_per_dozen || 12),
+                                                        Number(form.pcs_per_box || 24),
+                                                    ),
+                                                )}
+                                                readOnly
+                                                disabled
+                                            />
+                                            <select
+                                                className="w-28 border border-gray-200 rounded-md px-3 py-2 text-sm bg-white text-black"
+                                                value={form.currentStockViewUnit}
+                                                onChange={(e) => setForm((f) => ({ ...f, currentStockViewUnit: e.target.value as "PCS" | "DOZEN" | "BOX" }))}
+                                                disabled={saving}
+                                            >
+                                                <option value="PCS">PCS</option>
+                                                <option value="DOZEN">Dozen</option>
+                                                <option value="BOX">Box</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-sm font-medium text-gray-700 block mb-1">Adjust Stock</label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                            <Input
+                                                type="number"
+                                                min={0}
+                                                value={form.adjustQuantity}
+                                                onChange={(e) => setForm((f) => ({ ...f, adjustQuantity: e.target.value }))}
+                                                placeholder="Quantity"
+                                                disabled={saving}
+                                            />
+                                            <select
+                                                className="border border-gray-200 rounded-md px-3 py-2 text-sm bg-white text-black"
+                                                value={form.adjustAction}
+                                                onChange={(e) => setForm((f) => ({ ...f, adjustAction: e.target.value as "increase" | "decrease" }))}
+                                                disabled={saving}
+                                            >
+                                                <option value="increase">Increase</option>
+                                                <option value="decrease">Decrease</option>
+                                            </select>
+                                            <select
+                                                className="border border-gray-200 rounded-md px-3 py-2 text-sm bg-white text-black"
+                                                value={form.adjustUnit}
+                                                onChange={(e) => setForm((f) => ({ ...f, adjustUnit: e.target.value as "PCS" | "DOZEN" | "BOX" }))}
+                                                disabled={saving}
+                                            >
+                                                <option value="PCS">PCS</option>
+                                                <option value="DOZEN">Dozen</option>
+                                                <option value="BOX">Box</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <div>
+                                    <label className="text-sm font-medium text-gray-700 block mb-1">Opening Stock</label>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            type="number"
+                                            min={0}
+                                            className="flex-1"
+                                            value={form.stockQuantity}
+                                            onChange={(e) => setForm((f) => ({ ...f, stockQuantity: e.target.value }))}
+                                            placeholder="e.g. 100"
+                                            disabled={saving}
+                                        />
+                                        <select
+                                            className="w-24 border border-gray-200 rounded-md px-3 py-2 text-sm bg-white text-black"
+                                            value={form.stockUnit}
+                                            onChange={(e) => setForm((f) => ({ ...f, stockUnit: e.target.value as "PCS" | "DOZEN" | "BOX" }))}
+                                            disabled={saving}
+                                        >
+                                            <option value="PCS">PCS</option>
+                                            <option value="BOX">BOX</option>
+                                        </select>
+                                    </div>
+                                    {form.stockUnit === "BOX" && form.stockQuantity && (
+                                        <p className="text-xs text-gray-400 mt-1">
+                                            = {Math.round(Number(form.stockQuantity) * Number(form.pcs_per_box || 24))} PCS
+                                        </p>
+                                    )}
                                 </div>
-                                {form.stockUnit === "BOX" && form.stockQuantity && (
-                                    <p className="text-xs text-gray-400 mt-1">
-                                        = {Math.round(Number(form.stockQuantity) * Number(form.pcs_per_box || 24))} PCS
-                                    </p>
-                                )}
-                            </div>
+                            )}
 
                             {/* Dozen / Box */}
                             <div className="grid grid-cols-2 gap-3">
