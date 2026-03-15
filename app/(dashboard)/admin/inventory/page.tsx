@@ -27,6 +27,17 @@ type Product = {
     inventory: { quantity: number } | null;
 };
 
+type StockHistory = {
+    id: number;
+    product_id: number;
+    event: "order" | "restock" | "adjustment" | "return";
+    change_quantity: number;
+    inventory_after: number;
+    source: string | null;
+    created_at: string;
+    product: { id: number; name: string; photo_url: string };
+};
+
 const emptyForm = {
     name: "",
     description: "",
@@ -60,6 +71,11 @@ export default function AdminInventoryPage() {
     const { token } = useAuth();
     const queryClient = useQueryClient();
 
+    const [activeTab, setActiveTab] = useState<"inventory" | "history">("inventory");
+    const [historySearch, setHistorySearch] = useState("");
+    const [startDate, setStartDate] = useState("");
+    const [endDate, setEndDate] = useState("");
+
     const { data: products = [], isLoading: loading, error: queryError } = useQuery({
         queryKey: ["admin-products"],
         queryFn: () => apiFetch<Product[]>("/products", { token }),
@@ -71,6 +87,38 @@ export default function AdminInventoryPage() {
         queryFn: () => apiFetch<Category[]>("/categories", { token }),
         enabled: !!token,
     });
+
+    const { data: stockHistory = [], isLoading: historyLoading, error: historyError } = useQuery({
+        queryKey: ["stock-history"],
+        queryFn: () => apiFetch<StockHistory[]>("/inventory/stock-history", { token }),
+        enabled: !!token,
+    });
+
+    const filteredHistory = useMemo(() => {
+        let list = stockHistory;
+
+        const q = historySearch.trim().toLowerCase();
+        if (q) {
+            list = list.filter((entry) =>
+                entry.product.name.toLowerCase().includes(q) || (entry.source ?? "").toLowerCase().includes(q)
+            );
+        }
+
+        const start = startDate ? new Date(startDate) : null;
+        const end = endDate ? new Date(endDate) : null;
+        const endInclusive = end ? new Date(end.getTime() + 24 * 60 * 60 * 1000) : null;
+
+        if (start || endInclusive) {
+            list = list.filter((entry) => {
+                const d = new Date(entry.created_at);
+                if (start && d < start) return false;
+                if (endInclusive && d >= endInclusive) return false;
+                return true;
+            });
+        }
+
+        return list;
+    }, [stockHistory, historySearch, startDate, endDate]);
 
     const [error, setError] = useState<string | null>(queryError?.message ?? null);
     const [searchQuery, setSearchQuery] = useState("");
@@ -226,94 +274,245 @@ export default function AdminInventoryPage() {
                 <p className="text-gray-500 mt-1">Manage product catalogue and inventory stock</p>
             </div>
 
-            {/* Filters + Actions */}
-            <div className="flex flex-col sm:flex-row items-center gap-4">
-                <Input
-                    placeholder="Search products…"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="flex-1 h-10 px-4 bg-white text-black placeholder:text-gray-400 border-gray-300 rounded-md"
-                />
-                <select
-                    className="h-10 px-4 rounded-md text-sm text-white font-medium bg-gradient-to-r from-pink-500 to-rose-600 border-0 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-pink-400 whitespace-nowrap"
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
-                >
-                    <option value="all" className="bg-white text-black">All Categories</option>
-                    {categories.map((c) => (
-                        <option key={c.id} value={c.name} className="bg-white text-black">{c.name}</option>
-                    ))}
-                </select>
-                <Button
-                    className="h-10 px-4 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 whitespace-nowrap"
-                    onClick={() => { setNewCategoryName(""); setCategoryError(null); setCategoryDialogOpen(true); }}
-                >
-                    + Add Category
-                </Button>
-                <Button
-                    className="h-10 px-4 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 whitespace-nowrap"
-                    onClick={openCreate}
-                >
-                    + Add Product
-                </Button>
+            {/* Tabs */}
+            <div className="flex items-center gap-2 border-b border-gray-200">
+                {[
+                    { key: "inventory", label: "Inventory" },
+                    { key: "history", label: "Stock History" },
+                ].map((tab) => (
+                    <button
+                        key={tab.key}
+                        onClick={() => setActiveTab(tab.key as typeof activeTab)}
+                        className={`px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === tab.key
+                            ? "text-rose-600 border-rose-500"
+                            : "text-gray-500 border-transparent hover:text-gray-700"}`}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
             </div>
 
-            {/* Content */}
-            {loading ? (
-                <p className="text-gray-400 text-sm">Loading products…</p>
-            ) : error ? (
-                <p className="text-red-500 text-sm">{error}</p>
-            ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {filteredProducts.map((product) => (
-                        <Card key={product.id} className={`overflow-hidden ${!product.is_active ? "opacity-50" : ""}`}>
-                            {/* Image */}
-                            <div className="aspect-square bg-gray-100">
-                                <img
-                                    src={product.photo_url || "/mock/product-1.svg"}
-                                    alt={product.name}
-                                    className="w-full h-full object-cover"
-                                    onError={(e) => { e.currentTarget.src = "/mock/product-1.svg"; }}
-                                />
-                            </div>
-                            <CardContent className="p-3 space-y-2">
-                                <div>
-                                    <p className="font-medium text-sm text-black line-clamp-1">{product.name}</p>
-                                    <p className="text-xs text-black">{formatCategory(product.category)}</p>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <span className="text-sm font-semibold text-black">{formatCurrency(Number(product.unit_price))}</span>
-                                    <span className={`text-xs px-2 py-0.5 rounded-full ${(product.inventory?.quantity ?? 0) > 10
-                                        ? "bg-green-100 text-green-700"
-                                        : (product.inventory?.quantity ?? 0) > 0
-                                            ? "bg-yellow-100 text-yellow-700"
-                                            : "bg-red-100 text-red-700"
-                                        }`}>
-                                        Stock: {product.inventory?.quantity ?? 0}
-                                    </span>
-                                </div>
-                                <div className="flex gap-2 pt-1">
-                                    <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => openEdit(product)}>
-                                        Edit
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="flex-1 text-xs text-red-600 border-red-200 hover:bg-red-50"
-                                        onClick={() => handleDelete(product)}
-                                        disabled={deletingId === product.id}
-                                    >
-                                        {deletingId === product.id ? "…" : "Delete"}
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
-                    {filteredProducts.length === 0 && (
-                        <p className="text-gray-400 text-sm col-span-full text-center py-12">
-                            No products found.
-                        </p>
+            {activeTab === "inventory" && (
+                <>
+                    {/* Filters + Actions */}
+                    <div className="flex flex-col sm:flex-row items-center gap-4">
+                        <Input
+                            placeholder="Search products…"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="flex-1 h-10 px-4 bg-white text-black placeholder:text-gray-400 border-gray-300 rounded-md"
+                        />
+                        <select
+                            className="h-10 px-4 rounded-md text-sm text-white font-medium bg-gradient-to-r from-pink-500 to-rose-600 border-0 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-pink-400 whitespace-nowrap"
+                            value={categoryFilter}
+                            onChange={(e) => setCategoryFilter(e.target.value)}
+                        >
+                            <option value="all" className="bg-white text-black">All Categories</option>
+                            {categories.map((c) => (
+                                <option key={c.id} value={c.name} className="bg-white text-black">{c.name}</option>
+                            ))}
+                        </select>
+                        <Button
+                            className="h-10 px-4 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 whitespace-nowrap"
+                            onClick={() => { setNewCategoryName(""); setCategoryError(null); setCategoryDialogOpen(true); }}
+                        >
+                            + Add Category
+                        </Button>
+                        <Button
+                            className="h-10 px-4 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 whitespace-nowrap"
+                            onClick={openCreate}
+                        >
+                            + Add Product
+                        </Button>
+                    </div>
+
+                    {/* Content */}
+                    {loading ? (
+                        <p className="text-gray-400 text-sm">Loading products…</p>
+                    ) : error ? (
+                        <p className="text-red-500 text-sm">{error}</p>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                            {filteredProducts.map((product) => (
+                                <Card key={product.id} className={`overflow-hidden ${!product.is_active ? "opacity-50" : ""}`}>
+                                    {/* Image */}
+                                    <div className="aspect-square bg-gray-100">
+                                        <img
+                                            src={product.photo_url || "/mock/product-1.svg"}
+                                            alt={product.name}
+                                            className="w-full h-full object-cover"
+                                            onError={(e) => { e.currentTarget.src = "/mock/product-1.svg"; }}
+                                        />
+                                    </div>
+                                    <CardContent className="p-3 space-y-2">
+                                        <div>
+                                            <p className="font-medium text-sm text-black line-clamp-1">{product.name}</p>
+                                            <p className="text-xs text-black">{formatCategory(product.category)}</p>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sm font-semibold text-black">{formatCurrency(Number(product.unit_price))}</span>
+                                            <span className={`text-xs px-2 py-0.5 rounded-full ${(product.inventory?.quantity ?? 0) > 10
+                                                ? "bg-green-100 text-green-700"
+                                                : (product.inventory?.quantity ?? 0) > 0
+                                                    ? "bg-yellow-100 text-yellow-700"
+                                                    : "bg-red-100 text-red-700"
+                                                }`}>
+                                                Stock: {product.inventory?.quantity ?? 0}
+                                            </span>
+                                        </div>
+                                        <div className="flex gap-2 pt-1">
+                                            <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => openEdit(product)}>
+                                                Edit
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="flex-1 text-xs text-red-600 border-red-200 hover:bg-red-50"
+                                                onClick={() => handleDelete(product)}
+                                                disabled={deletingId === product.id}
+                                            >
+                                                {deletingId === product.id ? "…" : "Delete"}
+                                            </Button>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                            {filteredProducts.length === 0 && (
+                                <p className="text-gray-400 text-sm col-span-full text-center py-12">
+                                    No products found.
+                                </p>
+                            )}
+                        </div>
                     )}
+                </>
+            )}
+
+            {activeTab === "history" && (
+                <div className="bg-white border border-gray-100 rounded-xl shadow-sm">
+                    <div className="p-4 sm:p-6 flex flex-col gap-3">
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <h2 className="text-lg font-semibold text-gray-900">Stock History</h2>
+                                <p className="text-sm text-gray-500">Newest changes first</p>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
+                            <Input
+                                placeholder="Search inventory history..."
+                                value={historySearch}
+                                onChange={(e) => setHistorySearch(e.target.value)}
+                                className="flex-1 min-w-[240px]"
+                            />
+
+                            <div className="flex items-center gap-2 flex-nowrap">
+                                <Input
+                                    type="date"
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    className="h-10 min-w-[140px]"
+                                />
+                                <span className="text-gray-400 text-sm">→</span>
+                                <Input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    className="h-10 min-w-[140px]"
+                                />
+                                <Button
+                                    variant="outline"
+                                    className="h-10"
+                                    onClick={() => {
+                                        const today = new Date().toISOString().slice(0, 10);
+                                        setStartDate(today);
+                                        setEndDate(today);
+                                    }}
+                                >
+                                    Today
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="px-4 pb-6 sm:px-6">
+                        {historyLoading ? (
+                            <p className="text-gray-400 text-sm">Loading history…</p>
+                        ) : historyError ? (
+                            <p className="text-red-500 text-sm">{(historyError as Error).message}</p>
+                        ) : filteredHistory.length === 0 ? (
+                            <p className="text-gray-400 text-sm text-center py-8">No stock changes recorded yet.</p>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full text-left text-sm">
+                                    <thead>
+                                        <tr className="text-xs uppercase tracking-wide text-gray-500">
+                                            <th className="py-2 pr-4">Date</th>
+                                            <th className="py-2 pr-4">Product</th>
+                                            <th className="py-2 pr-4">Event</th>
+                                            <th className="py-2 pr-4">Change</th>
+                                            <th className="py-2 pr-4">Inventory After</th>
+                                            <th className="py-2 pr-4">Source</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {filteredHistory.map((entry) => {
+                                            const change = entry.change_quantity;
+                                            const badgeClass = entry.event === "order"
+                                                ? "bg-red-50 text-red-700"
+                                                : entry.event === "restock"
+                                                    ? "bg-green-50 text-green-700"
+                                                    : entry.event === "return"
+                                                        ? "bg-blue-50 text-blue-700"
+                                                        : "bg-amber-50 text-amber-700";
+
+                                            return (
+                                                <tr key={entry.id} className="text-gray-800">
+                                                    <td className="py-3 pr-4 whitespace-nowrap text-xs sm:text-sm text-gray-600">
+                                                        {new Date(entry.created_at).toLocaleString("en-MM", {
+                                                            year: "numeric",
+                                                            month: "short",
+                                                            day: "numeric",
+                                                            hour: "2-digit",
+                                                            minute: "2-digit",
+                                                        })}
+                                                    </td>
+                                                    <td className="py-3 pr-4 min-w-[200px]">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-10 h-10 rounded-md bg-gray-100 overflow-hidden flex-shrink-0">
+                                                                <img
+                                                                    src={entry.product.photo_url || "/mock/product-1.svg"}
+                                                                    alt={entry.product.name}
+                                                                    className="w-full h-full object-cover"
+                                                                    onError={(e) => { e.currentTarget.src = "/mock/product-1.svg"; }}
+                                                                />
+                                                            </div>
+                                                            <div className="flex flex-col">
+                                                                <span className="text-sm font-medium text-gray-900 line-clamp-1">{entry.product.name}</span>
+                                                                <span className="text-xs text-gray-500">ID #{entry.product_id}</span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3 pr-4 whitespace-nowrap">
+                                                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${badgeClass}`}>
+                                                            {entry.event.charAt(0).toUpperCase() + entry.event.slice(1)}
+                                                        </span>
+                                                    </td>
+                                                    <td className={`py-3 pr-4 whitespace-nowrap font-semibold ${change >= 0 ? "text-green-700" : "text-red-700"}`}>
+                                                        {change > 0 ? `+${change}` : change}
+                                                    </td>
+                                                    <td className="py-3 pr-4 whitespace-nowrap text-gray-800 font-medium">
+                                                        {entry.inventory_after}
+                                                    </td>
+                                                    <td className="py-3 pr-4 text-gray-600 text-xs sm:text-sm whitespace-nowrap">
+                                                        {entry.source || "—"}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
 
