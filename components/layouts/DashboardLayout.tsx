@@ -20,11 +20,13 @@ const adminNavItems = [
     { href: "/admin/outstanding", label: "Payment", icon: "outstanding" },
     { href: "/admin/payment-history", label: "Payment History", icon: "history" },
     { href: "/admin/expenses", label: "Expenses", icon: "expenses" },
+    { href: "/admin/purchase", label: "Purchase", icon: "purchase" },
     { href: "/admin/cash-ledger", label: "Cash Ledger", icon: "ledger" },
 ];
 
 const adminSetupItems = [
     { href: "/admin/inventory", label: "Products", icon: "products" },
+    { href: "/admin/suppliers", label: "Suppliers", icon: "shops" },
     { href: "/admin/employees", label: "Employees", icon: "employees" },
     { href: "/admin/users", label: "Users", icon: "users" },
     { href: "/admin/customers", label: "Customers", icon: "customers" },
@@ -106,6 +108,13 @@ const icons: Record<string, React.ReactNode> = {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
         </svg>
     ),
+    purchase: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l2.5 11h9.5l2.2-8H7.3" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 18h.01M17 18h.01" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v4m2-2h-4" />
+        </svg>
+    ),
     ledger: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -167,7 +176,7 @@ export default function DashboardLayout({
                 if (settingsData?.system_logo) setSystemLogo(settingsData.system_logo);
                 else setSystemLogo(null);
             })
-            .catch(() => {});
+            .catch(() => { });
     }, [user]);
 
     useEffect(() => {
