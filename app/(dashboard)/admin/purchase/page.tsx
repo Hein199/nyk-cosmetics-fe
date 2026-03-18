@@ -720,9 +720,9 @@ export default function AdminPurchasePage() {
                                                                 Purchase Price / Pcs
                                                             </label>
                                                             <Input
-                                                                type="text"
-                                                                inputMode="numeric"
-                                                                pattern="[0-9]*"
+                                                                type="number"
+                                                                min={0}
+                                                                step="0.01"
                                                                 value={line.purchase_price_per_pcs}
                                                                 onChange={(event) =>
                                                                     updateLineItem(line.product_id, "purchase_price_per_pcs", event.target.value)
@@ -748,15 +748,14 @@ export default function AdminPurchasePage() {
                                                                 Quantity ({unitLabel})
                                                             </label>
                                                             <Input
-                                                                type="text"
-                                                                inputMode="numeric"
-                                                                pattern="[0-9]*"
+                                                                type="number"
+                                                                min={0}
+                                                                step="1"
                                                                 value={line.quantity}
                                                                 onChange={(event) =>
                                                                     updateLineItem(line.product_id, "quantity", event.target.value)
                                                                 }
                                                                 onBlur={() => handleLineItemBlur(line.product_id, "quantity")}
-                                                                onKeyDown={preventInvalidAmountKeys}
                                                                 className={`h-9 ${quantityInvalid ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                                                             />
                                                             {quantityInvalid && (

@@ -8,11 +8,14 @@ interface FetchOptions {
     signal?: AbortSignal;
 }
 
+const inFlightMutationRequests = new Map<string, Promise<unknown>>();
+
 export async function apiFetch<T = unknown>(
     path: string,
     options: FetchOptions = {},
 ): Promise<T> {
     const { method = 'GET', body, token, params, signal } = options;
+    const normalizedMethod = method.toUpperCase();
 
     let url = `${API_BASE_URL}/_api${path}`;
     if (params) {
@@ -32,30 +35,52 @@ export async function apiFetch<T = unknown>(
         headers.Authorization = `Bearer ${token}`;
     }
 
-    const response = await fetch(url, {
-        method,
-        headers,
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-        signal,
-    });
+    const requestBody = body !== undefined ? JSON.stringify(body) : undefined;
 
-    if (!response.ok) {
-        let message = `Request failed (${response.status})`;
-        try {
-            const errBody = await response.json();
-            if (errBody.message) {
-                message = Array.isArray(errBody.message)
-                    ? errBody.message.join(', ')
-                    : errBody.message;
+    const runRequest = async () => {
+        const response = await fetch(url, {
+            method: normalizedMethod,
+            headers,
+            body: requestBody,
+            signal,
+        });
+
+        if (!response.ok) {
+            let message = `Request failed (${response.status})`;
+            try {
+                const errBody = await response.json();
+                if (errBody.message) {
+                    message = Array.isArray(errBody.message)
+                        ? errBody.message.join(', ')
+                        : errBody.message;
+                }
+            } catch {
+                const text = await response.text();
+                if (text) message = text;
             }
-        } catch {
-            const text = await response.text();
-            if (text) message = text;
+            throw new Error(message);
         }
-        throw new Error(message);
+
+        const text = await response.text();
+        if (!text) return undefined as T;
+        return JSON.parse(text) as T;
+    };
+
+    const shouldDedupeMutation = !signal && normalizedMethod !== 'GET' && normalizedMethod !== 'HEAD';
+    if (!shouldDedupeMutation) {
+        return runRequest();
     }
 
-    const text = await response.text();
-    if (!text) return undefined as T;
-    return JSON.parse(text) as T;
+    const mutationKey = `${normalizedMethod}:${url}:${token ?? ''}:${requestBody ?? ''}`;
+    const existingRequest = inFlightMutationRequests.get(mutationKey);
+    if (existingRequest) {
+        return existingRequest as Promise<T>;
+    }
+
+    const requestPromise = runRequest().finally(() => {
+        inFlightMutationRequests.delete(mutationKey);
+    });
+
+    inFlightMutationRequests.set(mutationKey, requestPromise as Promise<unknown>);
+    return requestPromise;
 }

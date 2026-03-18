@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,14 @@ function formatCurrency(amount: number) {
 
 function formatCategory(category: string) {
     return category.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function sanitizeNonNegativeInteger(value: string) {
+    const digitsOnly = value.replace(/\D/g, "");
+    if (digitsOnly === "") {
+        return "";
+    }
+    return digitsOnly.replace(/^0+(?=\d)/, "");
 }
 
 export default function ProductDetailPage() {
@@ -102,6 +110,58 @@ export default function ProductDetailPage() {
         const remaining = Math.max(0, stock - existingCartPieces);
         return Math.max(0, Math.floor(remaining / unitMultiplier));
     }, [product, existingCartPieces, unitMultiplier]);
+
+    const preventInvalidNumericKeys = (event: KeyboardEvent<HTMLInputElement>) => {
+        const allowedControlKeys = [
+            "Backspace",
+            "Delete",
+            "ArrowLeft",
+            "ArrowRight",
+            "Tab",
+            "Home",
+            "End",
+        ];
+
+        if (event.ctrlKey || event.metaKey) {
+            return;
+        }
+
+        if (allowedControlKeys.includes(event.key)) {
+            return;
+        }
+
+        if (!/^\d$/.test(event.key)) {
+            event.preventDefault();
+        }
+    };
+
+    const handleQuantityInput = (value: string) => {
+        const normalized = sanitizeNonNegativeInteger(value);
+        if (!normalized) {
+            setQuantity(1);
+            return;
+        }
+
+        const parsed = Number(normalized);
+        if (!Number.isFinite(parsed)) {
+            return;
+        }
+
+        setQuantity(Math.max(1, Math.min(maxQuantity, parsed)));
+    };
+
+    const handleCustomPriceInput = (value: string) => {
+        const normalized = sanitizeNonNegativeInteger(value);
+        setCustomPrice(normalized);
+    };
+
+    const handleCustomPriceBlur = () => {
+        if (customPrice === "") {
+            return;
+        }
+        const normalized = sanitizeNonNegativeInteger(customPrice);
+        setCustomPrice(normalized === "" ? "0" : String(Number(normalized)));
+    };
 
     const handleDecrease = () => {
         setQuantity((prev) => Math.max(1, prev - 1));
@@ -281,11 +341,13 @@ export default function ProductDetailPage() {
                                 </div>
                                 {useCustomPrice && (
                                     <Input
-                                        type="number"
-                                        min="0"
-                                        step="100"
+                                        type="text"
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
                                         value={customPrice}
-                                        onChange={(e) => setCustomPrice(e.target.value)}
+                                        onChange={(e) => handleCustomPriceInput(e.target.value)}
+                                        onBlur={handleCustomPriceBlur}
+                                        onKeyDown={preventInvalidNumericKeys}
                                         placeholder={`Default: ${formatCurrency(Number(product.unit_price ?? 0) * unitMultiplier)}`}
                                         className="h-9 text-sm text-black font-medium"
                                     />
@@ -303,11 +365,12 @@ export default function ProductDetailPage() {
                                     </button>
                                     <div className="w-16">
                                         <Input
-                                            type="number"
-                                            min="1"
-                                            max={maxQuantity}
+                                            type="text"
+                                            inputMode="numeric"
+                                            pattern="[0-9]*"
                                             value={quantity}
-                                            onChange={(e) => setQuantity(Math.max(1, Math.min(maxQuantity, parseInt(e.target.value) || 1)))}
+                                            onChange={(e) => handleQuantityInput(e.target.value)}
+                                            onKeyDown={preventInvalidNumericKeys}
                                             className="h-10 w-16 border-0 text-center text-sm font-medium text-gray-900 focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                         />
                                     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -113,6 +113,45 @@ export default function OrdersPage() {
     const [editedItems, setEditedItems] = useState<Record<number, { quantity: number; unit_price: number; unit_type: string }>>({});
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
+
+    const normalizeNonNegativeIntegerInput = (value: string) => {
+        const digitsOnly = value.replace(/\D/g, "");
+        if (digitsOnly === "") {
+            return 0;
+        }
+        const normalized = digitsOnly.replace(/^0+(?=\d)/, "");
+        return Number(normalized);
+    };
+
+    const preventNegativeQuantityKeys = (event: KeyboardEvent<HTMLInputElement>) => {
+        const allowedControlKeys = [
+            "Backspace",
+            "Delete",
+            "ArrowLeft",
+            "ArrowRight",
+            "Tab",
+            "Home",
+            "End",
+        ];
+
+        if (event.ctrlKey || event.metaKey) {
+            return;
+        }
+
+        if (allowedControlKeys.includes(event.key)) {
+            return;
+        }
+
+        if (!/^\d$/.test(event.key)) {
+            event.preventDefault();
+        }
+    };
+
+    const preventNegativePriceKeys = (event: KeyboardEvent<HTMLInputElement>) => {
+        if (["-", "+", "e", "E"].includes(event.key)) {
+            event.preventDefault();
+        }
+    };
 
     const dateRangeKey = useMemo(() => `nyk-orders-date-range:${user?.id ?? "anon"}`, [user?.id]);
     const todayDate = thaiToday();
@@ -798,10 +837,12 @@ export default function OrdersPage() {
                                                             <td className="py-3 px-4 text-center text-gray-900 font-semibold border-r border-gray-300">
                                                                 {isEditMode ? (
                                                                     <Input
-                                                                        type="number"
-                                                                        min={1}
+                                                                        type="text"
+                                                                        inputMode="numeric"
+                                                                        pattern="[0-9]*"
                                                                         value={qty}
-                                                                        onChange={(e) => updateEditedItem(item.id, "quantity", Math.max(1, parseInt(e.target.value) || 1))}
+                                                                        onChange={(e) => updateEditedItem(item.id, "quantity", normalizeNonNegativeIntegerInput(e.target.value))}
+                                                                        onKeyDown={preventNegativeQuantityKeys}
                                                                         className="h-8 w-20 text-center mx-auto"
                                                                     />
                                                                 ) : (
@@ -816,6 +857,7 @@ export default function OrdersPage() {
                                                                         step="0.01"
                                                                         value={unitPrice}
                                                                         onChange={(e) => updateEditedItem(item.id, "unit_price", Math.max(0, parseFloat(e.target.value) || 0))}
+                                                                        onKeyDown={preventNegativePriceKeys}
                                                                         className="h-8 w-28 text-right ml-auto"
                                                                     />
                                                                 ) : (

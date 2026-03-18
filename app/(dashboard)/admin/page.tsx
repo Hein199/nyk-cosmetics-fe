@@ -83,6 +83,44 @@ function fmtFull(amount: number): string {
     }).format(amount);
 }
 
+const TOP_PRODUCT_LABEL_MAX_CHARS = 22;
+
+function truncateLabel(label: string, maxChars: number): string {
+    if (label.length <= maxChars) {
+        return label;
+    }
+    return `${label.slice(0, maxChars).trimEnd()}...`;
+}
+
+function TopProductYAxisTick({
+    x = 0,
+    y = 0,
+    payload,
+}: {
+    x?: number;
+    y?: number;
+    payload?: { value?: string };
+}) {
+    const fullLabel = String(payload?.value ?? "");
+    const truncatedLabel = truncateLabel(fullLabel, TOP_PRODUCT_LABEL_MAX_CHARS);
+
+    return (
+        <g transform={`translate(${x},${y})`}>
+            <text
+                x={0}
+                y={0}
+                dy={4}
+                textAnchor="end"
+                fontSize={11}
+                fill="#475569"
+            >
+                <title>{fullLabel}</title>
+                {truncatedLabel}
+            </text>
+        </g>
+    );
+}
+
 // ── Shared tooltip ────────────────────────────────────────────────────────────
 
 function ChartTooltip({
@@ -242,6 +280,10 @@ export default function AdminPage() {
     const hasSalesperson = salesperson.data.length > 0;
     const hasCashFlow = cashFlow.some((d) => d["Cash In"] > 0 || d["Cash Out"] > 0);
     const hasSalesData = useMemo(() => salesData.some((d) => d.sales > 0), [salesData]);
+    const topProductsChartHeight = useMemo(() => {
+        const rows = Math.max(topProducts.length, 5);
+        return Math.max(220, rows * 34);
+    }, [topProducts.length]);
 
     return (
         <div className="space-y-6">
@@ -318,7 +360,7 @@ export default function AdminPage() {
                             </div>
                         }
                     />
-                    <div className="px-2 pb-5">
+                    <div className="px-3 sm:px-4 pb-5">
                         {topLoading ? (
                             <ChartSkeleton height={200} />
                         ) : topError ? (
@@ -326,11 +368,11 @@ export default function AdminPage() {
                         ) : !hasTopProducts ? (
                             <ChartEmpty message="No product sales data for this period." />
                         ) : (
-                            <ResponsiveContainer width="100%" height={200}>
+                            <ResponsiveContainer width="100%" height={topProductsChartHeight}>
                                 <BarChart
                                     layout="vertical"
                                     data={topProducts}
-                                    margin={{ top: 0, right: 16, left: 8, bottom: 0 }}
+                                    margin={{ top: 2, right: 12, left: 26, bottom: 2 }}
                                 >
                                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
                                     <XAxis
@@ -346,12 +388,17 @@ export default function AdminPage() {
                                     <YAxis
                                         type="category"
                                         dataKey="name"
-                                        tick={{ fontSize: 10, fill: "#64748b" }}
+                                        tick={<TopProductYAxisTick />}
                                         axisLine={false}
                                         tickLine={false}
-                                        width={90}
+                                        tickMargin={10}
+                                        interval={0}
+                                        width={170}
                                     />
-                                    <Tooltip content={<ChartTooltip isQty={topMetric === "qty"} />} />
+                                    <Tooltip
+                                        content={<ChartTooltip isQty={topMetric === "qty"} />}
+                                        cursor={{ fill: "rgba(167, 139, 250, 0.12)" }}
+                                    />
                                     <Bar dataKey="value" fill="#a78bfa" radius={[0, 4, 4, 0]} maxBarSize={18} />
                                 </BarChart>
                             </ResponsiveContainer>
