@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type KeyboardEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
+import { thaiToday } from "@/lib/utils";
 
 type Category = {
     id: number;
@@ -20,6 +21,7 @@ type Product = {
     description: string | null;
     category: string;
     unit_price: string | number;
+    last_purchase_price: string | number | null;
     pcs_per_dozen: string | number;
     pcs_per_box: string | number;
     photo_url: string;
@@ -43,6 +45,7 @@ const emptyForm = {
     description: "",
     category: "",
     unit_price: "",
+    last_purchase_price: "",
     stockQuantity: "",
     stockUnit: "PCS" as "PCS" | "DOZEN" | "BOX",
     adjustQuantity: "",
@@ -60,7 +63,15 @@ function formatCurrency(amount: number) {
         style: "currency",
         currency: "MMK",
         minimumFractionDigits: 0,
+        maximumFractionDigits: 6,
     }).format(amount);
+}
+
+function formatMmk(amount: number) {
+    return `${new Intl.NumberFormat("en-MM", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 6,
+    }).format(amount)} MMK`;
 }
 
 function formatCategory(category: string) {
@@ -71,14 +82,39 @@ function formatCategory(category: string) {
     return category;
 }
 
+function sanitizeAmountInput(value: string) {
+    const digitsOnly = value.replace(/\D/g, "");
+    return digitsOnly.replace(/^0+(?=\d)/, "");
+}
+
 export default function AdminInventoryPage() {
     const { token } = useAuth();
     const queryClient = useQueryClient();
+    const todayDate = thaiToday();
 
     const [activeTab, setActiveTab] = useState<"inventory" | "history">("inventory");
     const [historySearch, setHistorySearch] = useState("");
     const [startDate, setStartDate] = useState("");
-    const [endDate, setEndDate] = useState("");
+    const [endDate, setEndDate] = useState(todayDate);
+    const isToDateInvalid = Boolean(endDate && endDate > todayDate);
+    const isFromDateInvalid = Boolean(startDate && endDate && startDate > endDate);
+    const isDateRangeInvalid = isToDateInvalid || isFromDateInvalid;
+
+    const handleToDateChange = (value: string) => {
+        const nextToDate = !value || value > todayDate ? todayDate : value;
+        setEndDate(nextToDate);
+        setStartDate((prev) => (prev && prev > nextToDate ? "" : prev));
+    };
+
+    const handleFromDateChange = (value: string) => {
+        if (!value) {
+            setStartDate("");
+            return;
+        }
+
+        const maxFrom = endDate || todayDate;
+        setStartDate(value > maxFrom ? maxFrom : value);
+    };
 
     const { data: products = [], isLoading: loading, error: queryError } = useQuery({
         queryKey: ["admin-products"],
@@ -93,9 +129,14 @@ export default function AdminInventoryPage() {
     });
 
     const { data: stockHistory = [], isLoading: historyLoading, error: historyError } = useQuery({
-        queryKey: ["stock-history"],
-        queryFn: () => apiFetch<StockHistory[]>("/inventory/stock-history", { token }),
-        enabled: !!token,
+        queryKey: ["stock-history", startDate, endDate],
+        queryFn: () => {
+            const params: Record<string, string> = {};
+            if (startDate) params.from = startDate;
+            if (endDate) params.to = endDate;
+            return apiFetch<StockHistory[]>("/inventory/stock-history", { token, params });
+        },
+        enabled: !!token && !isDateRangeInvalid,
     });
 
     const filteredHistory = useMemo(() => {
@@ -108,21 +149,8 @@ export default function AdminInventoryPage() {
             );
         }
 
-        const start = startDate ? new Date(startDate) : null;
-        const end = endDate ? new Date(endDate) : null;
-        const endInclusive = end ? new Date(end.getTime() + 24 * 60 * 60 * 1000) : null;
-
-        if (start || endInclusive) {
-            list = list.filter((entry) => {
-                const d = new Date(entry.created_at);
-                if (start && d < start) return false;
-                if (endInclusive && d >= endInclusive) return false;
-                return true;
-            });
-        }
-
         return list;
-    }, [stockHistory, historySearch, startDate, endDate]);
+    }, [stockHistory, historySearch]);
 
     const [error, setError] = useState<string | null>(queryError?.message ?? null);
     const [searchQuery, setSearchQuery] = useState("");
@@ -144,6 +172,60 @@ export default function AdminInventoryPage() {
     const [categorySaving, setCategorySaving] = useState(false);
     const [categoryError, setCategoryError] = useState<string | null>(null);
     const [deletingCategoryId, setDeletingCategoryId] = useState<number | null>(null);
+
+    const preventInvalidAmountKeys = (e: KeyboardEvent<HTMLInputElement>) => {
+        if (["e", "E", "+", "-", ".", ",", " "].includes(e.key)) {
+            e.preventDefault();
+        }
+    };
+
+    const handleUnitPriceChange = (value: string) => {
+        setForm((f) => ({ ...f, unit_price: sanitizeAmountInput(value) }));
+    };
+
+    const handleLastPurchasePriceChange = (value: string) => {
+        setForm((f) => ({ ...f, last_purchase_price: sanitizeAmountInput(value) }));
+    };
+
+    const handleUnitPriceBlur = () => {
+        setForm((f) => ({ ...f, unit_price: sanitizeAmountInput(f.unit_price) }));
+    };
+
+    const handleLastPurchasePriceBlur = () => {
+        setForm((f) => ({ ...f, last_purchase_price: sanitizeAmountInput(f.last_purchase_price) }));
+    };
+
+    const handleStockQuantityChange = (value: string) => {
+        setForm((f) => ({ ...f, stockQuantity: sanitizeAmountInput(value) }));
+    };
+
+    const handleAdjustQuantityChange = (value: string) => {
+        setForm((f) => ({ ...f, adjustQuantity: sanitizeAmountInput(value) }));
+    };
+
+    const handlePcsPerDozenChange = (value: string) => {
+        setForm((f) => ({ ...f, pcs_per_dozen: sanitizeAmountInput(value) }));
+    };
+
+    const handlePcsPerBoxChange = (value: string) => {
+        setForm((f) => ({ ...f, pcs_per_box: sanitizeAmountInput(value) }));
+    };
+
+    const handleStockQuantityBlur = () => {
+        setForm((f) => ({ ...f, stockQuantity: sanitizeAmountInput(f.stockQuantity) }));
+    };
+
+    const handleAdjustQuantityBlur = () => {
+        setForm((f) => ({ ...f, adjustQuantity: sanitizeAmountInput(f.adjustQuantity) }));
+    };
+
+    const handlePcsPerDozenBlur = () => {
+        setForm((f) => ({ ...f, pcs_per_dozen: sanitizeAmountInput(f.pcs_per_dozen) }));
+    };
+
+    const handlePcsPerBoxBlur = () => {
+        setForm((f) => ({ ...f, pcs_per_box: sanitizeAmountInput(f.pcs_per_box) }));
+    };
 
     async function handleCreateCategory() {
         if (!token || !newCategoryName.trim()) return;
@@ -222,6 +304,7 @@ export default function AdminInventoryPage() {
             description: product.description ?? "",
             category: product.category,
             unit_price: String(product.unit_price),
+            last_purchase_price: product.last_purchase_price == null ? "" : String(product.last_purchase_price),
             stockQuantity: String(product.inventory?.quantity ?? 0),
             stockUnit: "PCS",
             adjustQuantity: "",
@@ -239,13 +322,53 @@ export default function AdminInventoryPage() {
 
     async function handleSave() {
         if (!token) return;
-        if (!form.name.trim() || !form.unit_price) {
+        const rawUnitPrice = String(form.unit_price ?? "").trim();
+        if (!form.name.trim() || !rawUnitPrice) {
             setSaveError("Name and unit price are required.");
             return;
         }
 
-        const pcsPerDozen = Number(form.pcs_per_dozen || 12);
-        const pcsPerBox = Number(form.pcs_per_box || 24);
+        if (!/^[1-9]\d*$/.test(rawUnitPrice)) {
+            setSaveError("Selling price must be greater than 0.");
+            return;
+        }
+
+        let rawLastPurchasePrice: string | null = null;
+
+        if (form.last_purchase_price !== "") {
+            const lastPurchasePrice = String(form.last_purchase_price ?? "").trim();
+            if (!/^(0|[1-9]\d*)$/.test(lastPurchasePrice)) {
+                setSaveError("Last purchase price must be greater than or equal to 0.");
+                return;
+            }
+
+            rawLastPurchasePrice = lastPurchasePrice;
+        }
+
+        const rawPcsPerDozen = String(form.pcs_per_dozen ?? "").trim();
+        if (!/^[1-9]\d*$/.test(rawPcsPerDozen)) {
+            setSaveError("Pcs per dozen must be greater than 0.");
+            return;
+        }
+
+        const rawPcsPerBox = String(form.pcs_per_box ?? "").trim();
+        if (!/^[1-9]\d*$/.test(rawPcsPerBox)) {
+            setSaveError("Pcs per box must be greater than 0.");
+            return;
+        }
+
+        let rawStockQuantity: string | null = null;
+        if (form.stockQuantity !== "") {
+            const stockQuantity = String(form.stockQuantity ?? "").trim();
+            if (!/^(0|[1-9]\d*)$/.test(stockQuantity)) {
+                setSaveError("Stock quantity must be greater than or equal to 0.");
+                return;
+            }
+            rawStockQuantity = stockQuantity;
+        }
+
+        const pcsPerDozen = Number(rawPcsPerDozen);
+        const pcsPerBox = Number(rawPcsPerBox);
 
         setSaving(true);
         setSaveError(null);
@@ -257,23 +380,26 @@ export default function AdminInventoryPage() {
                 name: form.name,
                 description: form.description || null,
                 category: form.category,
-                unit_price: form.unit_price,
-                pcs_per_dozen: form.pcs_per_dozen,
-                pcs_per_box: form.pcs_per_box,
+                unit_price: rawUnitPrice,
+                last_purchase_price: rawLastPurchasePrice,
+                pcs_per_dozen: rawPcsPerDozen,
+                pcs_per_box: rawPcsPerBox,
                 photo_url: form.photo_url,
                 is_active: form.is_active,
             };
 
             if (editingProduct) {
                 const currentStock = Number(form.stockQuantity || 0);
-                const adjustQty = Number(form.adjustQuantity || 0);
+                const rawAdjustQuantity = String(form.adjustQuantity ?? "").trim();
 
-                if (form.adjustQuantity) {
-                    if (Number.isNaN(adjustQty) || adjustQty <= 0) {
+                if (rawAdjustQuantity) {
+                    if (!/^[1-9]\d*$/.test(rawAdjustQuantity)) {
                         setSaveError("Adjust quantity must be greater than 0.");
                         setSaving(false);
                         return;
                     }
+
+                    const adjustQty = Number(rawAdjustQuantity);
 
                     const deltaPcs = convertToPcs(adjustQty, form.adjustUnit, pcsPerDozen, pcsPerBox);
                     const signedDelta = form.adjustAction === "increase" ? deltaPcs : -deltaPcs;
@@ -290,8 +416,8 @@ export default function AdminInventoryPage() {
                     body.stockEvent = "adjustment";
                     body.stockSource = "Admin";
                 }
-            } else if (form.stockQuantity) {
-                body.stockQuantity = form.stockQuantity;
+            } else if (rawStockQuantity !== null) {
+                body.stockQuantity = rawStockQuantity;
                 body.stockUnit = form.stockUnit;
             }
 
@@ -415,6 +541,11 @@ export default function AdminInventoryPage() {
                                                 Stock: {product.inventory?.quantity ?? 0}
                                             </span>
                                         </div>
+                                        <p className="text-xs text-gray-600">
+                                            Purchase Price Per Pcs : {product.last_purchase_price == null
+                                                ? "-"
+                                                : `${formatMmk(Number(product.last_purchase_price))} / Pcs`}
+                                        </p>
                                         <div className="flex gap-2 pt-1">
                                             <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => openEdit(product)}>
                                                 Edit
@@ -464,29 +595,34 @@ export default function AdminInventoryPage() {
                                 <Input
                                     type="date"
                                     value={startDate}
-                                    onChange={(e) => setStartDate(e.target.value)}
-                                    className="h-10 min-w-[140px]"
+                                    onChange={(e) => handleFromDateChange(e.target.value)}
+                                    max={endDate || todayDate}
+                                    className={`h-10 min-w-[140px] ${isFromDateInvalid ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                                 />
                                 <span className="text-gray-400 text-sm">→</span>
                                 <Input
                                     type="date"
                                     value={endDate}
-                                    onChange={(e) => setEndDate(e.target.value)}
-                                    className="h-10 min-w-[140px]"
+                                    onChange={(e) => handleToDateChange(e.target.value)}
+                                    max={todayDate}
+                                    className={`h-10 min-w-[140px] ${isToDateInvalid ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                                 />
                                 <Button
                                     variant="outline"
                                     className="h-10"
                                     onClick={() => {
-                                        const today = new Date().toLocaleDateString("en-CA");
-                                        setStartDate(today);
-                                        setEndDate(today);
+                                        setStartDate(todayDate);
+                                        setEndDate(todayDate);
                                     }}
                                 >
                                     Today
                                 </Button>
                             </div>
                         </div>
+
+                        {isDateRangeInvalid && (
+                            <p className="text-sm text-red-600">Invalid date range</p>
+                        )}
                     </div>
                     <div className="px-4 pb-6 sm:px-6">
                         {historyLoading ? (
@@ -697,7 +833,7 @@ export default function AdminInventoryPage() {
                                 <Input
                                     value={form.name}
                                     onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                                    placeholder="e.g. Lip Gloss Shine"
+                                    placeholder="e.g. Lip Gloss"
                                     disabled={saving}
                                 />
                             </div>
@@ -732,13 +868,31 @@ export default function AdminInventoryPage() {
 
                             {/* Unit price */}
                             <div>
-                                <label className="text-sm font-medium text-gray-700 block mb-1">Unit Price (MMK) *</label>
+                                <label className="text-sm font-medium text-gray-700 block mb-1">Selling Price Per Pcs (MMK) *</label>
                                 <Input
-                                    type="number"
-                                    min={0}
+                                    type="text"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
                                     value={form.unit_price}
-                                    onChange={(e) => setForm((f) => ({ ...f, unit_price: e.target.value }))}
-                                    placeholder="e.g. 5000"
+                                    onChange={(e) => handleUnitPriceChange(e.target.value)}
+                                    onBlur={handleUnitPriceBlur}
+                                    onKeyDown={preventInvalidAmountKeys}
+                                    placeholder="e.g. 50000"
+                                    disabled={saving}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-medium text-gray-700 block mb-1">Purchase Price Per Pcs (MMK) *</label>
+                                <Input
+                                    type="text"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    value={form.last_purchase_price}
+                                    onChange={(e) => handleLastPurchasePriceChange(e.target.value)}
+                                    onBlur={handleLastPurchasePriceBlur}
+                                    onKeyDown={preventInvalidAmountKeys}
+                                    placeholder="e.g. 10000"
                                     disabled={saving}
                                 />
                             </div>
@@ -779,10 +933,13 @@ export default function AdminInventoryPage() {
                                         <label className="text-sm font-medium text-gray-700 block mb-1">Adjust Stock</label>
                                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                             <Input
-                                                type="number"
-                                                min={0}
+                                                type="text"
+                                                inputMode="numeric"
+                                                pattern="[0-9]*"
                                                 value={form.adjustQuantity}
-                                                onChange={(e) => setForm((f) => ({ ...f, adjustQuantity: e.target.value }))}
+                                                onChange={(e) => handleAdjustQuantityChange(e.target.value)}
+                                                onBlur={handleAdjustQuantityBlur}
+                                                onKeyDown={preventInvalidAmountKeys}
                                                 placeholder="Quantity"
                                                 disabled={saving}
                                             />
@@ -813,11 +970,14 @@ export default function AdminInventoryPage() {
                                     <label className="text-sm font-medium text-gray-700 block mb-1">Opening Stock</label>
                                     <div className="flex gap-2">
                                         <Input
-                                            type="number"
-                                            min={0}
+                                            type="text"
+                                            inputMode="numeric"
+                                            pattern="[0-9]*"
                                             className="flex-1"
                                             value={form.stockQuantity}
-                                            onChange={(e) => setForm((f) => ({ ...f, stockQuantity: e.target.value }))}
+                                            onChange={(e) => handleStockQuantityChange(e.target.value)}
+                                            onBlur={handleStockQuantityBlur}
+                                            onKeyDown={preventInvalidAmountKeys}
                                             placeholder="e.g. 100"
                                             disabled={saving}
                                         />
@@ -844,20 +1004,26 @@ export default function AdminInventoryPage() {
                                 <div>
                                     <label className="text-sm font-medium text-gray-700 block mb-1">Pcs per Dozen</label>
                                     <Input
-                                        type="number"
-                                        min={1}
+                                        type="text"
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
                                         value={form.pcs_per_dozen}
-                                        onChange={(e) => setForm((f) => ({ ...f, pcs_per_dozen: e.target.value }))}
+                                        onChange={(e) => handlePcsPerDozenChange(e.target.value)}
+                                        onBlur={handlePcsPerDozenBlur}
+                                        onKeyDown={preventInvalidAmountKeys}
                                         disabled={saving}
                                     />
                                 </div>
                                 <div>
                                     <label className="text-sm font-medium text-gray-700 block mb-1">Pcs per Box</label>
                                     <Input
-                                        type="number"
-                                        min={1}
+                                        type="text"
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
                                         value={form.pcs_per_box}
-                                        onChange={(e) => setForm((f) => ({ ...f, pcs_per_box: e.target.value }))}
+                                        onChange={(e) => handlePcsPerBoxChange(e.target.value)}
+                                        onBlur={handlePcsPerBoxBlur}
+                                        onKeyDown={preventInvalidAmountKeys}
                                         disabled={saving}
                                     />
                                 </div>

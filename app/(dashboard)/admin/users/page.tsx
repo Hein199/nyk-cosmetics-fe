@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +44,11 @@ const emptyForm = {
 
 type FormState = typeof emptyForm;
 
+function sanitizeAmountInput(value: string) {
+    const digitsOnly = value.replace(/\D/g, "");
+    return digitsOnly.replace(/^0+(?=\d)/, "");
+}
+
 
 export default function UsersPage() {
     const { token } = useAuth();
@@ -65,6 +70,12 @@ export default function UsersPage() {
     const [form, setForm] = useState<FormState>(emptyForm);
     const [formError, setFormError] = useState("");
     const [submitting, setSubmitting] = useState(false);
+
+    const preventInvalidAmountKeys = (e: KeyboardEvent<HTMLInputElement>) => {
+        if (["e", "E", "+", "-", ".", ",", " "].includes(e.key)) {
+            e.preventDefault();
+        }
+    };
 
     const filteredUsers = users.filter((u) => {
         const q = search.toLowerCase();
@@ -110,6 +121,10 @@ export default function UsersPage() {
             setFormError("Passwords do not match.");
             return false;
         }
+        if (form.role === "SALESPERSON" && form.target && !/^(0|[1-9]\d*)$/.test(form.target.trim())) {
+            setFormError("Monthly target must be greater than or equal to 0.");
+            return false;
+        }
         return true;
     }
 
@@ -128,7 +143,7 @@ export default function UsersPage() {
             if (form.role === "SALESPERSON") payload.salesperson_name = form.username;
             if (form.role === "SALESPERSON") {
                 if (form.region) payload.region = form.region;
-                if (form.target) payload.monthly_target = form.target;
+                if (form.target) payload.monthly_target = form.target.trim();
             }
 
             if (isEdit && selectedUser) {
@@ -288,9 +303,24 @@ export default function UsersPage() {
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Target (MMK)</label>
                             <Input
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
                                 placeholder="e.g. 50000000"
                                 value={form.target}
-                                onChange={(e) => setForm((prev) => ({ ...prev, target: e.target.value }))}
+                                onChange={(e) =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        target: sanitizeAmountInput(e.target.value),
+                                    }))
+                                }
+                                onBlur={() =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        target: sanitizeAmountInput(prev.target),
+                                    }))
+                                }
+                                onKeyDown={preventInvalidAmountKeys}
                                 className="w-full"
                             />
                         </div>

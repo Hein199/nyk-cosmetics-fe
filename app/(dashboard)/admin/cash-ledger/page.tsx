@@ -50,6 +50,7 @@ function formatCurrency(amount: number) {
         style: "currency",
         currency: "MMK",
         minimumFractionDigits: 0,
+        maximumFractionDigits: 6,
     }).format(amount);
 }
 
@@ -86,12 +87,32 @@ function referenceText(e: DisplayEntry): string {
 export default function CashLedgerPage() {
     const { token } = useAuth();
     const queryClient = useQueryClient();
+    const todayDate = today();
 
     // Filters
     const [searchQuery, setSearchQuery] = useState("");
     const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
     const [fromDate, setFromDate] = useState("");
     const [toDate, setToDate] = useState("");
+    const isToDateInvalid = Boolean(toDate && toDate > todayDate);
+    const isFromDateInvalid = Boolean(fromDate && toDate && fromDate > toDate);
+    const isDateRangeInvalid = isToDateInvalid || isFromDateInvalid;
+
+    const handleToDateChange = (value: string) => {
+        const nextToDate = !value || value > todayDate ? todayDate : value;
+        setToDate(nextToDate);
+        setFromDate((prev) => (prev && prev > nextToDate ? "" : prev));
+    };
+
+    const handleFromDateChange = (value: string) => {
+        if (!value) {
+            setFromDate("");
+            return;
+        }
+
+        const maxFrom = toDate || todayDate;
+        setFromDate(value > maxFrom ? maxFrom : value);
+    };
 
     // Data via React Query
     const { data: entries = [], isLoading: loading, error: queryError } = useQuery({
@@ -102,7 +123,7 @@ export default function CashLedgerPage() {
             if (toDate) params.to = toDate;
             return apiFetch<LedgerEntry[]>("/ledger", { token, params });
         },
-        enabled: !!token,
+        enabled: !!token && !isDateRangeInvalid,
     });
     const error = queryError?.message ?? null;
 
@@ -115,6 +136,7 @@ export default function CashLedgerPage() {
     const [modalDescription, setModalDescription] = useState("");
     const [modalSaving, setModalSaving] = useState(false);
     const [modalError, setModalError] = useState<string | null>(null);
+    const isModalDateInvalid = Boolean(modalDate && modalDate > todayDate);
 
     // Delete confirmation
     const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -175,7 +197,7 @@ export default function CashLedgerPage() {
 
     const openCreateModal = () => {
         setEditingEntry(null);
-        setModalDate(today());
+        setModalDate(todayDate);
         setModalType("INCOME");
         setModalAmount("");
         setModalDescription("");
@@ -183,11 +205,49 @@ export default function CashLedgerPage() {
         setModalOpen(true);
     };
 
+    const handleModalDateChange = (value: string) => {
+        if (!value) {
+            setModalDate("");
+            return;
+        }
+
+        setModalDate(value > todayDate ? todayDate : value);
+    };
+
+    const handleModalAmountChange = (value: string) => {
+        const digitsOnly = value.replace(/\D/g, "");
+        const normalized = digitsOnly.replace(/^0+(?=\d)/, "");
+        setModalAmount(normalized);
+    };
+
+    const handleModalAmountBlur = () => {
+        const normalized = modalAmount.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+        setModalAmount(normalized);
+    };
+
+    const preventInvalidAmountKeys = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (["e", "E", "+", "-", ".", ",", " "].includes(e.key)) {
+            e.preventDefault();
+        }
+    };
+
     const handleSaveEntry = async () => {
-        if (!token || !modalAmount || !modalDescription) return;
-        const parsed = Number(modalAmount);
+        if (!token || !modalAmount || !modalDescription || !modalDate) return;
+
+        if (modalDate > todayDate) {
+            setModalError("Date cannot be in the future.");
+            return;
+        }
+
+        const rawAmount = String(modalAmount).trim();
+        if (!/^[1-9]\d*$/.test(rawAmount)) {
+            setModalError("Amount must be greater than 0.");
+            return;
+        }
+
+        const parsed = Number(rawAmount);
         if (isNaN(parsed) || parsed <= 0) {
-            setModalError("Enter a valid amount greater than 0.");
+            setModalError("Amount must be greater than 0.");
             return;
         }
 
@@ -197,7 +257,7 @@ export default function CashLedgerPage() {
             const body = {
                 entry_date: modalDate,
                 type: modalType,
-                amount: String(modalAmount),
+                amount: rawAmount,
                 description: modalDescription,
             };
 
@@ -308,9 +368,10 @@ export default function CashLedgerPage() {
                                     type="date"
                                     value={fromDate}
                                     onChange={(e) =>
-                                        setFromDate(e.target.value)
+                                        handleFromDateChange(e.target.value)
                                     }
-                                    className="w-40 h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white shadow-sm"
+                                    max={toDate || todayDate}
+                                    className={`w-40 h-10 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white shadow-sm ${isFromDateInvalid ? "border-red-500" : "border-gray-300"}`}
                                 />
                             </div>
                             <div className="flex flex-col">
@@ -320,9 +381,10 @@ export default function CashLedgerPage() {
                                 <input
                                     type="date"
                                     value={toDate}
-                                    onChange={(e) => setToDate(e.target.value)}
+                                    onChange={(e) => handleToDateChange(e.target.value)}
+                                    max={todayDate}
                                     min={fromDate}
-                                    className="w-40 h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white shadow-sm"
+                                    className={`w-40 h-10 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white shadow-sm ${isToDateInvalid ? "border-red-500" : "border-gray-300"}`}
                                 />
                             </div>
                             <Button
@@ -337,34 +399,10 @@ export default function CashLedgerPage() {
                             >
                                 Today
                             </Button>
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-10 text-xs"
-                                disabled={loading}
-                                onClick={() => queryClient.invalidateQueries({ queryKey: ["ledger"] })}
-                            >
-                                {loading ? (
-                                    "Loading…"
-                                ) : (
-                                    <>
-                                        <svg
-                                            viewBox="0 0 24 24"
-                                            className="h-4 w-4 mr-1"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                        >
-                                            <path d="M21 12a9 9 0 1 1-3-6.7" />
-                                            <path d="M21 3v6h-6" />
-                                        </svg>
-                                        Refresh
-                                    </>
-                                )}
-                            </Button>
                         </div>
+                        {isDateRangeInvalid && (
+                            <p className="text-sm text-red-600">Invalid date range</p>
+                        )}
                         <div className="flex flex-col sm:flex-row gap-4">
                             <div className="flex-1">
                                 <Input
@@ -547,9 +585,10 @@ export default function CashLedgerPage() {
                                     type="date"
                                     value={modalDate}
                                     onChange={(e) =>
-                                        setModalDate(e.target.value)
+                                        handleModalDateChange(e.target.value)
                                     }
-                                    className="w-full h-10 px-3 text-sm text-black border border-gray-300 rounded-md bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                                    max={todayDate}
+                                    className={`w-full h-10 px-3 text-sm text-black border rounded-md bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 ${isModalDateInvalid ? "border-red-500" : "border-gray-300"}`}
                                 />
                             </div>
                             <div>
@@ -587,10 +626,15 @@ export default function CashLedgerPage() {
                             </label>
                             <Input
                                 id="modal-amount"
-                                type="number"
-                                min={1}
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
                                 value={modalAmount}
-                                onChange={(e) => setModalAmount(e.target.value)}
+                                onChange={(e) =>
+                                    handleModalAmountChange(e.target.value)
+                                }
+                                onBlur={handleModalAmountBlur}
+                                onKeyDown={preventInvalidAmountKeys}
                                 placeholder="e.g. 50000"
                                 className="h-10 rounded-md px-3 border-gray-300"
                             />
@@ -618,6 +662,11 @@ export default function CashLedgerPage() {
                         {modalError && (
                             <p className="text-sm text-red-600">{modalError}</p>
                         )}
+                        {isModalDateInvalid && (
+                            <p className="text-sm text-red-600">
+                                Date cannot be in the future.
+                            </p>
+                        )}
                     </div>
 
                     {/* Footer */}
@@ -635,7 +684,9 @@ export default function CashLedgerPage() {
                             disabled={
                                 modalSaving ||
                                 !modalAmount ||
-                                !modalDescription
+                                !modalDescription ||
+                                !modalDate ||
+                                isModalDateInvalid
                             }
                             className="h-10 px-4 bg-pink-600 hover:bg-pink-700 text-white"
                         >

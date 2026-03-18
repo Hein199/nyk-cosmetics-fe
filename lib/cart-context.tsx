@@ -44,9 +44,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const [cart, setCart] = useState<CartItem[]>([]);
     const [selectedCustomer, setSelectedCustomer] = useState("");
     const [customerSearch, setCustomerSearch] = useState("");
-    const [orderDate, setOrderDate] = useState(() => getLocalDateString());
+    const [orderDate, setOrderDateState] = useState(() => getLocalDateString());
     const [paymentType, setPaymentType] = useState("CASH");
     const [remark, setRemark] = useState("");
+
+    const setOrderDate = useCallback((date: string) => {
+        const today = getLocalDateString();
+        const next = date > today ? today : date;
+        setOrderDateState(next);
+    }, []);
 
     // Load cart from localStorage on mount
     useEffect(() => {
@@ -71,7 +77,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             setCustomerSearch(savedCustomerSearch);
         }
 
-        setOrderDate(getLocalDateString());
+        setOrderDateState(getLocalDateString());
         if (savedPaymentType) {
             setPaymentType(savedPaymentType);
         }
@@ -134,7 +140,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setCart([]);
         setSelectedCustomer("");
         setCustomerSearch("");
-        setOrderDate(getLocalDateString());
+        setOrderDateState(getLocalDateString());
         setRemark("");
     }, []);
 

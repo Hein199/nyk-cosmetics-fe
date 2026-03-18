@@ -77,7 +77,7 @@ function formatCurrency(amount: number) {
         style: "currency",
         currency: "MMK",
         minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
+        maximumFractionDigits: 6,
     }).format(amount);
 }
 
@@ -110,11 +110,12 @@ export default function OrdersPage() {
     const [statusFilter, setStatusFilter] = useState("all");
     const [ordersError] = useState<string | null>(null);
     const [isEditMode, setIsEditMode] = useState(false);
-    const [editedItems, setEditedItems] = useState<Record<number, { quantity: number; unit_price: number }>>({});
+    const [editedItems, setEditedItems] = useState<Record<number, { quantity: number; unit_price: number; unit_type: string }>>({});
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
 
     const dateRangeKey = useMemo(() => `nyk-orders-date-range:${user?.id ?? "anon"}`, [user?.id]);
+    const todayDate = thaiToday();
 
     const loadDateRange = () => {
         if (typeof window === "undefined") return null;
@@ -139,15 +140,23 @@ export default function OrdersPage() {
         sessionStorage.setItem(dateRangeKey, JSON.stringify({ fromDate: from, toDate: to }));
     };
 
+    const normalizeDateRange = (from: string, to: string) => {
+        const normalizedTo = !to ? todayDate : to > todayDate ? todayDate : to;
+        const candidateFrom = from || normalizedTo;
+        const normalizedFrom = candidateFrom > normalizedTo ? normalizedTo : candidateFrom;
+        return { fromDate: normalizedFrom, toDate: normalizedTo };
+    };
+
     // Date range selection state
     const [fromDate, setFromDate] = useState(() => {
         const stored = loadDateRange();
-        return stored?.fromDate ?? "2025-12-01";
+        return normalizeDateRange(stored?.fromDate ?? todayDate, stored?.toDate ?? todayDate).fromDate;
     });
     const [toDate, setToDate] = useState(() => {
         const stored = loadDateRange();
-        return stored?.toDate ?? "2025-12-05";
+        return normalizeDateRange(stored?.fromDate ?? todayDate, stored?.toDate ?? todayDate).toDate;
     });
+    const isDateRangeInvalid = fromDate > toDate || toDate > todayDate;
 
     // Dialog state for order details
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -160,13 +169,29 @@ export default function OrdersPage() {
     const { data: orders = [], isLoading: ordersLoading, dataUpdatedAt } = useQuery({
         queryKey: ["sp-orders"],
         queryFn: () => apiFetch<OrderListItem[]>("/orders", { token }),
-        enabled: !!token,
+        enabled: !!token && !isDateRangeInvalid,
     });
     const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
     // Save date range preference
-    const handleFromDate = (v: string) => { setFromDate(v); saveDateRange(v, toDate); };
-    const handleToDate = (v: string) => { setToDate(v); saveDateRange(fromDate, v); };
+    const handleFromDate = (v: string) => {
+        const normalized = normalizeDateRange(v, toDate);
+        setFromDate(normalized.fromDate);
+        setToDate(normalized.toDate);
+        saveDateRange(normalized.fromDate, normalized.toDate);
+    };
+    const handleToDate = (v: string) => {
+        const normalized = normalizeDateRange(fromDate, v);
+        setFromDate(normalized.fromDate);
+        setToDate(normalized.toDate);
+        saveDateRange(normalized.fromDate, normalized.toDate);
+    };
+
+    const handleTodayDateRange = () => {
+        setFromDate(todayDate);
+        setToDate(todayDate);
+        saveDateRange(todayDate, todayDate);
+    };
 
     const openOrderDetails = async (orderId: number, mode: "view" | "edit") => {
         setIsEditMode(mode === "edit");
@@ -182,9 +207,13 @@ export default function OrdersPage() {
             const data = await apiFetch<OrderDetail>(`/orders/${orderId}`, { token });
             setOrderDetails(data);
             if (mode === "edit") {
-                const initial: Record<number, { quantity: number; unit_price: number }> = {};
+                const initial: Record<number, { quantity: number; unit_price: number; unit_type: string }> = {};
                 for (const item of data.items) {
-                    initial[item.id] = { quantity: item.quantity, unit_price: Number(item.unit_price) };
+                    initial[item.id] = {
+                        quantity: item.quantity,
+                        unit_price: Number(item.unit_price),
+                        unit_type: item.unit_type,
+                    };
                 }
                 setEditedItems(initial);
             }
@@ -215,6 +244,7 @@ export default function OrdersPage() {
                 id: Number(id),
                 quantity: vals.quantity,
                 unit_price: String(vals.unit_price),
+                unit_type: vals.unit_type,
             }));
             const updated = await apiFetch<OrderDetail>(`/orders/${orderDetails.id}/items`, {
                 method: "PATCH",
@@ -232,7 +262,7 @@ export default function OrdersPage() {
         }
     };
 
-    const updateEditedItem = (itemId: number, field: "quantity" | "unit_price", value: number) => {
+    const updateEditedItem = (itemId: number, field: "quantity" | "unit_price" | "unit_type", value: number | string) => {
         setEditedItems((prev) => ({
             ...prev,
             [itemId]: { ...prev[itemId], [field]: value },
@@ -241,10 +271,14 @@ export default function OrdersPage() {
 
     // Filter and search orders
     const filteredOrders = useMemo(() => {
+        if (isDateRangeInvalid) {
+            return [];
+        }
+        const [rangeFrom, rangeTo] = fromDate <= toDate ? [fromDate, toDate] : [toDate, fromDate];
         return orders.filter((order) => {
             const orderDate = toBangkokDateStr(order.created_at);
             // Date range filter
-            const matchesDateRange = orderDate >= fromDate && orderDate <= toDate;
+            const matchesDateRange = orderDate >= rangeFrom && orderDate <= rangeTo;
 
             // Status filter
             const matchesStatus = statusFilter === "all" || order.status.toLowerCase() === statusFilter;
@@ -256,14 +290,15 @@ export default function OrdersPage() {
 
             return matchesDateRange && matchesStatus && matchesSearch;
         });
-    }, [fromDate, toDate, searchQuery, statusFilter, orders]);
+    }, [fromDate, toDate, searchQuery, statusFilter, orders, isDateRangeInvalid]);
 
     // Format date range for display
     const formatDateRange = (from: string, to: string) => {
-        if (from === to) {
-            return formatDate(from);
+        const [start, end] = from <= to ? [from, to] : [to, from];
+        if (start === end) {
+            return formatDate(start);
         }
-        return `${formatDate(from)} - ${formatDate(to)}`;
+        return `${formatDate(start)} - ${formatDate(end)}`;
     };
 
     return (
@@ -317,7 +352,10 @@ export default function OrdersPage() {
                                     type="date"
                                     value={fromDate}
                                     onChange={(e) => handleFromDate(e.target.value)}
-                                    className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                    max={toDate || todayDate}
+                                    className={`w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
+                                        ? "border-red-300 focus:ring-red-500 focus:border-red-500"
+                                        : "border-gray-300 focus:ring-pink-500 focus:border-pink-500"}`}
                                 />
                             </div>
                             <div className="flex flex-col">
@@ -329,7 +367,10 @@ export default function OrdersPage() {
                                     type="date"
                                     value={toDate}
                                     onChange={(e) => handleToDate(e.target.value)}
-                                    className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                    max={todayDate}
+                                    className={`w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
+                                        ? "border-red-300 focus:ring-red-500 focus:border-red-500"
+                                        : "border-gray-300 focus:ring-pink-500 focus:border-pink-500"}`}
                                     min={fromDate}
                                 />
                             </div>
@@ -338,17 +379,18 @@ export default function OrdersPage() {
                                 <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => {
-                                        const today = thaiToday();
-                                        handleFromDate(today);
-                                        handleToDate(today);
-                                    }}
+                                    onClick={handleTodayDateRange}
                                     className="text-xs h-10"
                                 >
                                     Today
                                 </Button>
                             </div>
                         </div>
+                        {isDateRangeInvalid && (
+                            <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                                Invalid date range
+                            </div>
+                        )}
                         <p className="text-xs text-gray-500 mt-1">
                             Found {filteredOrders.length} orders for {formatDateRange(fromDate, toDate)}
                         </p>
@@ -367,6 +409,7 @@ export default function OrdersPage() {
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full h-10"
+                                disabled={isDateRangeInvalid}
                             />
                         </div>
 
@@ -376,6 +419,7 @@ export default function OrdersPage() {
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
                                 className="w-full h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                disabled={isDateRangeInvalid}
                             >
                                 {statusOptions.map((option) => (
                                     <option key={option.value} value={option.value}>
@@ -717,6 +761,7 @@ export default function OrdersPage() {
                                                     const edited = editedItems[item.id];
                                                     const qty = isEditMode && edited ? edited.quantity : item.quantity;
                                                     const unitPrice = isEditMode && edited ? edited.unit_price : Number(item.unit_price);
+                                                    const unitType = isEditMode && edited ? edited.unit_type : item.unit_type;
                                                     const total = unitPrice * qty;
                                                     return (
                                                         <tr key={item.id} className={`border-b border-gray-300 ${index % 2 === 0
@@ -736,7 +781,19 @@ export default function OrdersPage() {
                                                                 {item.product?.category ?? "-"}
                                                             </td>
                                                             <td className="py-3 px-4 text-center text-gray-700 font-medium border-r border-gray-300">
-                                                                {unitTypeLabel(item.unit_type)}
+                                                                {isEditMode ? (
+                                                                    <select
+                                                                        value={unitType}
+                                                                        onChange={(e) => updateEditedItem(item.id, "unit_type", e.target.value)}
+                                                                        className="h-8 w-24 rounded border border-gray-300 bg-white px-2 text-xs text-gray-900"
+                                                                    >
+                                                                        <option value="Pcs">Pcs</option>
+                                                                        <option value="D">Dozen</option>
+                                                                        <option value="P">Box</option>
+                                                                    </select>
+                                                                ) : (
+                                                                    unitTypeLabel(unitType)
+                                                                )}
                                                             </td>
                                                             <td className="py-3 px-4 text-center text-gray-900 font-semibold border-r border-gray-300">
                                                                 {isEditMode ? (
