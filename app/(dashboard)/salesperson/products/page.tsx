@@ -57,7 +57,11 @@ export default function ProductsPage() {
         queryKey: ["sp-products"],
         queryFn: () => apiFetch<Product[]>("/products", { token }),
         enabled: !!token,
-        select: (data) => data.filter((product) => product.is_active),
+        select: (data) =>
+            data.filter((product) => {
+                const stockQty = product.inventory?.quantity ?? 0;
+                return product.is_active && stockQty > 0;
+            }),
     });
     const products = allProducts;
     const productError = productQueryError?.message ?? null;
