@@ -30,11 +30,13 @@ interface OrderDetail {
 }
 
 function formatCurrency(amount: number) {
+    const safeAmount = Number.isFinite(amount) ? Math.abs(amount) : 0;
     return new Intl.NumberFormat("en-MM", {
         style: "currency",
         currency: "MMK",
         minimumFractionDigits: 0,
-    }).format(amount);
+        maximumFractionDigits: 6,
+    }).format(safeAmount);
 }
 
 function formatDate(dateString: string) {

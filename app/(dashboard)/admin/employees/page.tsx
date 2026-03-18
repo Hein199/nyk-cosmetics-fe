@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -128,6 +128,7 @@ function formatCurrency(amount: number) {
         style: "currency",
         currency: "MMK",
         minimumFractionDigits: 0,
+        maximumFractionDigits: 6,
     }).format(amount);
 }
 
@@ -154,6 +155,11 @@ function toLocalDateInputValue(date: Date): string {
     const m = String(date.getMonth() + 1).padStart(2, "0");
     const d = String(date.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
+}
+
+function sanitizeAmountInput(value: string) {
+    const digitsOnly = value.replace(/\D/g, "");
+    return digitsOnly.replace(/^0+(?=\d)/, "");
 }
 
 const emptyEmployee = {
@@ -188,6 +194,15 @@ export default function EmployeesPage() {
     const [tab, setTab] = useState<"employees" | "salaries">("employees");
     const [search, setSearch] = useState("");
     const [isLocalhost, setIsLocalhost] = useState(false);
+    const todayDate = toLocalDateInputValue(new Date());
+    const [salaryFromDate, setSalaryFromDate] = useState("");
+    const [salaryToDate, setSalaryToDate] = useState(todayDate);
+
+    const isSalaryToDateInvalid = Boolean(salaryToDate && salaryToDate > todayDate);
+    const isSalaryFromDateInvalid = Boolean(
+        salaryFromDate && salaryToDate && salaryFromDate > salaryToDate
+    );
+    const isSalaryDateRangeInvalid = isSalaryToDateInvalid || isSalaryFromDateInvalid;
 
     useEffect(() => {
         if (typeof window !== "undefined") {
@@ -197,19 +212,54 @@ export default function EmployeesPage() {
 
     const usingMockData = !token && isLocalhost;
 
+    const handleSalaryToDateChange = (value: string) => {
+        const nextToDate = !value || value > todayDate ? todayDate : value;
+        setSalaryToDate(nextToDate);
+        setSalaryFromDate((prev) => (prev && prev > nextToDate ? "" : prev));
+    };
+
+    const handleSalaryFromDateChange = (value: string) => {
+        if (!value) {
+            setSalaryFromDate("");
+            return;
+        }
+
+        const maxFrom = salaryToDate || todayDate;
+        setSalaryFromDate(value > maxFrom ? maxFrom : value);
+    };
+
     const { data: employees = usingMockData ? MOCK_EMPLOYEES : [], isLoading: empLoading } = useQuery({
         queryKey: ["employees"],
         queryFn: () => apiFetch<Employee[]>("/employees", { token }),
         enabled: !!token,
     });
 
-    const { data: salaryRecords = usingMockData ? MOCK_SALARIES : [], isLoading: salLoading } = useQuery({
-        queryKey: ["salaries"],
-        queryFn: () => apiFetch<SalaryRecord[]>("/salaries", { token }),
-        enabled: !!token,
+    const { data: salaryRecords = usingMockData ? MOCK_SALARIES : [], isLoading: salLoading, error: salaryQueryError } = useQuery({
+        queryKey: ["salaries", salaryFromDate, salaryToDate],
+        queryFn: () => {
+            const params: Record<string, string> = {};
+            if (salaryFromDate) params.from = salaryFromDate;
+            if (salaryToDate) params.to = salaryToDate;
+            return apiFetch<SalaryRecord[]>("/salaries", { token, params });
+        },
+        enabled: !!token && !isSalaryDateRangeInvalid,
     });
 
+    const salaryError = salaryQueryError instanceof Error ? salaryQueryError.message : null;
+
     const loading = empLoading || salLoading;
+
+    const filteredSalaryRecords = usingMockData
+        ? salaryRecords.filter((s) => {
+            const dateStr = s.payment_date
+                ? toLocalDateInputValue(new Date(s.payment_date))
+                : toLocalDateInputValue(new Date(s.created_at));
+
+            if (salaryFromDate && dateStr < salaryFromDate) return false;
+            if (salaryToDate && dateStr > salaryToDate) return false;
+            return true;
+        })
+        : salaryRecords;
 
     // ── Add / Edit employee modal ──────────────────────────────────────────────
     const [isEmployeeOpen, setIsEmployeeOpen] = useState(false);
@@ -217,6 +267,9 @@ export default function EmployeesPage() {
     const [empForm, setEmpForm] = useState(emptyEmployee);
     const [savingEmp, setSavingEmp] = useState(false);
     const [empError, setEmpError] = useState<string | null>(null);
+    const isEmpStartDateInvalid = Boolean(
+        empForm.start_date && empForm.start_date > todayDate
+    );
 
     // ── Pay Salary modal ──────────────────────────────────────────────────────
     const [isSalaryOpen, setIsSalaryOpen] = useState(false);
@@ -229,6 +282,15 @@ export default function EmployeesPage() {
     const [salRemark, setSalRemark] = useState("");
     const [savingSal, setSavingSal] = useState(false);
     const [salError, setSalError] = useState<string | null>(null);
+    const isSalPaymentDateInvalid = Boolean(
+        salPaymentDate && salPaymentDate > todayDate
+    );
+
+    const preventInvalidAmountKeys = (e: KeyboardEvent<HTMLInputElement>) => {
+        if (["e", "E", "+", "-", ".", ",", " "].includes(e.key)) {
+            e.preventDefault();
+        }
+    };
 
     // ── Delete confirm ────────────────────────────────────────────────────────
     const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -269,12 +331,30 @@ export default function EmployeesPage() {
         setIsEmployeeOpen(true);
     };
 
+    const handleEmpStartDateChange = (value: string) => {
+        if (!value) {
+            setEmpForm((f) => ({ ...f, start_date: "" }));
+            return;
+        }
+
+        setEmpForm((f) => ({
+            ...f,
+            start_date: value > todayDate ? todayDate : value,
+        }));
+    };
+
     const validateEmpForm = () => {
         if (!empForm.name.trim()) return "Full name is required.";
         if (!empForm.phone.trim()) return "Phone number is required.";
         if (!empForm.position.trim()) return "Position is required.";
         if (!empForm.basic_salary) return "Basic salary is required.";
+        if (!/^[1-9]\d*$/.test(String(empForm.basic_salary).trim())) {
+            return "Basic salary must be greater than 0.";
+        }
         if (!empForm.start_date) return "Start date is required.";
+        if (empForm.start_date > todayDate) {
+            return "Start date cannot be in the future.";
+        }
         return null;
     };
 
@@ -288,7 +368,10 @@ export default function EmployeesPage() {
             if (editingEmployee) {
                 // Strip empty strings so optional fields (e.g. start_date) pass backend validation
                 const patchBody = Object.fromEntries(
-                    Object.entries(empForm).filter(([, v]) => v !== "")
+                    Object.entries({
+                        ...empForm,
+                        basic_salary: String(empForm.basic_salary).trim(),
+                    }).filter(([, v]) => v !== "")
                 );
                 await apiFetch(`/employees/${editingEmployee.id}`, {
                     method: "PATCH",
@@ -299,7 +382,10 @@ export default function EmployeesPage() {
                 await apiFetch("/employees", {
                     method: "POST",
                     token,
-                    body: empForm,
+                    body: {
+                        ...empForm,
+                        basic_salary: String(empForm.basic_salary).trim(),
+                    },
                 });
             }
             setIsEmployeeOpen(false);
@@ -341,10 +427,19 @@ export default function EmployeesPage() {
         setSalMonth("");
         setSalBonuses(emptyBonuses.map(b => ({ ...b })));
         setSalDeductions(emptyDeductions.map(d => ({ ...d })));
-        setSalPaymentDate(toLocalDateInputValue(new Date()));
+        setSalPaymentDate(todayDate);
         setSalRemark("");
         setSalError(null);
         setIsSalaryOpen(true);
+    };
+
+    const handleSalPaymentDateChange = (value: string) => {
+        if (!value) {
+            setSalPaymentDate("");
+            return;
+        }
+
+        setSalPaymentDate(value > todayDate ? todayDate : value);
     };
 
     const totalBonus = salBonuses.reduce(
@@ -362,8 +457,33 @@ export default function EmployeesPage() {
             setSalError("Employee, salary month, basic salary, and payment date are required.");
             return;
         }
+
+        if (salPaymentDate > todayDate) {
+            setSalError("Payment date cannot be in the future.");
+            return;
+        }
+
+        const rawBasicSalary = String(salBasic).trim();
+        if (!/^[1-9]\d*$/.test(rawBasicSalary)) {
+            setSalError("Basic salary must be greater than 0.");
+            return;
+        }
+
         const activeBonuses = salBonuses.filter((b) => b.type && b.amount);
         const activeDeductions = salDeductions.filter((d) => d.type && d.amount);
+
+        const hasInvalidBonusAmount = activeBonuses.some((b) => !/^[1-9]\d*$/.test(String(b.amount).trim()));
+        if (hasInvalidBonusAmount) {
+            setSalError("Bonus amount must be greater than 0.");
+            return;
+        }
+
+        const hasInvalidDeductionAmount = activeDeductions.some((d) => !/^[1-9]\d*$/.test(String(d.amount).trim()));
+        if (hasInvalidDeductionAmount) {
+            setSalError("Deduction amount must be greater than 0.");
+            return;
+        }
+
         setSavingSal(true);
         setSalError(null);
         try {
@@ -373,7 +493,7 @@ export default function EmployeesPage() {
                 body: {
                     employee_id: parseInt(salEmployeeId),
                     salary_month: salMonth,
-                    basic_salary: salBasic,
+                    basic_salary: rawBasicSalary,
                     bonuses: activeBonuses,
                     deductions: activeDeductions,
                     payment_date: salPaymentDate,
@@ -392,7 +512,10 @@ export default function EmployeesPage() {
     const updateBonus = (index: number, field: keyof BonusItem, value: string) => {
         setSalBonuses((prev) => {
             const next = [...prev];
-            next[index] = { ...next[index], [field]: value };
+            next[index] = {
+                ...next[index],
+                [field]: field === "amount" ? sanitizeAmountInput(value) : value,
+            };
             return next;
         });
     };
@@ -400,7 +523,10 @@ export default function EmployeesPage() {
     const updateDeduction = (index: number, field: keyof BonusItem, value: string) => {
         setSalDeductions((prev) => {
             const next = [...prev];
-            next[index] = { ...next[index], [field]: value };
+            next[index] = {
+                ...next[index],
+                [field]: field === "amount" ? sanitizeAmountInput(value) : value,
+            };
             return next;
         });
     };
@@ -540,8 +666,47 @@ export default function EmployeesPage() {
             ) : (
                 <Card>
                     <CardHeader>
-                        <CardTitle>Salary Records</CardTitle>
-                        <CardDescription>{salaryRecords.length} records</CardDescription>
+                        <div className="space-y-4">
+                            <div className="flex flex-wrap items-baseline justify-between gap-3">
+                                <CardTitle>Salary Records</CardTitle>
+                                <CardDescription>{filteredSalaryRecords.length} records</CardDescription>
+                            </div>
+                            <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
+                                <div className="flex items-center gap-2 flex-nowrap">
+                                    <Input
+                                        type="date"
+                                        value={salaryFromDate}
+                                        onChange={(e) => handleSalaryFromDateChange(e.target.value)}
+                                        max={salaryToDate || todayDate}
+                                        className={`h-10 min-w-[140px] ${isSalaryFromDateInvalid ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                                    />
+                                    <span className="text-gray-400 text-sm">→</span>
+                                    <Input
+                                        type="date"
+                                        value={salaryToDate}
+                                        onChange={(e) => handleSalaryToDateChange(e.target.value)}
+                                        max={todayDate}
+                                        className={`h-10 min-w-[140px] ${isSalaryToDateInvalid ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                                    />
+                                    <Button
+                                        variant="outline"
+                                        className="h-10"
+                                        onClick={() => {
+                                            setSalaryFromDate(todayDate);
+                                            setSalaryToDate(todayDate);
+                                        }}
+                                    >
+                                        Today
+                                    </Button>
+                                </div>
+                            </div>
+                            {isSalaryDateRangeInvalid && (
+                                <p className="text-sm text-red-600">Invalid date range</p>
+                            )}
+                            {salaryError && (
+                                <p className="text-sm text-red-600">{salaryError}</p>
+                            )}
+                        </div>
                     </CardHeader>
                     <CardContent>
                         <div className="overflow-x-auto">
@@ -561,14 +726,14 @@ export default function EmployeesPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {salaryRecords.length === 0 ? (
+                                    {filteredSalaryRecords.length === 0 ? (
                                         <tr>
                                             <td colSpan={7} className="py-8 text-center text-gray-400 text-sm">
                                                 No salary records yet.
                                             </td>
                                         </tr>
                                     ) : (
-                                        salaryRecords.map((s) => (
+                                        filteredSalaryRecords.map((s) => (
                                             <tr key={s.id} className="border-b border-gray-100 hover:bg-gray-50">
                                                 <td className="py-3 px-4 font-medium text-gray-900">
                                                     {s.employee?.name ?? `EMP#${String(s.employee_id).padStart(2, "0")}`}
@@ -678,9 +843,23 @@ export default function EmployeesPage() {
                                 </label>
                                 <Input
                                     className="w-full"
-                                    type="number"
+                                    type="text"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
                                     value={empForm.basic_salary}
-                                    onChange={(e) => setEmpForm((f) => ({ ...f, basic_salary: e.target.value }))}
+                                    onChange={(e) =>
+                                        setEmpForm((f) => ({
+                                            ...f,
+                                            basic_salary: sanitizeAmountInput(e.target.value),
+                                        }))
+                                    }
+                                    onBlur={() =>
+                                        setEmpForm((f) => ({
+                                            ...f,
+                                            basic_salary: sanitizeAmountInput(f.basic_salary),
+                                        }))
+                                    }
+                                    onKeyDown={preventInvalidAmountKeys}
                                     placeholder="e.g. 350000"
                                 />
                             </div>
@@ -689,13 +868,18 @@ export default function EmployeesPage() {
                                     Start Date <span className="text-red-500">*</span>
                                 </label>
                                 <Input
-                                    className="w-full"
                                     type="date"
                                     value={empForm.start_date}
-                                    onChange={(e) => setEmpForm((f) => ({ ...f, start_date: e.target.value }))}
+                                    onChange={(e) => handleEmpStartDateChange(e.target.value)}
+                                    max={todayDate}
+                                    className={isEmpStartDateInvalid ? "w-full border-red-500 focus-visible:ring-red-500" : "w-full"}
                                 />
                             </div>
                         </div>
+
+                        {isEmpStartDateInvalid && (
+                            <p className="text-sm text-red-600">Start date cannot be in the future.</p>
+                        )}
 
                         {/* Remark */}
                         <div>
@@ -727,7 +911,7 @@ export default function EmployeesPage() {
                                 )}
                                 <Button
                                     onClick={handleSaveEmployee}
-                                    disabled={savingEmp}
+                                    disabled={savingEmp || isEmpStartDateInvalid}
                                     className="bg-pink-600 hover:bg-pink-700 text-white"
                                 >
                                     {savingEmp ? "Saving..." : "Save Employee"}
@@ -805,10 +989,15 @@ export default function EmployeesPage() {
                                     className="w-full"
                                     type="date"
                                     value={salPaymentDate}
-                                    onChange={(e) => setSalPaymentDate(e.target.value)}
+                                    onChange={(e) => handleSalPaymentDateChange(e.target.value)}
+                                    max={todayDate}
                                 />
                             </div>
                         </div>
+
+                        {isSalPaymentDateInvalid && (
+                            <p className="text-sm text-red-600">Payment date cannot be in the future.</p>
+                        )}
 
                         {/* Basic Salary */}
                         <div>
@@ -843,12 +1032,16 @@ export default function EmployeesPage() {
                                             ))}
                                         </select>
                                         <Input
-                                            type="number"
+                                            type="text"
+                                            inputMode="numeric"
+                                            pattern="[0-9]*"
                                             className="w-full"
                                             placeholder="Amount"
                                             value={bonus.amount}
                                             disabled={!bonus.type}
                                             onChange={(e) => updateBonus(i, "amount", e.target.value)}
+                                            onBlur={(e) => updateBonus(i, "amount", e.target.value)}
+                                            onKeyDown={preventInvalidAmountKeys}
                                         />
                                     </div>
                                 ))}
@@ -874,12 +1067,16 @@ export default function EmployeesPage() {
                                             ))}
                                         </select>
                                         <Input
-                                            type="number"
+                                            type="text"
+                                            inputMode="numeric"
+                                            pattern="[0-9]*"
                                             className="w-full"
                                             placeholder="Amount"
                                             value={deduction.amount}
                                             disabled={!deduction.type}
                                             onChange={(e) => updateDeduction(i, "amount", e.target.value)}
+                                            onBlur={(e) => updateDeduction(i, "amount", e.target.value)}
+                                            onKeyDown={preventInvalidAmountKeys}
                                         />
                                     </div>
                                 ))}
@@ -932,7 +1129,7 @@ export default function EmployeesPage() {
                         <div className="flex justify-end gap-2 pt-1">
                             <Button
                                 onClick={handlePaySalary}
-                                disabled={savingSal}
+                                disabled={savingSal || isSalPaymentDateInvalid}
                                 className="bg-pink-600 hover:bg-pink-700 text-white"
                             >
                                 {savingSal ? "Processing..." : "Confirm Payment"}

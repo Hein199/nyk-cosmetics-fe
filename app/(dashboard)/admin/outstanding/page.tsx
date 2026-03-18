@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type KeyboardEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,23 +47,14 @@ interface OutstandingOrder {
     }[];
 }
 
-interface PaymentRecord {
-    id: number;
-    order_id: number | null;
-    amount_paid: string | number;
-    payment_type: string;
-    status: string;
-    created_at: string;
-    customer: { id: number; name: string };
-    order: { id: number; created_at: string } | null;
-}
-
 function formatCurrency(amount: number) {
+    const safeAmount = Number.isFinite(amount) ? Math.abs(amount) : 0;
     return new Intl.NumberFormat("en-MM", {
         style: "currency",
         currency: "MMK",
         minimumFractionDigits: 0,
-    }).format(amount);
+        maximumFractionDigits: 6,
+    }).format(safeAmount);
 }
 
 function formatDate(dateString: string) {
@@ -76,17 +67,10 @@ function formatDate(dateString: string) {
 }
 
 export default function OutstandingPage() {
-    const { user, token } = useAuth();
+    const { token } = useAuth();
     const queryClient = useQueryClient();
-
-    const { data: orders = [], isLoading: loading } = useQuery({
-        queryKey: ["admin-outstanding"],
-        queryFn: () => apiFetch<OutstandingOrder[]>("/orders/outstanding", { token }),
-        enabled: !!token,
-    });
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
-    const [statusFilter, setStatusFilter] = useState("all");
     const [employeeFilter, setEmployeeFilter] = useState("all");
     const [fromDate, setFromDate] = useState("");
     const [toDate, setToDate] = useState("");
@@ -95,26 +79,63 @@ export default function OutstandingPage() {
         {}
     );
     const [savingPayment, setSavingPayment] = useState<number | null>(null);
-    const [confirmingPayment, setConfirmingPayment] = useState<number | null>(
-        null
-    );
     const [paymentDateNotice, setPaymentDateNotice] = useState<string | null>(
         null
     );
+    const [paymentAmountErrors, setPaymentAmountErrors] = useState<Record<string, string | null>>({});
     const [selectedOrder, setSelectedOrder] = useState<OutstandingOrder | null>(
         null
     );
-    const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false);
-    const [allPayments, setAllPayments] = useState<PaymentRecord[]>([]);
-    const [loadingPayments, setLoadingPayments] = useState(false);
+    const todayDate = thaiToday();
+
+    const normalizeDateRange = (from: string, to: string) => {
+        const normalizedTo = !to ? "" : to > todayDate ? todayDate : to;
+        if (!from || !normalizedTo) {
+            return { fromDate: from, toDate: normalizedTo };
+        }
+        const normalizedFrom = from > normalizedTo ? normalizedTo : from;
+        return { fromDate: normalizedFrom, toDate: normalizedTo };
+    };
+
+    const isDateRangeInvalid = Boolean(
+        (fromDate && toDate && fromDate > toDate) ||
+        (toDate && toDate > todayDate)
+    );
+
+    const handleFromDate = (value: string) => {
+        const normalized = normalizeDateRange(value, toDate);
+        setFromDate(normalized.fromDate);
+        setToDate(normalized.toDate);
+    };
+
+    const handleToDate = (value: string) => {
+        const normalized = normalizeDateRange(fromDate, value);
+        setFromDate(normalized.fromDate);
+        setToDate(normalized.toDate);
+    };
+
+    const handleTodayDateRange = () => {
+        setFromDate(todayDate);
+        setToDate(todayDate);
+    };
+
+    const handleAllDateRange = () => {
+        setFromDate("");
+        setToDate("");
+    };
+
+    const { data: orders = [], isLoading: loading } = useQuery({
+        queryKey: ["admin-outstanding"],
+        queryFn: () => apiFetch<OutstandingOrder[]>("/orders/outstanding", { token }),
+        enabled: !!token && !isDateRangeInvalid,
+    });
 
     const filteredOrders = useMemo(() => {
+        if (isDateRangeInvalid) {
+            return [];
+        }
         return orders.filter((order) => {
             const remaining = Number(order.loan?.remaining_amount ?? 0);
-            const isCompleted = remaining === 0;
-            const matchesStatus =
-                statusFilter === "all" ||
-                (statusFilter === "COMPLETED" ? isCompleted : !isCompleted);
             const orderDate = toBangkokDateStr(order.created_at);
             const matchesFrom = !fromDate || orderDate >= fromDate;
             const matchesTo = !toDate || orderDate <= toDate;
@@ -127,9 +148,9 @@ export default function OutstandingPage() {
                 order.customer.name.toLowerCase().includes(q) ||
                 String(order.id).includes(q) ||
                 (order.customer.phone_number ?? "").includes(q);
-            return matchesStatus && matchesFrom && matchesTo && matchesSearch && matchesEmployee;
+            return matchesFrom && matchesTo && matchesSearch && matchesEmployee;
         });
-    }, [orders, searchQuery, statusFilter, employeeFilter, fromDate, toDate]);
+    }, [orders, searchQuery, employeeFilter, fromDate, toDate, isDateRangeInvalid]);
 
     const employeeOptions = useMemo(() => {
         const unique = new Map<string, string>();
@@ -141,32 +162,171 @@ export default function OutstandingPage() {
         return Array.from(unique.entries()).map(([id, username]) => ({ id, username }));
     }, [orders]);
 
+    const handlePaymentDateChange = (value: string) => {
+        if (!value) {
+            setPaymentDate("");
+            setPaymentDateNotice(null);
+            return;
+        }
+        const today = thaiToday();
+        if (value > today) {
+            setPaymentDate(today);
+            setPaymentDateNotice("Payment date cannot be later than today.");
+            return;
+        }
+        setPaymentDate(value);
+        setPaymentDateNotice(null);
+    };
+
     const handlePaymentChange = (
         orderId: string,
         maxAmount: number,
         value: string
     ) => {
-        const parsed = Number(value);
-        if (Number.isNaN(parsed) || parsed < 0) {
-            setPaymentInputs((prev) => ({ ...prev, [orderId]: value }));
+        if (value === "") {
+            setPaymentInputs((prev) => ({ ...prev, [orderId]: "" }));
+            setPaymentAmountErrors((prev) => ({ ...prev, [orderId]: null }));
             return;
         }
-        const clamped = Math.min(parsed, maxAmount);
+
+        let normalized = value.replace(/[^\d.]/g, "");
+        if (normalized === "") {
+            return;
+        }
+
+        if (normalized.startsWith(".")) {
+            normalized = `0${normalized}`;
+        }
+
+        normalized = normalized.replace(/(\..*)\./g, "$1");
+
+        const [integerPart, fractionalPart] = normalized.split(".");
+        const trimmedIntegerPart = integerPart.replace(/^0+(?=\d)/, "");
+        normalized =
+            fractionalPart !== undefined
+                ? `${trimmedIntegerPart || "0"}.${fractionalPart}`
+                : trimmedIntegerPart;
+
+        const parsed = Number(normalized);
+        if (!Number.isFinite(parsed)) {
+            return;
+        }
+
+        if (parsed > maxAmount) {
+            normalized = String(Math.max(maxAmount, 0));
+        }
+
+        const normalizedAmount = Number(normalized);
         setPaymentInputs((prev) => ({
             ...prev,
-            [orderId]: clamped === 0 ? "" : String(clamped),
+            [orderId]: normalized,
+        }));
+        setPaymentAmountErrors((prev) => ({
+            ...prev,
+            [orderId]: normalizedAmount <= 0 ? "Amount must be greater than 0" : null,
         }));
     };
 
-    const handleCollectPayment = async (order: OutstandingOrder) => {
-        const inputValue = paymentInputs[String(order.id)];
-        const parsed = Number(inputValue);
-        if (!inputValue || Number.isNaN(parsed) || parsed <= 0 || !token)
+    const handlePaymentBlur = (orderId: string, maxAmount: number) => {
+        const currentValue = paymentInputs[orderId];
+        if (currentValue === undefined || currentValue === "") {
             return;
+        }
+
+        let normalized = currentValue.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1");
+        if (!normalized || normalized === ".") {
+            setPaymentInputs((prev) => ({
+                ...prev,
+                [orderId]: "",
+            }));
+            setPaymentAmountErrors((prev) => ({
+                ...prev,
+                [orderId]: "Amount must be greater than 0",
+            }));
+            return;
+        }
+
+        if (normalized.startsWith(".")) {
+            normalized = `0${normalized}`;
+        }
+
+        const parsed = Number(normalized);
+        if (!Number.isFinite(parsed)) {
+            return;
+        }
+
+        const clamped = Math.min(parsed, maxAmount);
+        const finalValue = clamped > 0 ? String(clamped) : normalized;
+        setPaymentInputs((prev) => ({
+            ...prev,
+            [orderId]: finalValue,
+        }));
+        setPaymentAmountErrors((prev) => ({
+            ...prev,
+            [orderId]: clamped <= 0 ? "Amount must be greater than 0" : null,
+        }));
+    };
+
+    const preventInvalidAmountKeys = (event: KeyboardEvent<HTMLInputElement>) => {
+        const allowedControlKeys = [
+            "Backspace",
+            "Delete",
+            "ArrowLeft",
+            "ArrowRight",
+            "Tab",
+            "Home",
+            "End",
+        ];
+
+        if (event.ctrlKey || event.metaKey) {
+            return;
+        }
+
+        if (allowedControlKeys.includes(event.key)) {
+            return;
+        }
+
+        if (event.key === ".") {
+            if (event.currentTarget.value.includes(".")) {
+                event.preventDefault();
+            }
+            return;
+        }
+
+        if (!/^\d$/.test(event.key)) {
+            event.preventDefault();
+        }
+    };
+
+    const isPaymentAmountInvalid = (orderId: string) => {
+        const raw = paymentInputs[orderId];
+        if (!raw) {
+            return true;
+        }
+        const parsed = Number(raw);
+        return !Number.isFinite(parsed) || parsed <= 0;
+    };
+
+    const handleCollectPayment = async (order: OutstandingOrder) => {
+        const orderId = String(order.id);
+        const inputValue = paymentInputs[orderId];
+        const parsed = Number(inputValue);
+        if (!inputValue || Number.isNaN(parsed) || parsed <= 0 || !token) {
+            setPaymentAmountErrors((prev) => ({
+                ...prev,
+                [orderId]: "Amount must be greater than 0",
+            }));
+            return;
+        }
 
         const orderDate = toBangkokDateStr(order.created_at);
         const selectedPaymentDate =
             paymentDate || thaiToday();
+        const today = thaiToday();
+        if (selectedPaymentDate > today) {
+            setPaymentDateNotice("Payment date cannot be later than today.");
+            return;
+        }
         if (selectedPaymentDate < orderDate) {
             setPaymentDateNotice(
                 "Payment date cannot be earlier than order date."
@@ -186,7 +346,8 @@ export default function OutstandingPage() {
                     payment_type: "CASH",
                 },
             });
-            setPaymentInputs((prev) => ({ ...prev, [String(order.id)]: "" }));
+            setPaymentInputs((prev) => ({ ...prev, [orderId]: "" }));
+            setPaymentAmountErrors((prev) => ({ ...prev, [orderId]: null }));
             queryClient.invalidateQueries({ queryKey: ["admin-outstanding"] });
         } catch (err) {
             setError(
@@ -199,194 +360,22 @@ export default function OutstandingPage() {
         }
     };
 
-    const statusOptions = [
-        { value: "all", label: "All Orders" },
-        { value: "UNPAID", label: "Unpaid" },
-        { value: "COMPLETED", label: "Completed" },
-    ];
-
-    const handleConfirmPayments = async (order: OutstandingOrder) => {
-        const pendingPayments = (order.payments ?? []).filter(
-            (p) => p.status === "PENDING"
-        );
-        if (!token || pendingPayments.length === 0) return;
-        setConfirmingPayment(order.id);
-        try {
-            await Promise.all(
-                pendingPayments.map((p) =>
-                    apiFetch(`/payments/${p.id}/confirm`, {
-                        method: "POST",
-                        token,
-                    })
-                )
-            );
-            queryClient.invalidateQueries({ queryKey: ["admin-outstanding"] });
-        } catch (err) {
-            setError(
-                err instanceof Error
-                    ? err.message
-                    : "Failed to confirm payments"
-            );
-        } finally {
-            setConfirmingPayment(null);
-        }
-    };
-
     const formatDateRange = (from: string, to: string) => {
         if (!from && !to) return "All dates";
         if (from === to) return formatDate(from);
-        if (from && to) return `${formatDate(from)} - ${formatDate(to)}`;
+        if (from && to) {
+            const [start, end] =
+                from <= to ? [from, to] : [to, from];
+            return `${formatDate(start)} - ${formatDate(end)}`;
+        }
         if (from) return `From ${formatDate(from)}`;
         return `Until ${formatDate(to)}`;
     };
 
-    const printablePayments = useMemo(() => {
-        const rangeFrom = paymentDate || fromDate;
-        const rangeTo = paymentDate || toDate;
-        return allPayments.filter((p) => {
-            const pDate = toBangkokDateStr(p.created_at);
-            return (
-                (!rangeFrom || pDate >= rangeFrom) &&
-                (!rangeTo || pDate <= rangeTo)
-            );
-        });
-    }, [allPayments, paymentDate, fromDate, toDate]);
-
-    const totalPrintableAmount = useMemo(
-        () =>
-            printablePayments.reduce(
-                (sum, p) => sum + Number(p.amount_paid),
-                0
-            ),
-        [printablePayments]
-    );
-
     return (
         <div className="space-y-6">
-            <style jsx global>{`
-                @media print {
-                    body * {
-                        visibility: hidden !important;
-                    }
-                    .printable,
-                    .printable * {
-                        visibility: visible !important;
-                    }
-                    .printable {
-                        position: absolute;
-                        left: 0;
-                        top: 0;
-                        width: 100%;
-                    }
-                    .no-print {
-                        display: none !important;
-                    }
-                }
-                .print-only {
-                    display: none;
-                }
-                @media print {
-                    .print-only {
-                        display: block;
-                    }
-                }
-            `}</style>
-
-            {/* Hidden print-only section */}
-            <div className="printable print-only">
-                <div className="p-6">
-                    <div className="mb-6">
-                        <div className="text-2xl font-semibold text-gray-900">
-                            Payments by Day
-                        </div>
-                        <div className="text-base font-medium text-black">
-                            Date:{" "}
-                            {paymentDate
-                                ? formatDate(paymentDate)
-                                : formatDateRange(fromDate, toDate)}
-                        </div>
-                        <div className="text-base font-medium text-black">
-                            User: {user?.username ?? "-"}
-                        </div>
-                    </div>
-                    <div className="max-h-[60vh] overflow-y-auto border border-gray-200 rounded-md text-black max-w-[90%] mx-auto">
-                        <table className="w-full text-sm border-collapse text-black">
-                            <thead>
-                                <tr className="bg-blue-600 text-white">
-                                    <th className="border border-blue-500 text-center py-2 px-3">
-                                        Order ID
-                                    </th>
-                                    <th className="border border-blue-500 text-center py-2 px-3">
-                                        Customer
-                                    </th>
-                                    <th className="border border-blue-500 text-center py-2 px-3">
-                                        Order Date
-                                    </th>
-                                    <th className="border border-blue-500 text-center py-2 px-3">
-                                        Payment Date
-                                    </th>
-                                    <th className="border border-blue-500 text-center py-2 px-3">
-                                        Amount
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {printablePayments.length === 0 ? (
-                                    <tr>
-                                        <td
-                                            colSpan={5}
-                                            className="border border-blue-500 py-4 text-center text-gray-500"
-                                        >
-                                            No payments recorded for selected
-                                            dates.
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    printablePayments.map((p) => (
-                                        <tr key={p.id}>
-                                            <td className="border border-blue-500 py-2 px-3">
-                                                {p.order_id ? formatId('ORD', p.order_id) : formatId('PAY', p.id)}
-                                            </td>
-                                            <td className="border border-blue-500 py-2 px-3">
-                                                {p.customer.name}
-                                            </td>
-                                            <td className="border border-blue-500 py-2 px-3">
-                                                {p.order
-                                                    ? formatDate(p.order.created_at)
-                                                    : "-"}
-                                            </td>
-                                            <td className="border border-blue-500 py-2 px-3">
-                                                {formatDate(p.created_at)}
-                                            </td>
-                                            <td className="border border-blue-500 py-2 px-3 text-right">
-                                                {formatCurrency(Number(p.amount_paid))}
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                    <div className="mt-6 max-w-[90%] mx-auto flex gap-4">
-                        <div className="border border-blue-600 bg-blue-50 h-24 w-1/2">
-                            <div className="text-xs text-blue-700 px-2 pt-2">
-                                Payment Accept by
-                            </div>
-                        </div>
-                        <div className="border border-blue-600 bg-blue-50 h-24 w-1/2">
-                            <div className="text-xs text-blue-700 px-2 pt-2">
-                                Total Payment Amount
-                            </div>
-                            <div className="px-2 pt-2 text-base font-semibold text-black">
-                                {formatCurrency(totalPrintableAmount)}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             {/* Main content */}
-            <div className="no-print">
+            <div>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900">
@@ -416,44 +405,6 @@ export default function OutstandingPage() {
                                     unpaid)
                                 </CardDescription>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={async () => {
-                                        setIsPrintDialogOpen(true);
-                                        if (!token) return;
-                                        setLoadingPayments(true);
-                                        try {
-                                            const data = await apiFetch<PaymentRecord[]>("/payments", { token });
-                                            setAllPayments(data);
-                                        } catch { /* silently ignore */ }
-                                        finally { setLoadingPayments(false); }
-                                    }}
-                                >
-                                    Payment List
-                                </Button>
-                            </div>
-                            <div className="flex flex-col sm:flex-row gap-4">
-                                <div className="sm:w-48">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Payment Date
-                                    </label>
-                                    <input
-                                        type="date"
-                                        value={paymentDate}
-                                        onChange={(e) =>
-                                            setPaymentDate(e.target.value)
-                                        }
-                                        className="w-full h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
-                                    />
-                                    {paymentDateNotice && (
-                                        <div className="mt-2 text-xs text-red-600">
-                                            {paymentDateNotice}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
                                     Date Range
@@ -467,9 +418,12 @@ export default function OutstandingPage() {
                                             type="date"
                                             value={fromDate}
                                             onChange={(e) =>
-                                                setFromDate(e.target.value)
+                                                handleFromDate(e.target.value)
                                             }
-                                            className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                            max={toDate || todayDate}
+                                            className={`w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
+                                                ? "border-red-300 focus:ring-red-500 focus:border-red-500"
+                                                : "border-gray-300 focus:ring-pink-500 focus:border-pink-500"}`}
                                         />
                                     </div>
                                     <div className="flex flex-col">
@@ -480,9 +434,12 @@ export default function OutstandingPage() {
                                             type="date"
                                             value={toDate}
                                             onChange={(e) =>
-                                                setToDate(e.target.value)
+                                                handleToDate(e.target.value)
                                             }
-                                            className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                            max={todayDate}
+                                            className={`w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
+                                                ? "border-red-300 focus:ring-red-500 focus:border-red-500"
+                                                : "border-gray-300 focus:ring-pink-500 focus:border-pink-500"}`}
                                             min={fromDate}
                                         />
                                     </div>
@@ -494,11 +451,7 @@ export default function OutstandingPage() {
                                             <Button
                                                 size="sm"
                                                 variant="outline"
-                                                onClick={() => {
-                                                    const t = new Date().toLocaleDateString("en-CA");
-                                                    setFromDate(t);
-                                                    setToDate(t);
-                                                }}
+                                                onClick={handleTodayDateRange}
                                                 className="text-xs h-10 w-16"
                                             >
                                                 Today
@@ -506,10 +459,7 @@ export default function OutstandingPage() {
                                             <Button
                                                 size="sm"
                                                 variant="outline"
-                                                onClick={() => {
-                                                    setFromDate("");
-                                                    setToDate("");
-                                                }}
+                                                onClick={handleAllDateRange}
                                                 className="text-xs h-10 w-16"
                                             >
                                                 All
@@ -517,6 +467,11 @@ export default function OutstandingPage() {
                                         </div>
                                     </div>
                                 </div>
+                                {isDateRangeInvalid && (
+                                    <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                                        Invalid date range
+                                    </div>
+                                )}
                                 <p className="text-xs text-gray-500 mt-1">
                                     Found {filteredOrders.length} orders{" "}
                                     {fromDate || toDate
@@ -524,6 +479,11 @@ export default function OutstandingPage() {
                                         : ""}
                                 </p>
                             </div>
+                            {paymentDateNotice && (
+                                <div className="text-xs text-red-600">
+                                    {paymentDateNotice}
+                                </div>
+                            )}
                             <div className="flex flex-col sm:flex-row gap-4">
                                 <div className="flex-1">
                                     <Input
@@ -533,6 +493,7 @@ export default function OutstandingPage() {
                                             setSearchQuery(e.target.value)
                                         }
                                         className="w-full h-10"
+                                        disabled={isDateRangeInvalid}
                                     />
                                 </div>
                                 <div className="sm:w-48">
@@ -542,29 +503,12 @@ export default function OutstandingPage() {
                                             setEmployeeFilter(e.target.value)
                                         }
                                         className="w-full h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                        disabled={isDateRangeInvalid}
                                     >
                                         <option value="all">All Employees</option>
                                         {employeeOptions.map((o) => (
                                             <option key={o.id} value={o.id}>
                                                 {o.username}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="sm:w-48">
-                                    <select
-                                        value={statusFilter}
-                                        onChange={(e) =>
-                                            setStatusFilter(e.target.value)
-                                        }
-                                        className="w-full h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
-                                    >
-                                        {statusOptions.map((o) => (
-                                            <option
-                                                key={o.value}
-                                                value={o.value}
-                                            >
-                                                {o.label}
                                             </option>
                                         ))}
                                     </select>
@@ -616,7 +560,7 @@ export default function OutstandingPage() {
                                                         >
                                                             {remaining === 0
                                                                 ? "COMPLETED"
-                                                                : "UNPAID"}
+                                                                : "NOT PAID"}
                                                         </span>
                                                     </div>
                                                     <div>
@@ -648,9 +592,9 @@ export default function OutstandingPage() {
                                                     {remaining > 0 ? (
                                                         <div className="flex items-center gap-2">
                                                             <Input
-                                                                type="number"
-                                                                min={0}
-                                                                max={remaining}
+                                                                type="text"
+                                                                inputMode="decimal"
+                                                                pattern="[0-9]*[.]?[0-9]*"
                                                                 value={
                                                                     paymentInputs[
                                                                     String(order.id)
@@ -664,8 +608,19 @@ export default function OutstandingPage() {
                                                                             .value
                                                                     )
                                                                 }
+                                                                onBlur={() =>
+                                                                    handlePaymentBlur(
+                                                                        String(order.id),
+                                                                        remaining
+                                                                    )
+                                                                }
+                                                                onKeyDown={
+                                                                    preventInvalidAmountKeys
+                                                                }
                                                                 placeholder="Payment"
-                                                                className="h-9 text-sm text-black"
+                                                                className={`h-9 text-sm text-black ${paymentAmountErrors[String(order.id)]
+                                                                    ? "border-red-500 focus-visible:ring-red-500"
+                                                                    : ""}`}
                                                             />
                                                             <Button
                                                                 size="sm"
@@ -673,7 +628,10 @@ export default function OutstandingPage() {
                                                                 className="border-green-500 text-green-700 hover:bg-green-50"
                                                                 disabled={
                                                                     savingPayment ===
-                                                                    order.id
+                                                                    order.id ||
+                                                                    isPaymentAmountInvalid(
+                                                                        String(order.id)
+                                                                    )
                                                                 }
                                                                 onClick={() =>
                                                                     handleCollectPayment(
@@ -687,31 +645,12 @@ export default function OutstandingPage() {
                                                                     : "Save"}
                                                             </Button>
                                                         </div>
-                                                    ) : (order.payments ?? []).some(
-                                                        (p) =>
-                                                            p.status ===
-                                                            "PENDING"
-                                                    ) ? (
-                                                        <Button
-                                                            size="sm"
-                                                            variant="outline"
-                                                            className="border-blue-500 text-blue-700 hover:bg-blue-50 w-full"
-                                                            disabled={
-                                                                confirmingPayment ===
-                                                                order.id
-                                                            }
-                                                            onClick={() =>
-                                                                handleConfirmPayments(
-                                                                    order
-                                                                )
-                                                            }
-                                                        >
-                                                            {confirmingPayment ===
-                                                                order.id
-                                                                ? "..."
-                                                                : "Confirm"}
-                                                        </Button>
                                                     ) : null}
+                                                    {paymentAmountErrors[String(order.id)] && (
+                                                        <p className="text-xs text-red-600">
+                                                            {paymentAmountErrors[String(order.id)]}
+                                                        </p>
+                                                    )}
                                                 </div>
                                             );
                                         })
@@ -738,7 +677,7 @@ export default function OutstandingPage() {
                                                 <th className="w-24 text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">
                                                     Status
                                                 </th>
-                                                <th className="w-44 text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">
+                                                <th className="w-32 text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">
                                                     Make Payment
                                                 </th>
                                                 <th className="w-20 text-center py-3 px-3 text-sm font-medium text-white bg-blue-600 border-l border-blue-500">
@@ -827,15 +766,23 @@ export default function OutstandingPage() {
                                                             <td className="py-3 px-4 text-center border-l border-gray-200">
                                                                 {remaining >
                                                                     0 && (
-                                                                        <div className="flex items-center justify-center">
+                                                                        <div className="flex items-center justify-center gap-2">
+                                                                            <input
+                                                                                type="date"
+                                                                                value={paymentDate}
+                                                                                onChange={(e) =>
+                                                                                    handlePaymentDateChange(
+                                                                                        e.target.value
+                                                                                    )
+                                                                                }
+                                                                                max={todayDate}
+                                                                                aria-label="Payment Date"
+                                                                                className="h-9 w-26 px-2 py-1 text-xs text-black border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                                                                            />
                                                                             <Input
-                                                                                type="number"
-                                                                                min={
-                                                                                    0
-                                                                                }
-                                                                                max={
-                                                                                    remaining
-                                                                                }
+                                                                                type="text"
+                                                                                inputMode="decimal"
+                                                                                pattern="[0-9]*[.]?[0-9]*"
                                                                                 value={
                                                                                     paymentInputs[
                                                                                     String(order
@@ -854,11 +801,28 @@ export default function OutstandingPage() {
                                                                                             .value
                                                                                     )
                                                                                 }
+                                                                                onBlur={() =>
+                                                                                    handlePaymentBlur(
+                                                                                        String(order.id),
+                                                                                        remaining
+                                                                                    )
+                                                                                }
+                                                                                onKeyDown={
+                                                                                    preventInvalidAmountKeys
+                                                                                }
                                                                                 placeholder="Payment"
-                                                                                className="h-9 w-40 text-sm text-black"
+                                                                                className={`h-9 w-40 text-sm text-black ${paymentAmountErrors[String(order.id)]
+                                                                                    ? "border-red-500 focus-visible:ring-red-500"
+                                                                                    : ""}`}
                                                                             />
+                                                                            
                                                                         </div>
                                                                     )}
+                                                                {paymentAmountErrors[String(order.id)] && (
+                                                                    <p className="text-xs text-red-600 mt-1">
+                                                                        {paymentAmountErrors[String(order.id)]}
+                                                                    </p>
+                                                                )}
                                                             </td>
                                                             <td className="py-3 px-4 text-center border-l border-gray-200">
                                                                 {remaining >
@@ -869,7 +833,10 @@ export default function OutstandingPage() {
                                                                         className="border-green-500 text-green-700 hover:bg-green-50 h-9 w-20"
                                                                         disabled={
                                                                             savingPayment ===
-                                                                            order.id
+                                                                            order.id ||
+                                                                            isPaymentAmountInvalid(
+                                                                                String(order.id)
+                                                                            )
                                                                         }
                                                                         onClick={() =>
                                                                             handleCollectPayment(
@@ -881,30 +848,6 @@ export default function OutstandingPage() {
                                                                             order.id
                                                                             ? "..."
                                                                             : "Save"}
-                                                                    </Button>
-                                                                ) : (order.payments ?? []).some(
-                                                                    (p) =>
-                                                                        p.status ===
-                                                                        "PENDING"
-                                                                ) ? (
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        className="border-blue-500 text-blue-700 hover:bg-blue-50 h-9 w-20"
-                                                                        disabled={
-                                                                            confirmingPayment ===
-                                                                            order.id
-                                                                        }
-                                                                        onClick={() =>
-                                                                            handleConfirmPayments(
-                                                                                order
-                                                                            )
-                                                                        }
-                                                                    >
-                                                                        {confirmingPayment ===
-                                                                            order.id
-                                                                            ? "..."
-                                                                            : "Confirm"}
                                                                     </Button>
                                                                 ) : null}
                                                             </td>
@@ -919,133 +862,6 @@ export default function OutstandingPage() {
                         )}
                     </CardContent>
                 </Card>
-
-                {/* Print Dialog */}
-                <Dialog
-                    open={isPrintDialogOpen}
-                    onOpenChange={setIsPrintDialogOpen}
-                >
-                    <DialogContent className="w-[794px] h-[1123px] max-w-[95vw] max-h-[90vh] overflow-y-auto">
-                        <DialogHeader className="space-y-1 text-left">
-                            <DialogTitle className="text-2xl font-semibold text-gray-900">
-                                Payments by Day
-                            </DialogTitle>
-                            <div className="text-base font-medium text-black">
-                                Date:{" "}
-                                {paymentDate
-                                    ? formatDate(paymentDate)
-                                    : formatDateRange(fromDate, toDate)}
-                            </div>
-                            <div className="text-base font-medium text-black">
-                                User: {user?.username ?? "-"}
-                            </div>
-                        </DialogHeader>
-                        <div className="space-y-4">
-                            <div className="max-h-[60vh] overflow-y-auto border border-gray-200 rounded-md text-black max-w-[90%] mx-auto">
-                                <table className="w-full text-sm border-collapse text-black">
-                                    <thead>
-                                        <tr className="bg-blue-600 text-white">
-                                            <th className="border border-blue-500 text-center py-2 px-3">
-                                                Order ID
-                                            </th>
-                                            <th className="border border-blue-500 text-center py-2 px-3">
-                                                Customer
-                                            </th>
-                                            <th className="border border-blue-500 text-center py-2 px-3">
-                                                Order Date
-                                            </th>
-                                            <th className="border border-blue-500 text-center py-2 px-3">
-                                                Payment Date
-                                            </th>
-                                            <th className="border border-blue-500 text-center py-2 px-3">
-                                                Amount
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {loadingPayments ? (
-                                            <tr>
-                                                <td
-                                                    colSpan={5}
-                                                    className="border border-blue-500 py-4 text-center text-gray-500"
-                                                >
-                                                    Loading payments...
-                                                </td>
-                                            </tr>
-                                        ) : printablePayments.length === 0 ? (
-                                            <tr>
-                                                <td
-                                                    colSpan={5}
-                                                    className="border border-blue-500 py-4 text-center text-gray-500"
-                                                >
-                                                    No payments recorded for
-                                                    selected dates.
-                                                </td>
-                                            </tr>
-                                        ) : (
-                                            printablePayments.map((p) => (
-                                                <tr key={p.id}>
-                                                    <td className="border border-blue-500 py-2 px-3">
-                                                        {p.order_id ? formatId('ORD', p.order_id) : formatId('PAY', p.id)}
-                                                    </td>
-                                                    <td className="border border-blue-500 py-2 px-3">
-                                                        {p.customer.name}
-                                                    </td>
-                                                    <td className="border border-blue-500 py-2 px-3">
-                                                        {p.order
-                                                            ? formatDate(p.order.created_at)
-                                                            : "-"}
-                                                    </td>
-                                                    <td className="border border-blue-500 py-2 px-3">
-                                                        {formatDate(p.created_at)}
-                                                    </td>
-                                                    <td className="border border-blue-500 py-2 px-3 text-right">
-                                                        {formatCurrency(
-                                                            Number(p.amount_paid)
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            ))
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div className="mt-6 max-w-[90%] mx-auto flex gap-4">
-                                <div className="border border-blue-600 bg-blue-50 h-24 w-1/2">
-                                    <div className="text-xs text-blue-700 px-2 pt-2">
-                                        Payment Accept by
-                                    </div>
-                                </div>
-                                <div className="border border-blue-600 bg-blue-50 h-24 w-1/2">
-                                    <div className="text-xs text-blue-700 px-2 pt-2">
-                                        Total Payment Amount
-                                    </div>
-                                    <div className="px-2 pt-2 text-base font-semibold text-black">
-                                        {formatCurrency(totalPrintableAmount)}
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="max-w-[90%] mx-auto flex items-center justify-end gap-2">
-                                <Button
-                                    variant="outline"
-                                    className="h-9 w-24"
-                                    onClick={() => setIsPrintDialogOpen(false)}
-                                >
-                                    Close
-                                </Button>
-                                <Button
-                                    className="bg-blue-600 hover:bg-blue-700 text-white h-9 w-24"
-                                    onClick={() => {
-                                        setIsPrintDialogOpen(false);
-                                        window.print();
-                                    }}
-                                >
-                                    Print
-                                </Button>
-                            </div>
-                        </div>
-                    </DialogContent>
-                </Dialog>
 
                 {/* Order Detail Dialog */}
                 <Dialog
@@ -1100,7 +916,7 @@ export default function OutstandingPage() {
                                                         0
                                                     ) === 0
                                                         ? "PAID"
-                                                        : "UNPAID"}
+                                                        : "NOT PAID"}
                                                 </span>
                                                 <div className="mt-3 text-2xl font-bold text-gray-900">
                                                     {formatCurrency(

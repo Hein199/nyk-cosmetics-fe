@@ -37,11 +37,13 @@ interface Payment {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatCurrency(amount: number) {
+    const safeAmount = Number.isFinite(amount) ? Math.abs(amount) : 0;
     return new Intl.NumberFormat("en-MM", {
         style: "currency",
         currency: "MMK",
         minimumFractionDigits: 0,
-    }).format(amount);
+        maximumFractionDigits: 6,
+    }).format(safeAmount);
 }
 
 function getCreatedByLabel(collected_by: CollectedBy): string {
@@ -73,17 +75,54 @@ export default function PaymentHistoryPage() {
     const { token } = useAuth();
     const queryClient = useQueryClient();
 
-    const { data: payments = [], isLoading: loading, error: queryError } = useQuery({
-        queryKey: ["admin-payments"],
-        queryFn: () => apiFetch<Payment[]>("/payments", { token }),
-        enabled: !!token,
-    });
-    const [error, setError] = useState<string | null>(queryError?.message ?? null);
-
     const [searchQuery, setSearchQuery] = useState("");
     const [fromDate, setFromDate] = useState("");
     const [toDate, setToDate] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
+    const todayDate = thaiToday();
+
+    const normalizeDateRange = (from: string, to: string) => {
+        const normalizedTo = !to ? "" : to > todayDate ? todayDate : to;
+        if (!from || !normalizedTo) {
+            return { fromDate: from, toDate: normalizedTo };
+        }
+        const normalizedFrom = from > normalizedTo ? normalizedTo : from;
+        return { fromDate: normalizedFrom, toDate: normalizedTo };
+    };
+
+    const isDateRangeInvalid = Boolean(
+        (fromDate && toDate && fromDate > toDate) ||
+        (toDate && toDate > todayDate)
+    );
+
+    const handleFromDate = (value: string) => {
+        const normalized = normalizeDateRange(value, toDate);
+        setFromDate(normalized.fromDate);
+        setToDate(normalized.toDate);
+    };
+
+    const handleToDate = (value: string) => {
+        const normalized = normalizeDateRange(fromDate, value);
+        setFromDate(normalized.fromDate);
+        setToDate(normalized.toDate);
+    };
+
+    const handleTodayDateRange = () => {
+        setFromDate(todayDate);
+        setToDate(todayDate);
+    };
+
+    const handleAllDateRange = () => {
+        setFromDate("");
+        setToDate("");
+    };
+
+    const { data: payments = [], isLoading: loading, error: queryError } = useQuery({
+        queryKey: ["admin-payments"],
+        queryFn: () => apiFetch<Payment[]>("/payments", { token }),
+        enabled: !!token && !isDateRangeInvalid,
+    });
+    const [error, setError] = useState<string | null>(queryError?.message ?? null);
 
     // Per-row action loading: { [paymentId]: 'confirm' | 'reject' | null }
     const [actionLoading, setActionLoading] = useState<Record<number, "confirm" | "reject" | null>>({});
@@ -116,6 +155,9 @@ export default function PaymentHistoryPage() {
     // ── Filtering ────────────────────────────────────────────────────────────
 
     const filteredPayments = useMemo(() => {
+        if (isDateRangeInvalid) {
+            return [];
+        }
         return payments.filter((p) => {
             const pDate = toBangkokDateStr(p.created_at);
             const matchesFrom = !fromDate || pDate >= fromDate;
@@ -132,7 +174,18 @@ export default function PaymentHistoryPage() {
                 getCreatedByLabel(p.collected_by).toLowerCase().includes(q);
             return matchesFrom && matchesTo && matchesStatus && matchesSearch;
         });
-    }, [payments, searchQuery, fromDate, toDate, statusFilter]);
+    }, [payments, searchQuery, fromDate, toDate, statusFilter, isDateRangeInvalid]);
+
+    const formatDateRange = (from: string, to: string) => {
+        if (!from && !to) return "All dates";
+        if (from === to) return formatThaiDate(from);
+        if (from && to) {
+            const [start, end] = from <= to ? [from, to] : [to, from];
+            return `${formatThaiDate(start)} - ${formatThaiDate(end)}`;
+        }
+        if (from) return `From ${formatThaiDate(from)}`;
+        return `Until ${formatThaiDate(to)}`;
+    };
 
     const totalAmount = useMemo(
         () =>
@@ -192,8 +245,11 @@ export default function PaymentHistoryPage() {
                                     <input
                                         type="date"
                                         value={fromDate}
-                                        onChange={(e) => setFromDate(e.target.value)}
-                                        className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white shadow-sm"
+                                        onChange={(e) => handleFromDate(e.target.value)}
+                                        max={toDate || todayDate}
+                                        className={`w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
+                                            ? "border-red-300 focus:ring-red-500"
+                                            : "border-gray-300 focus:ring-pink-500"}`}
                                     />
                                 </div>
                                 <div className="flex flex-col">
@@ -201,8 +257,11 @@ export default function PaymentHistoryPage() {
                                     <input
                                         type="date"
                                         value={toDate}
-                                        onChange={(e) => setToDate(e.target.value)}
-                                        className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white shadow-sm"
+                                        onChange={(e) => handleToDate(e.target.value)}
+                                        max={todayDate}
+                                        className={`w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
+                                            ? "border-red-300 focus:ring-red-500"
+                                            : "border-gray-300 focus:ring-pink-500"}`}
                                         min={fromDate}
                                     />
                                 </div>
@@ -211,18 +270,36 @@ export default function PaymentHistoryPage() {
                                     <Button
                                         size="sm"
                                         variant="outline"
-                                        onClick={() => {
-                                            const t = thaiToday();
-                                            setFromDate(t);
-                                            setToDate(t);
-                                        }}
+                                        onClick={handleTodayDateRange}
                                         className="text-xs h-10 w-16"
                                     >
                                         Today
                                     </Button>
                                 </div>
+                                <div className="flex flex-col">
+                                    <label className="text-xs text-transparent mb-1">.</label>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={handleAllDateRange}
+                                        className="text-xs h-10 w-16"
+                                    >
+                                        All
+                                    </Button>
+                                </div>
                             </div>
                         </div>
+                        {isDateRangeInvalid && (
+                            <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                                Invalid date range
+                            </div>
+                        )}
+                        <p className="text-xs text-gray-500 mt-1">
+                            Found {filteredPayments.length} payments{" "}
+                            {fromDate || toDate
+                                ? `for ${formatDateRange(fromDate, toDate)}`
+                                : ""}
+                        </p>
 
                         {/* Search + status filter */}
                         <div className="flex flex-col sm:flex-row gap-4">
@@ -232,6 +309,7 @@ export default function PaymentHistoryPage() {
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     className="w-full h-10"
+                                    disabled={isDateRangeInvalid}
                                 />
                             </div>
                             <div className="sm:w-48">
@@ -239,6 +317,7 @@ export default function PaymentHistoryPage() {
                                     value={statusFilter}
                                     onChange={(e) => setStatusFilter(e.target.value)}
                                     className="w-full h-10 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white shadow-sm"
+                                    disabled={isDateRangeInvalid}
                                 >
                                     <option value="all">All Status</option>
                                     <option value="CONFIRMED">Confirmed</option>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
@@ -38,6 +38,14 @@ interface DashboardStats {
         date: string;
         itemCount: number;
     }[];
+    recentPurchases: {
+        id: number;
+        expenseCode: string;
+        supplier: string;
+        amount: string | number;
+        date: string;
+        itemCount: number;
+    }[];
 }
 
 interface ChartPoint { label: string; sales: number }
@@ -61,6 +69,7 @@ function fmt(amount: number): string {
         style: "currency",
         currency: "MMK",
         minimumFractionDigits: 0,
+        maximumFractionDigits: 6,
         notation: amount >= 1_000_000 ? "compact" : "standard",
     }).format(amount);
 }
@@ -70,6 +79,7 @@ function fmtFull(amount: number): string {
         style: "currency",
         currency: "MMK",
         minimumFractionDigits: 0,
+        maximumFractionDigits: 6,
     }).format(amount);
 }
 
@@ -181,7 +191,6 @@ function ChartEmpty({ message }: { message: string }) {
 
 export default function AdminPage() {
     const { token } = useAuth();
-    const queryClient = useQueryClient();
 
     // Top products toggles
     const [topMode, setTopMode] = useState<"daily" | "monthly">("daily");
@@ -224,20 +233,11 @@ export default function AdminPage() {
     });
     const cashFlowError = cfQueryError?.message ?? null;
 
-    // ── Refresh all ─────────────────────────────────────────────────────────────
-
-    function refreshAll() {
-        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
-        queryClient.invalidateQueries({ queryKey: ["dashboard-sales-chart"] });
-        queryClient.invalidateQueries({ queryKey: ["dashboard-top-products"] });
-        queryClient.invalidateQueries({ queryKey: ["dashboard-salesperson"] });
-        queryClient.invalidateQueries({ queryKey: ["dashboard-cash-flow"] });
-    }
-
     // ── Derived ─────────────────────────────────────────────────────────────────
 
     const lowStockProducts = stats?.lowStockProducts ?? [];
     const recentOrders = stats?.recentOrders ?? [];
+    const recentPurchases = stats?.recentPurchases ?? [];
     const hasTopProducts = topProducts.length > 0;
     const hasSalesperson = salesperson.data.length > 0;
     const hasCashFlow = cashFlow.some((d) => d["Cash In"] > 0 || d["Cash Out"] > 0);
@@ -252,13 +252,6 @@ export default function AdminPage() {
                     <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
                     <p className="text-sm text-gray-500 mt-0.5">Business performance overview</p>
                 </div>
-                <Button variant="outline" size="sm" className="w-fit" onClick={refreshAll}>
-                    <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path d="M21 12a9 9 0 1 1-3-6.7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
-                        <path d="M21 3v6h-6" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
-                    </svg>
-                    Refresh
-                </Button>
             </div>
 
             {error && (
@@ -444,55 +437,100 @@ export default function AdminPage() {
                 </div>
             </Section>
 
-            {/* ── Recent Orders + Low Stock ──────────────────────────── */}
+            {/* ── Recent Orders + Recent Purchases + Low Stock ────────── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                {/* Recent Orders */}
-                <Section className="lg:col-span-2">
-                    <SectionHeader
-                        title="Recent Orders"
-                        subtitle="Latest orders across all salespersons"
-                        action={
-                            <Link href="/admin/orders">
-                                <Button variant="outline" size="sm" className="text-xs">View All</Button>
-                            </Link>
-                        }
-                    />
-                    <div className="px-5 pb-5">
-                        {statsLoading ? (
-                            <div className="text-center py-10 text-sm text-gray-400">Loading…</div>
-                        ) : recentOrders.length === 0 ? (
-                            <div className="text-center py-10 text-sm text-gray-400">No orders yet.</div>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="border-b border-gray-100">
-                                            <th className="text-left py-2 px-2 text-xs text-gray-400 font-medium">Customer</th>
-                                            <th className="text-left py-2 px-2 text-xs text-gray-400 font-medium">Salesperson</th>
-                                            <th className="text-right py-2 px-2 text-xs text-gray-400 font-medium">Amount</th>
-                                            <th className="text-center py-2 px-2 text-xs text-gray-400 font-medium">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-50">
-                                        {recentOrders.map((order) => (
-                                            <tr key={order.id} className="hover:bg-gray-50 transition-colors">
-                                                <td className="py-3 px-2 text-gray-800 font-medium">{order.customer}</td>
-                                                <td className="py-3 px-2 text-gray-500">{order.salesperson}</td>
-                                                <td className="py-3 px-2 text-right font-semibold text-gray-900">{fmt(Number(order.amount))}</td>
-                                                <td className="py-3 px-2 text-center">
-                                                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full capitalize ${statusColors[order.status] ?? "bg-gray-100 text-gray-600"}`}>
-                                                        {order.status.replace(/_/g, " ")}
-                                                    </span>
-                                                </td>
+                <div className="lg:col-span-2 space-y-6">
+                    {/* Recent Orders */}
+                    <Section>
+                        <SectionHeader
+                            title="Recent Orders"
+                            subtitle="Latest orders across all salespersons"
+                            action={
+                                <Link href="/admin/orders">
+                                    <Button variant="outline" size="sm" className="text-xs">View All</Button>
+                                </Link>
+                            }
+                        />
+                        <div className="px-5 pb-5">
+                            {statsLoading ? (
+                                <div className="text-center py-10 text-sm text-gray-400">Loading…</div>
+                            ) : recentOrders.length === 0 ? (
+                                <div className="text-center py-10 text-sm text-gray-400">No orders yet.</div>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead>
+                                            <tr className="border-b border-gray-100">
+                                                <th className="text-left py-2 px-2 text-xs text-gray-400 font-medium">Customer</th>
+                                                <th className="text-left py-2 px-2 text-xs text-gray-400 font-medium">Salesperson</th>
+                                                <th className="text-right py-2 px-2 text-xs text-gray-400 font-medium">Amount</th>
+                                                <th className="text-center py-2 px-2 text-xs text-gray-400 font-medium">Status</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </div>
-                </Section>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-50">
+                                            {recentOrders.map((order) => (
+                                                <tr key={order.id} className="hover:bg-gray-50 transition-colors">
+                                                    <td className="py-3 px-2 text-gray-800 font-medium">{order.customer}</td>
+                                                    <td className="py-3 px-2 text-gray-500">{order.salesperson}</td>
+                                                    <td className="py-3 px-2 text-right font-semibold text-gray-900">{fmt(Number(order.amount))}</td>
+                                                    <td className="py-3 px-2 text-center">
+                                                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full capitalize ${statusColors[order.status] ?? "bg-gray-100 text-gray-600"}`}>
+                                                            {order.status.replace(/_/g, " ")}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    </Section>
+
+                    {/* Recent Purchase Orders */}
+                    <Section>
+                        <SectionHeader
+                            title="Recent Purchase Orders"
+                            subtitle="Latest purchase entries"
+                            action={
+                                <Link href="/admin/purchase">
+                                    <Button variant="outline" size="sm" className="text-xs">View All</Button>
+                                </Link>
+                            }
+                        />
+                        <div className="px-5 pb-5">
+                            {statsLoading ? (
+                                <div className="text-center py-10 text-sm text-gray-400">Loading…</div>
+                            ) : recentPurchases.length === 0 ? (
+                                <div className="text-center py-10 text-sm text-gray-400">No purchases yet.</div>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead>
+                                            <tr className="border-b border-gray-100">
+                                                <th className="text-left py-2 px-2 text-xs text-gray-400 font-medium">Code</th>
+                                                <th className="text-left py-2 px-2 text-xs text-gray-400 font-medium">Supplier</th>
+                                                <th className="text-right py-2 px-2 text-xs text-gray-400 font-medium">Amount</th>
+                                                <th className="text-center py-2 px-2 text-xs text-gray-400 font-medium">Items</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-50">
+                                            {recentPurchases.map((purchase) => (
+                                                <tr key={purchase.id} className="hover:bg-gray-50 transition-colors">
+                                                    <td className="py-3 px-2 text-gray-800 font-medium">{purchase.expenseCode}</td>
+                                                    <td className="py-3 px-2 text-gray-500">{purchase.supplier}</td>
+                                                    <td className="py-3 px-2 text-right font-semibold text-gray-900">{fmt(Number(purchase.amount))}</td>
+                                                    <td className="py-3 px-2 text-center text-gray-600">{purchase.itemCount}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    </Section>
+                </div>
 
                 {/* Low Stock */}
                 <Section>
