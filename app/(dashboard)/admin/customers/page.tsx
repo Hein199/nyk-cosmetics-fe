@@ -64,7 +64,12 @@ const emptyForm: CustomerForm = {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmt = (n: number) =>
-    new Intl.NumberFormat("en-MM", { style: "currency", currency: "MMK", maximumFractionDigits: 0 }).format(n);
+    new Intl.NumberFormat("en-MM", {
+        style: "currency",
+        currency: "MMK",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 6,
+    }).format(n);
 
 const outstandingColor = (n: number) =>
     n > 500000 ? "text-red-600" : n > 0 ? "text-orange-500" : "text-green-600";

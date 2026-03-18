@@ -19,7 +19,9 @@ type Customer = {
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-MM", {
         style: "currency",
-        currency: "MMK"
+        currency: "MMK",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 6,
     }).format(amount);
 };
 

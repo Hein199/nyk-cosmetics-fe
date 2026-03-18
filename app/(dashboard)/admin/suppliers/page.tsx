@@ -53,7 +53,12 @@ const emptyForm: SupplierForm = {
 };
 
 const fmt = (n: number) =>
-    new Intl.NumberFormat("en-MM", { style: "currency", currency: "MMK", maximumFractionDigits: 0 }).format(n);
+    new Intl.NumberFormat("en-MM", {
+        style: "currency",
+        currency: "MMK",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 6,
+    }).format(n);
 
 function formatPaymentMethod(value: string) {
     const normalized = value.toLowerCase();

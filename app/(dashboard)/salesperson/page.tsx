@@ -45,6 +45,7 @@ function formatCurrency(amount: number) {
         style: "currency",
         currency: "MMK",
         minimumFractionDigits: 0,
+        maximumFractionDigits: 6,
     }).format(amount);
 }
 
@@ -93,10 +94,32 @@ function toDateKey(dateString: string) {
 export default function SalespersonPage() {
     const router = useRouter();
     const { token, user } = useAuth();
+    const todayDate = thaiToday();
 
     // Date range selection state
-    const [fromDate, setFromDate] = useState("2025-12-01");
-    const [toDate, setToDate] = useState("2025-12-05");
+    const [fromDate, setFromDate] = useState(todayDate);
+    const [toDate, setToDate] = useState(todayDate);
+
+    const normalizeDateRange = (from: string, to: string) => {
+        const normalizedTo = !to ? todayDate : to > todayDate ? todayDate : to;
+        const candidateFrom = from || normalizedTo;
+        const normalizedFrom = candidateFrom > normalizedTo ? normalizedTo : candidateFrom;
+        return { fromDate: normalizedFrom, toDate: normalizedTo };
+    };
+
+    const isDateRangeInvalid = fromDate > toDate || toDate > todayDate;
+
+    const handleFromDate = (value: string) => {
+        const normalized = normalizeDateRange(value, toDate);
+        setFromDate(normalized.fromDate);
+        setToDate(normalized.toDate);
+    };
+
+    const handleToDate = (value: string) => {
+        const normalized = normalizeDateRange(fromDate, value);
+        setFromDate(normalized.fromDate);
+        setToDate(normalized.toDate);
+    };
 
     // Monthly target state
     const [selectedYear, setSelectedYear] = useState("2025");
@@ -119,7 +142,7 @@ export default function SalespersonPage() {
     const { data: orders = [], isLoading: ordersLoading, dataUpdatedAt, error: ordersQueryError } = useQuery({
         queryKey: ["sp-orders"],
         queryFn: () => apiFetch<OrderListItem[]>("/orders", { token }),
-        enabled: !!token,
+        enabled: !!token && !isDateRangeInvalid,
     });
     const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
@@ -128,6 +151,9 @@ export default function SalespersonPage() {
 
     // Filter orders by date range
     const filteredOrders = useMemo(() => {
+        if (isDateRangeInvalid) {
+            return [];
+        }
         return orders
             .map((order) => {
                 const dateKey = toDateKey(order.created_at);
@@ -147,7 +173,7 @@ export default function SalespersonPage() {
             })
             .filter((order) => order.date >= fromDate && order.date <= toDate)
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    }, [orders, fromDate, toDate]);
+            }, [orders, fromDate, toDate, isDateRangeInvalid]);
 
     // Calculate statistics for the date range
     const rangeStats = useMemo(() => {
@@ -201,7 +227,8 @@ export default function SalespersonPage() {
         if (from === to) {
             return formatDate(from);
         }
-        return `${formatDate(from)} - ${formatDate(to)}`;
+        const [start, end] = from <= to ? [from, to] : [to, from];
+        return `${formatDate(start)} - ${formatDate(end)}`;
     };
 
     // Format month for display
@@ -254,8 +281,8 @@ export default function SalespersonPage() {
                 break;
             }
             default:
-                setFromDate("2025-12-01");
-                setToDate("2025-12-05");
+                setFromDate(todayDate);
+                setToDate(todayDate);
         }
     };
 
@@ -443,9 +470,12 @@ export default function SalespersonPage() {
                                                 id="from-date"
                                                 type="date"
                                                 value={fromDate}
-                                                onChange={(e) => setFromDate(e.target.value)}
+                                                onChange={(e) => handleFromDate(e.target.value)}
                                                 lang="en-US"
-                                                className="w-36 h-9 px-3 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                                max={toDate || todayDate}
+                                                className={`w-36 h-9 px-3 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
+                                                    ? "border-red-300 focus:ring-red-500 focus:border-red-500"
+                                                    : "border-gray-300 focus:ring-pink-500 focus:border-pink-500"}`}
                                             />
                                         </div>
                                         <div className="flex flex-col">
@@ -456,13 +486,21 @@ export default function SalespersonPage() {
                                                 id="to-date"
                                                 type="date"
                                                 value={toDate}
-                                                onChange={(e) => setToDate(e.target.value)}
+                                                onChange={(e) => handleToDate(e.target.value)}
                                                 lang="en-US"
-                                                className="w-36 h-9 px-3 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
+                                                max={todayDate}
+                                                className={`w-36 h-9 px-3 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
+                                                    ? "border-red-300 focus:ring-red-500 focus:border-red-500"
+                                                    : "border-gray-300 focus:ring-pink-500 focus:border-pink-500"}`}
                                                 min={fromDate}
                                             />
                                         </div>
                                     </div>
+                                    {isDateRangeInvalid && (
+                                        <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                                            Invalid date range
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 

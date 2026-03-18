@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type KeyboardEvent } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,28 +35,63 @@ function todayStr() {
 }
 
 function formatCurrency(amount: number) {
+    const safeAmount = Number.isFinite(amount) ? Math.abs(amount) : 0;
     return new Intl.NumberFormat("en-MM", {
         style: "currency",
         currency: "MMK",
         minimumFractionDigits: 0,
-    }).format(amount);
+        maximumFractionDigits: 6,
+    }).format(safeAmount);
 }
 
 export default function ExpensesPage() {
     const { token } = useAuth();
     const queryClient = useQueryClient();
 
-    const { data: expenses = [], isLoading: loading, error: queryError } = useQuery({
-        queryKey: ["expenses"],
-        queryFn: () => apiFetch<Expense[]>("/expenses", { token }),
-        enabled: !!token,
-    });
-
-    const [error, setError] = useState<string | null>(queryError?.message ?? null);
+    const [error, setError] = useState<string | null>(null);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [fromDate, setFromDate] = useState("");
     const [toDate, setToDate] = useState("");
+    const todayDate = thaiToday();
+
+    const normalizeDateRange = (from: string, to: string) => {
+        const normalizedTo = !to ? "" : to > todayDate ? todayDate : to;
+        if (!from || !normalizedTo) {
+            return { fromDate: from, toDate: normalizedTo };
+        }
+        const normalizedFrom = from > normalizedTo ? normalizedTo : from;
+        return { fromDate: normalizedFrom, toDate: normalizedTo };
+    };
+
+    const isDateRangeInvalid = Boolean(
+        (fromDate && toDate && fromDate > toDate) ||
+        (toDate && toDate > todayDate)
+    );
+
+    const handleFromDate = (value: string) => {
+        const normalized = normalizeDateRange(value, toDate);
+        setFromDate(normalized.fromDate);
+        setToDate(normalized.toDate);
+    };
+
+    const handleToDate = (value: string) => {
+        const normalized = normalizeDateRange(fromDate, value);
+        setFromDate(normalized.fromDate);
+        setToDate(normalized.toDate);
+    };
+
+    const handleTodayDateRange = () => {
+        setFromDate(todayDate);
+        setToDate(todayDate);
+    };
+
+    const { data: expenses = [], isLoading: loading, error: queryError } = useQuery({
+        queryKey: ["expenses"],
+        queryFn: () => apiFetch<Expense[]>("/expenses", { token }),
+        enabled: !!token && !isDateRangeInvalid,
+    });
+    const displayError = error ?? (queryError?.message ?? null);
 
     // Form
     const [description, setDescription] = useState("");
@@ -66,8 +101,71 @@ export default function ExpensesPage() {
         "CASH"
     );
     const [expenseDate, setExpenseDate] = useState(todayStr());
+    const isAmountInvalid = amount !== "" && Number(amount) <= 0;
+    const isExpenseDateInvalid = expenseDate > todayDate;
+
+    const preventInvalidAmountKeys = (event: KeyboardEvent<HTMLInputElement>) => {
+        const allowedControlKeys = [
+            "Backspace",
+            "Delete",
+            "ArrowLeft",
+            "ArrowRight",
+            "Tab",
+            "Home",
+            "End",
+        ];
+
+        if (event.ctrlKey || event.metaKey) {
+            return;
+        }
+
+        if (allowedControlKeys.includes(event.key)) {
+            return;
+        }
+
+        if (!/^\d$/.test(event.key)) {
+            event.preventDefault();
+        }
+    };
+
+    const handleAmountChange = (value: string) => {
+        if (value === "") {
+            setAmount("");
+            return;
+        }
+
+        const digitsOnly = value.replace(/\D/g, "");
+        if (digitsOnly === "") {
+            return;
+        }
+
+        // Strip leading zeros while preserving a single zero when input is all zeros.
+        const cleaned = digitsOnly.replace(/^0+(?=\d)/, "");
+        const numberValue = Number(cleaned);
+
+        if (!Number.isFinite(numberValue) || numberValue < 0) {
+            return;
+        }
+
+        setAmount(cleaned);
+    };
+
+    const handleAmountBlur = () => {
+        setAmount((prev) => String(Number(prev) || 0));
+    };
+
+    const handleExpenseDateChange = (value: string) => {
+        if (!value) {
+            setExpenseDate(todayDate);
+            return;
+        }
+        setExpenseDate(value > todayDate ? todayDate : value);
+    };
 
     const filtered = useMemo(() => {
+        if (isDateRangeInvalid) {
+            return [];
+        }
         return expenses.filter((e) => {
             const eDate = toBangkokDateStr(e.created_at);
             const matchesFrom = !fromDate || eDate >= fromDate;
@@ -78,7 +176,18 @@ export default function ExpensesPage() {
                 e.description.toLowerCase().includes(q);
             return matchesFrom && matchesTo && matchesSearch;
         });
-    }, [expenses, searchQuery, fromDate, toDate]);
+    }, [expenses, searchQuery, fromDate, toDate, isDateRangeInvalid]);
+
+    const formatDateRange = (from: string, to: string) => {
+        if (!from && !to) return "All dates";
+        if (from === to) return from;
+        if (from && to) {
+            const [start, end] = from <= to ? [from, to] : [to, from];
+            return `${start} - ${end}`;
+        }
+        if (from) return `From ${from}`;
+        return `Until ${to}`;
+    };
 
     const totalExpenses = useMemo(
         () => filtered.reduce((sum, e) => sum + Number(e.amount), 0),
@@ -112,7 +221,15 @@ export default function ExpensesPage() {
     });
 
     const handleCreate = () => {
-        if (!token || !description || !amount) return;
+        if (!token || !description || amount === "") return;
+        if (Number(amount) <= 0) {
+            setError("Amount must be greater than 0");
+            return;
+        }
+        if (expenseDate > todayDate) {
+            setError("Expense date cannot be later than today");
+            return;
+        }
         setError(null);
         createMutation.mutate();
     };
@@ -137,9 +254,9 @@ export default function ExpensesPage() {
                 </Button>
             </div>
 
-            {error && (
+            {displayError && (
                 <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-                    {error}
+                    {displayError}
                 </div>
             )}
 
@@ -163,8 +280,11 @@ export default function ExpensesPage() {
                                     <input
                                         type="date"
                                         value={fromDate}
-                                        onChange={(e) => setFromDate(e.target.value)}
-                                        className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white shadow-sm"
+                                        onChange={(e) => handleFromDate(e.target.value)}
+                                        max={toDate || todayDate}
+                                        className={`w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
+                                            ? "border-red-300 focus:ring-red-500"
+                                            : "border-gray-300 focus:ring-pink-500"}`}
                                     />
                                 </div>
                                 <div className="flex flex-col">
@@ -174,8 +294,11 @@ export default function ExpensesPage() {
                                     <input
                                         type="date"
                                         value={toDate}
-                                        onChange={(e) => setToDate(e.target.value)}
-                                        className="w-40 px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white shadow-sm"
+                                        onChange={(e) => handleToDate(e.target.value)}
+                                        max={todayDate}
+                                        className={`w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
+                                            ? "border-red-300 focus:ring-red-500"
+                                            : "border-gray-300 focus:ring-pink-500"}`}
                                         min={fromDate}
                                     />
                                 </div>
@@ -185,36 +308,30 @@ export default function ExpensesPage() {
                                         <Button
                                             size="sm"
                                             variant="outline"
-                                            onClick={() => {
-                                                const t = thaiToday();
-                                                setFromDate(t);
-                                                setToDate(t);
-                                            }}
+                                            onClick={handleTodayDateRange}
                                             className="text-xs h-10 w-16"
                                         >
                                             Today
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => {
-                                                setFromDate("");
-                                                setToDate("");
-                                            }}
-                                            className="text-xs h-10 w-16"
-                                        >
-                                            All
                                         </Button>
                                     </div>
                                 </div>
                             </div>
                         </div>
+                        {isDateRangeInvalid && (
+                            <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                                Invalid date range
+                            </div>
+                        )}
+                        <p className="text-xs text-gray-500 mt-1">
+                            Found {filtered.length} expenses {fromDate || toDate ? `for ${formatDateRange(fromDate, toDate)}` : ""}
+                        </p>
                         <div>
                             <Input
                                 placeholder="Search by description..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full h-10"
+                                disabled={isDateRangeInvalid}
                             />
                         </div>
                     </div>
@@ -318,9 +435,15 @@ export default function ExpensesPage() {
                                 <input
                                     type="date"
                                     value={expenseDate}
-                                    onChange={(e) => setExpenseDate(e.target.value)}
+                                    max={todayDate}
+                                    onChange={(e) => handleExpenseDateChange(e.target.value)}
                                     className="w-full h-10 px-3 text-sm text-black border border-gray-300 rounded-md bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
                                 />
+                                {isExpenseDateInvalid && (
+                                    <p className="text-xs text-red-600 mt-1">
+                                        Expense date cannot be later than today
+                                    </p>
+                                )}
                             </div>
                         </div>
 
@@ -331,12 +454,21 @@ export default function ExpensesPage() {
                                     Amount (MMK)
                                 </label>
                                 <Input
-                                    type="number"
+                                    type="text"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
                                     value={amount}
-                                    onChange={(e) => setAmount(e.target.value)}
+                                    onChange={(e) => handleAmountChange(e.target.value)}
+                                    onBlur={handleAmountBlur}
+                                    onKeyDown={preventInvalidAmountKeys}
                                     placeholder="e.g. 50000"
-                                    className="h-10 rounded-md px-3 border-gray-300"
+                                    className={`h-10 rounded-md px-3 ${isAmountInvalid ? "border-red-500 focus-visible:ring-red-500" : "border-gray-300"}`}
                                 />
+                                {isAmountInvalid && (
+                                    <p className="text-xs text-red-600 mt-1">
+                                        Amount must be greater than 0
+                                    </p>
+                                )}
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -360,7 +492,7 @@ export default function ExpensesPage() {
                         {/* Row 3: Description */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Description
+                                Description <span className="text-red-500">*</span>
                             </label>
                             <Input
                                 value={description}
@@ -398,7 +530,9 @@ export default function ExpensesPage() {
                             disabled={
                                 saving ||
                                 !description ||
-                                !amount
+                                amount === "" ||
+                                Number(amount) <= 0 ||
+                                isExpenseDateInvalid
                             }
                             className="h-10 px-4 bg-pink-600 hover:bg-pink-700 text-white"
                         >

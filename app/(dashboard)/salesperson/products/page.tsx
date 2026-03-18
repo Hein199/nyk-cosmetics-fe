@@ -13,6 +13,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useCart } from "@/lib/cart-context";
 import { apiFetch } from "@/lib/api";
+import { thaiToday } from "@/lib/utils";
 
 type Customer = {
     id: number;
@@ -36,7 +37,7 @@ function formatCurrency(amount: number) {
         style: "currency",
         currency: "MMK",
         minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
+        maximumFractionDigits: 6,
     }).format(amount);
 }
 
@@ -46,6 +47,7 @@ function formatCategory(category: string) {
 
 export default function ProductsPage() {
     const { token } = useAuth();
+    const todayDate = thaiToday();
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("all");
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
@@ -161,7 +163,11 @@ export default function ProductsPage() {
                                 id="order-date"
                                 type="date"
                                 value={orderDate}
-                                onChange={(e) => setOrderDate(e.target.value)}
+                                max={todayDate}
+                                onChange={(e) => {
+                                    const nextDate = e.target.value;
+                                    setOrderDate(nextDate > todayDate ? todayDate : nextDate);
+                                }}
                                 lang="en-US"
                                 className="w-full h-9 px-3 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white shadow-sm"
                             />
