@@ -56,6 +56,8 @@ export default function CartPage() {
 
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
     const [orderError, setOrderError] = useState<string | null>(null);
+    const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+    const submittingOrderRef = useRef(false);
     const customerDropdownRef = useRef<HTMLDivElement>(null);
 
     // Close dropdown when clicking outside
@@ -91,7 +93,10 @@ export default function CartPage() {
 
     const createOrder = async () => {
         if (!selectedCustomer || cart.length === 0 || !token) return;
+        if (submittingOrderRef.current) return;
 
+        submittingOrderRef.current = true;
+        setIsSubmittingOrder(true);
         setOrderError(null);
         try {
             await apiFetch("/orders", {
@@ -120,6 +125,9 @@ export default function CartPage() {
         } catch (err) {
             const message = err instanceof Error ? err.message : "Failed to create order";
             setOrderError(message);
+        } finally {
+            submittingOrderRef.current = false;
+            setIsSubmittingOrder(false);
         }
     };
 
@@ -135,6 +143,7 @@ export default function CartPage() {
                     <Button
                         variant="outline"
                         onClick={() => router.back()}
+                        disabled={isSubmittingOrder}
                         className="flex items-center gap-2"
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -256,10 +265,10 @@ export default function CartPage() {
                                         <div className="space-y-2">
                                             <Button
                                                 onClick={createOrder}
-                                                disabled={!selectedCustomer || cart.length === 0}
+                                                disabled={!selectedCustomer || cart.length === 0 || isSubmittingOrder}
                                                 className="w-full bg-green-600 hover:bg-green-700 text-white"
                                             >
-                                                Place Order
+                                                {isSubmittingOrder ? "Placing Order..." : "Place Order"}
                                             </Button>
                                             {orderError && (
                                                 <div className="text-sm text-red-600">
@@ -269,6 +278,7 @@ export default function CartPage() {
                                             <Button
                                                 onClick={clearCart}
                                                 variant="outline"
+                                                disabled={isSubmittingOrder}
                                                 className="w-full"
                                             >
                                                 Clear Cart
@@ -290,6 +300,7 @@ export default function CartPage() {
                                     </h2>
                                     <Button
                                         onClick={() => router.push('/salesperson/products')}
+                                        disabled={isSubmittingOrder}
                                         className="bg-pink-600 hover:bg-pink-700 text-white"
                                     >
                                         Add More Products
@@ -340,6 +351,7 @@ export default function CartPage() {
                                                         onClick={() => removeFromCart(index)}
                                                         variant="outline"
                                                         size="sm"
+                                                        disabled={isSubmittingOrder}
                                                         className="ml-4 text-red-600 border-red-600 hover:bg-red-50"
                                                     >
                                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

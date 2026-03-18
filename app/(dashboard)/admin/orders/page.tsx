@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -105,6 +105,45 @@ export default function OrdersPage() {
     const [saveError, setSaveError] = useState<string | null>(null);
     const [systemName, setSystemName] = useState("NYK Cosmetics");
     const [systemLogo, setSystemLogo] = useState<string | null>(null);
+
+    const normalizeNonNegativeIntegerInput = (value: string) => {
+        const digitsOnly = value.replace(/\D/g, "");
+        if (digitsOnly === "") {
+            return 0;
+        }
+        const normalized = digitsOnly.replace(/^0+(?=\d)/, "");
+        return Number(normalized);
+    };
+
+    const preventNegativeQuantityKeys = (event: KeyboardEvent<HTMLInputElement>) => {
+        const allowedControlKeys = [
+            "Backspace",
+            "Delete",
+            "ArrowLeft",
+            "ArrowRight",
+            "Tab",
+            "Home",
+            "End",
+        ];
+
+        if (event.ctrlKey || event.metaKey) {
+            return;
+        }
+
+        if (allowedControlKeys.includes(event.key)) {
+            return;
+        }
+
+        if (!/^\d$/.test(event.key)) {
+            event.preventDefault();
+        }
+    };
+
+    const preventNegativePriceKeys = (event: KeyboardEvent<HTMLInputElement>) => {
+        if (["-", "+", "e", "E"].includes(event.key)) {
+            event.preventDefault();
+        }
+    };
 
     useEffect(() => {
         if (!token) return;
@@ -404,31 +443,6 @@ export default function OrdersPage() {
                             Last updated {lastUpdated.toLocaleTimeString()}
                         </p>
                     )}
-                </div>
-                <div className="flex flex-col sm:flex-row gap-2">
-                    <Button
-                        size="lg"
-                        variant="outline"
-                        onClick={() => queryClient.invalidateQueries({ queryKey: ["admin-orders"] })}
-                        aria-label="Refresh"
-                        title="Refresh"
-                        className="h-11 w-11 p-0"
-                    >
-                        <svg
-                            aria-hidden="true"
-                            viewBox="0 0 24 24"
-                            className="h-5 w-5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                        >
-                            <path d="M21 12a9 9 0 1 1-3-6.7" />
-                            <path d="M21 3v6h-6" />
-                        </svg>
-                    </Button>
-
                 </div>
             </div>
 
@@ -884,10 +898,12 @@ export default function OrdersPage() {
                                                             <td className="py-3 px-4 text-center text-gray-900 font-semibold border-r border-gray-300">
                                                                 {isEditMode ? (
                                                                     <Input
-                                                                        type="number"
-                                                                        min={1}
+                                                                        type="text"
+                                                                        inputMode="numeric"
+                                                                        pattern="[0-9]*"
                                                                         value={qty}
-                                                                        onChange={(e) => updateEditedItem(item.id, "quantity", Math.max(1, parseInt(e.target.value) || 1))}
+                                                                        onChange={(e) => updateEditedItem(item.id, "quantity", normalizeNonNegativeIntegerInput(e.target.value))}
+                                                                        onKeyDown={preventNegativeQuantityKeys}
                                                                         className="w-16 h-8 text-center text-sm font-semibold text-gray-900 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                                     />
                                                                 ) : (
@@ -902,6 +918,7 @@ export default function OrdersPage() {
                                                                         step={100}
                                                                         value={unitPrice}
                                                                         onChange={(e) => updateEditedItem(item.id, "unit_price", Math.max(0, parseFloat(e.target.value) || 0))}
+                                                                        onKeyDown={preventNegativePriceKeys}
                                                                         className="w-24 h-8 text-right text-sm font-medium text-gray-900 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                                     />
                                                                 ) : (
