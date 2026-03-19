@@ -282,7 +282,7 @@ export default function LoginPage() {
                         </div>
 
                         {/* Remember me */}
-                        <div className="flex items-center justify-between">
+                        {/* <div className="flex items-center justify-between">
                             <label className="flex items-center gap-2 cursor-pointer">
                                 <input
                                     type="checkbox"
@@ -298,7 +298,7 @@ export default function LoginPage() {
                             >
                                 Forgot password?
                             </a>
-                        </div>
+                        </div> */}
 
                         {/* Sign In button */}
                         <button
@@ -333,13 +333,13 @@ export default function LoginPage() {
                         </button>
                     </form>
 
-                    {/* Contact admin */}
+                    {/* Contact admin
                     <p className="text-center text-xs mt-7" style={{ color: "#c0a0b0" }}>
                         Don&apos;t have an account?{" "}
                         <a href="#" className="font-semibold hover:underline" style={{ color: "#b8963e" }}>
                             Contact Admin
                         </a>
-                    </p>
+                    </p> */}
                 </div>
 
                 {/* Gold bottom accent bar */}
