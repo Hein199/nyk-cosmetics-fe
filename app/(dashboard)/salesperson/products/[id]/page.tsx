@@ -84,7 +84,7 @@ export default function ProductDetailPage() {
     const pricePerSelectedUnit = useMemo(() => {
         if (useCustomPrice && customPrice) {
             const parsed = Number(customPrice);
-            if (!Number.isNaN(parsed) && parsed >= 0) {
+            if (!Number.isNaN(parsed) && parsed > 0) {
                 return parsed;
             }
         }
@@ -152,15 +152,33 @@ export default function ProductDetailPage() {
 
     const handleCustomPriceInput = (value: string) => {
         const normalized = sanitizeNonNegativeInteger(value);
-        setCustomPrice(normalized);
+        if (!normalized) {
+            setCustomPrice("");
+            return;
+        }
+
+        const parsed = Number(normalized);
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+            setCustomPrice("");
+            return;
+        }
+
+        setCustomPrice(String(parsed));
     };
 
     const handleCustomPriceBlur = () => {
         if (customPrice === "") {
             return;
         }
+
         const normalized = sanitizeNonNegativeInteger(customPrice);
-        setCustomPrice(normalized === "" ? "0" : String(Number(normalized)));
+        const parsed = Number(normalized);
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+            setCustomPrice("");
+            return;
+        }
+
+        setCustomPrice(String(parsed));
     };
 
     const handleDecrease = () => {
@@ -386,6 +404,12 @@ export default function ProductDetailPage() {
                                     onClick={() => {
                                         const inventoryQty = product.inventory?.quantity ?? Number.MAX_SAFE_INTEGER;
                                         const newPieces = quantity * unitMultiplier;
+                                        const parsedCustomPrice = Number(customPrice);
+                                        const safeCustomPrice =
+                                            useCustomPrice && Number.isFinite(parsedCustomPrice) && parsedCustomPrice > 0
+                                                ? parsedCustomPrice
+                                                : undefined;
+
                                         if (existingCartPieces + newPieces > inventoryQty) {
                                             setStockError(`Insufficient stock.`);
                                             return;
@@ -396,7 +420,7 @@ export default function ProductDetailPage() {
                                             product.id,
                                             quantity,
                                             unit,
-                                            useCustomPrice && customPrice ? Number(customPrice) : undefined,
+                                            safeCustomPrice,
                                             product.name,
                                             Number(product.unit_price) * unitMultiplier
                                         );

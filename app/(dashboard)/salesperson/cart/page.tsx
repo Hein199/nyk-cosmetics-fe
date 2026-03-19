@@ -16,6 +16,7 @@ type Customer = {
     name: string;
     address: string;
     phone_number: string;
+    status: "ACTIVE" | "INACTIVE";
 };
 
 function formatCurrency(amount: number) {
@@ -80,8 +81,9 @@ export default function CartPage() {
 
     // Filter customers based on search
     const filteredCustomers = useMemo(() => {
-        if (!customerSearch) return customers;
-        return customers.filter(customer =>
+        const activeCustomers = customers.filter((customer) => customer.status === "ACTIVE");
+        if (!customerSearch) return activeCustomers;
+        return activeCustomers.filter((customer) =>
             customer.name.toLowerCase().includes(customerSearch.toLowerCase())
         );
     }, [customerSearch, customers]);
@@ -90,6 +92,8 @@ export default function CartPage() {
     const selectedCustomerDetails = useMemo(() => {
         return customers.find(c => String(c.id) === selectedCustomer);
     }, [selectedCustomer, customers]);
+
+    const isSelectedCustomerActive = selectedCustomerDetails?.status === "ACTIVE";
 
     const createOrder = async () => {
         if (!selectedCustomer || cart.length === 0 || !token) return;
@@ -265,11 +269,16 @@ export default function CartPage() {
                                         <div className="space-y-2">
                                             <Button
                                                 onClick={createOrder}
-                                                disabled={!selectedCustomer || cart.length === 0 || isSubmittingOrder}
+                                                disabled={!selectedCustomer || !isSelectedCustomerActive || cart.length === 0 || isSubmittingOrder}
                                                 className="w-full bg-green-600 hover:bg-green-700 text-white"
                                             >
                                                 {isSubmittingOrder ? "Placing Order..." : "Place Order"}
                                             </Button>
+                                            {selectedCustomer && !isSelectedCustomerActive && (
+                                                <div className="text-sm text-red-600">
+                                                    Archived customers cannot be used for new orders.
+                                                </div>
+                                            )}
                                             {orderError && (
                                                 <div className="text-sm text-red-600">
                                                     {orderError}

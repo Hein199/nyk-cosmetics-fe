@@ -434,14 +434,18 @@ export default function AdminInventoryPage() {
 
     async function handleDelete(product: Product) {
         if (!token) return;
-        const confirmed = window.confirm(`Are you sure you want to delete "${product.name}"? This cannot be undone.`);
+        if (!product.is_active) return;
+
+        const confirmed = window.confirm(
+            `Archive "${product.name}"? The product will be hidden from sales order flow but retained for history.`,
+        );
         if (!confirmed) return;
         setDeletingId(product.id);
         try {
             await apiFetch(`/products/${product.id}`, { method: "DELETE", token });
             queryClient.invalidateQueries({ queryKey: ["admin-products"] });
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to delete product");
+            setError(err instanceof Error ? err.message : "Failed to archive product");
         } finally {
             setDeletingId(null);
         }
@@ -553,11 +557,14 @@ export default function AdminInventoryPage() {
                                             <Button
                                                 size="sm"
                                                 variant="outline"
-                                                className="flex-1 text-xs text-red-600 border-red-200 hover:bg-red-50"
+                                                className={`flex-1 text-xs ${product.is_active
+                                                    ? "text-red-600 border-red-200 hover:bg-red-50"
+                                                    : "text-gray-400 border-gray-200 cursor-not-allowed"
+                                                    }`}
                                                 onClick={() => handleDelete(product)}
-                                                disabled={deletingId === product.id}
+                                                disabled={deletingId === product.id || !product.is_active}
                                             >
-                                                {deletingId === product.id ? "…" : "Delete"}
+                                                {deletingId === product.id ? "…" : product.is_active ? "Archive" : "Archived"}
                                             </Button>
                                         </div>
                                     </CardContent>
@@ -652,70 +659,70 @@ export default function AdminInventoryPage() {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                        {filteredHistory.map((entry, index) => {
-                                            const change = entry.change_quantity;
-                                            const badgeClass = entry.event === "order"
-                                                ? "bg-red-50 text-red-700 border-red-200"
-                                                : entry.event === "restock"
-                                                    ? "bg-green-50 text-green-700 border-green-200"
-                                                    : entry.event === "return"
-                                                        ? "bg-blue-50 text-blue-700 border-blue-200"
-                                                        : "bg-amber-50 text-amber-700 border-amber-200";
+                                            {filteredHistory.map((entry, index) => {
+                                                const change = entry.change_quantity;
+                                                const badgeClass = entry.event === "order"
+                                                    ? "bg-red-50 text-red-700 border-red-200"
+                                                    : entry.event === "restock"
+                                                        ? "bg-green-50 text-green-700 border-green-200"
+                                                        : entry.event === "return"
+                                                            ? "bg-blue-50 text-blue-700 border-blue-200"
+                                                            : "bg-amber-50 text-amber-700 border-amber-200";
 
-                                            return (
-                                                <tr
-                                                    key={entry.id}
-                                                    className={`border-b border-gray-200 divide-x divide-gray-200 ${index % 2 === 0
-                                                        ? "bg-blue-50 hover:bg-blue-100"
-                                                        : "bg-white hover:bg-gray-50"
-                                                        }`}
-                                                >
-                                                    <td className="py-3 px-4 whitespace-nowrap text-xs sm:text-sm text-gray-600">
-                                                        {new Date(entry.created_at).toLocaleString("en-MM", {
-                                                            year: "numeric",
-                                                            month: "short",
-                                                            day: "numeric",
-                                                            hour: "2-digit",
-                                                            minute: "2-digit",
-                                                        })}
-                                                    </td>
-                                                    <td className="py-3 px-4 min-w-[220px]">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="w-10 h-10 rounded-md bg-gray-100 overflow-hidden flex-shrink-0">
-                                                                <img
-                                                                    src={entry.product.photo_url || "/mock/product-1.svg"}
-                                                                    alt={entry.product.name}
-                                                                    className="w-full h-full object-cover"
-                                                                    onError={(e) => { e.currentTarget.src = "/mock/product-1.svg"; }}
-                                                                />
+                                                return (
+                                                    <tr
+                                                        key={entry.id}
+                                                        className={`border-b border-gray-200 divide-x divide-gray-200 ${index % 2 === 0
+                                                            ? "bg-blue-50 hover:bg-blue-100"
+                                                            : "bg-white hover:bg-gray-50"
+                                                            }`}
+                                                    >
+                                                        <td className="py-3 px-4 whitespace-nowrap text-xs sm:text-sm text-gray-600">
+                                                            {new Date(entry.created_at).toLocaleString("en-MM", {
+                                                                year: "numeric",
+                                                                month: "short",
+                                                                day: "numeric",
+                                                                hour: "2-digit",
+                                                                minute: "2-digit",
+                                                            })}
+                                                        </td>
+                                                        <td className="py-3 px-4 min-w-[220px]">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-10 h-10 rounded-md bg-gray-100 overflow-hidden flex-shrink-0">
+                                                                    <img
+                                                                        src={entry.product.photo_url || "/mock/product-1.svg"}
+                                                                        alt={entry.product.name}
+                                                                        className="w-full h-full object-cover"
+                                                                        onError={(e) => { e.currentTarget.src = "/mock/product-1.svg"; }}
+                                                                    />
+                                                                </div>
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-sm font-medium text-gray-900 line-clamp-1">{entry.product.name}</span>
+                                                                    <span className="text-xs text-gray-500">ID #{entry.product_id}</span>
+                                                                </div>
                                                             </div>
-                                                            <div className="flex flex-col">
-                                                                <span className="text-sm font-medium text-gray-900 line-clamp-1">{entry.product.name}</span>
-                                                                <span className="text-xs text-gray-500">ID #{entry.product_id}</span>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="py-3 px-4 whitespace-nowrap text-center">
-                                                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold border ${badgeClass}`}>
-                                                            {entry.event.charAt(0).toUpperCase() + entry.event.slice(1)}
-                                                        </span>
-                                                    </td>
-                                                    <td className={`py-3 px-4 whitespace-nowrap font-semibold text-right ${change >= 0 ? "text-green-700" : "text-red-700"}`}>
-                                                        {change > 0 ? `+${change}` : change}
-                                                    </td>
-                                                    <td className="py-3 px-4 whitespace-nowrap text-gray-800 font-medium text-right">
-                                                        {entry.inventory_after}
-                                                    </td>
-                                                    <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm whitespace-nowrap">
-                                                        {entry.source ? (
-                                                            <span className="inline-flex items-center px-2 py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-700">
-                                                                {entry.source}
+                                                        </td>
+                                                        <td className="py-3 px-4 whitespace-nowrap text-center">
+                                                            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold border ${badgeClass}`}>
+                                                                {entry.event.charAt(0).toUpperCase() + entry.event.slice(1)}
                                                             </span>
-                                                        ) : "—"}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
+                                                        </td>
+                                                        <td className={`py-3 px-4 whitespace-nowrap font-semibold text-right ${change >= 0 ? "text-green-700" : "text-red-700"}`}>
+                                                            {change > 0 ? `+${change}` : change}
+                                                        </td>
+                                                        <td className="py-3 px-4 whitespace-nowrap text-gray-800 font-medium text-right">
+                                                            {entry.inventory_after}
+                                                        </td>
+                                                        <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm whitespace-nowrap">
+                                                            {entry.source ? (
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-700">
+                                                                    {entry.source}
+                                                                </span>
+                                                            ) : "—"}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>

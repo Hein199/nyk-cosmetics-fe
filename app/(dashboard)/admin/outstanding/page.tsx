@@ -766,7 +766,7 @@ export default function OutstandingPage() {
                                                             <td className="py-3 px-4 text-center border-l border-gray-200">
                                                                 {remaining >
                                                                     0 && (
-                                                                        <div className="flex items-center justify-center gap-2">
+                                                                        <div className="flex flex-col items-center justify-center gap-2">
                                                                             <input
                                                                                 type="date"
                                                                                 value={paymentDate}
@@ -777,7 +777,7 @@ export default function OutstandingPage() {
                                                                                 }
                                                                                 max={todayDate}
                                                                                 aria-label="Payment Date"
-                                                                                className="h-9 w-26 px-2 py-1 text-xs text-black border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                                                                                className="h-9 w-32 px-2 py-1 text-xs text-black border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
                                                                             />
                                                                             <Input
                                                                                 type="text"
@@ -811,11 +811,11 @@ export default function OutstandingPage() {
                                                                                     preventInvalidAmountKeys
                                                                                 }
                                                                                 placeholder="Payment"
-                                                                                className={`h-9 w-40 text-sm text-black ${paymentAmountErrors[String(order.id)]
+                                                                                className={`h-9 w-32 text-sm text-black ${paymentAmountErrors[String(order.id)]
                                                                                     ? "border-red-500 focus-visible:ring-red-500"
                                                                                     : ""}`}
                                                                             />
-                                                                            
+
                                                                         </div>
                                                                     )}
                                                                 {paymentAmountErrors[String(order.id)] && (
