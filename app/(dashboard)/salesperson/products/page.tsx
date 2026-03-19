@@ -20,6 +20,7 @@ type Customer = {
     name: string;
     address: string;
     phone_number: string;
+    status: "ACTIVE" | "INACTIVE";
 };
 
 type Product = {
@@ -89,6 +90,11 @@ export default function ProductsPage() {
         cartSummary
     } = useCart();
 
+    const activeCustomers = useMemo(
+        () => customers.filter((customer) => customer.status === "ACTIVE"),
+        [customers],
+    );
+
     // Close dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -122,16 +128,28 @@ export default function ProductsPage() {
 
     // Filter customers based on search
     const filteredCustomers = useMemo(() => {
-        if (!customerSearch) return customers;
-        return customers.filter(customer =>
+        if (!customerSearch) return activeCustomers;
+        return activeCustomers.filter(customer =>
             customer.name.toLowerCase().includes(customerSearch.toLowerCase())
         );
-    }, [customerSearch, customers]);
+    }, [customerSearch, activeCustomers]);
 
     // Get selected customer details
     const selectedCustomerDetails = useMemo(() => {
-        return customers.find(c => String(c.id) === selectedCustomer);
-    }, [selectedCustomer, customers]);
+        return activeCustomers.find(c => String(c.id) === selectedCustomer);
+    }, [selectedCustomer, activeCustomers]);
+
+    useEffect(() => {
+        if (!selectedCustomer || loadingCustomers) {
+            return;
+        }
+
+        const selected = customers.find((customer) => String(customer.id) === selectedCustomer);
+        if (!selected || selected.status !== "ACTIVE") {
+            setSelectedCustomer("");
+            setCustomerSearch("");
+        }
+    }, [customers, loadingCustomers, selectedCustomer, setCustomerSearch, setSelectedCustomer]);
 
     return (
         <div className="min-h-screen bg-[#FFCDC9] p-6">

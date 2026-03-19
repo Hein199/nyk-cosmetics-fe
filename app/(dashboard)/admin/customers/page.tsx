@@ -232,6 +232,8 @@ export default function CustomersPage() {
     const [addOpen, setAddOpen] = useState(false);
     const [editingCustomer, setEditingCustomer] = useState(false);
     const [deletingCustomer, setDeletingCustomer] = useState(false);
+    const [archiveSaving, setArchiveSaving] = useState(false);
+    const [archiveError, setArchiveError] = useState("");
     const [notes, setNotes] = useState("");
     const [notesSaving, setNotesSaving] = useState(false);
     const [notesSaved, setNotesSaved] = useState(false);
@@ -318,9 +320,13 @@ export default function CustomersPage() {
                         <Button
                             size="sm"
                             className="bg-red-600 hover:bg-red-700 text-white"
-                            onClick={() => setDeletingCustomer(true)}
+                            onClick={() => {
+                                setArchiveError("");
+                                setDeletingCustomer(true);
+                            }}
+                            disabled={c.status === "INACTIVE"}
                         >
-                            Delete
+                            {c.status === "INACTIVE" ? "Archived" : "Archive"}
                         </Button>
                     </div>
                 </div>
@@ -563,26 +569,55 @@ export default function CustomersPage() {
                 {deletingCustomer && (
                     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
                         <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm space-y-4">
-                            <h2 className="text-base font-semibold text-gray-900">Delete Customer</h2>
+                            <h2 className="text-base font-semibold text-gray-900">Archive Customer</h2>
                             <p className="text-sm text-gray-600">
-                                Are you sure you want to delete{" "}
-                                <span className="font-semibold">{c.name}</span>? This action cannot be undone.
+                                Are you sure you want to archive{" "}
+                                <span className="font-semibold">{c.name}</span>? Historical orders and loan records will be kept.
                             </p>
+                            {archiveError && (
+                                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                                    {archiveError}
+                                </p>
+                            )}
                             <div className="flex justify-end gap-2 mt-4">
                                 <Button
                                     variant="outline"
                                     onClick={() => setDeletingCustomer(false)}
+                                    disabled={archiveSaving}
                                 >
                                     Cancel
                                 </Button>
                                 <Button
                                     className="bg-red-600 hover:bg-red-700 text-white"
-                                    onClick={() => {
-                                        setDeletingCustomer(false);
-                                        setSelectedCustomer(null);
+                                    disabled={archiveSaving}
+                                    onClick={async () => {
+                                        if (!token) {
+                                            setArchiveError("You are not authenticated.");
+                                            return;
+                                        }
+
+                                        setArchiveSaving(true);
+                                        setArchiveError("");
+                                        try {
+                                            await apiFetch(`/customers/${c.id}`, {
+                                                method: "DELETE",
+                                                token,
+                                            });
+                                            await queryClient.invalidateQueries({ queryKey: ["admin-customers"] });
+                                            setSelectedCustomer((prev) =>
+                                                prev ? { ...prev, status: "INACTIVE" } : prev,
+                                            );
+                                            setDeletingCustomer(false);
+                                        } catch (err) {
+                                            setArchiveError(
+                                                err instanceof Error ? err.message : "Failed to archive customer",
+                                            );
+                                        } finally {
+                                            setArchiveSaving(false);
+                                        }
                                     }}
                                 >
-                                    Delete
+                                    {archiveSaving ? "Archiving..." : "Archive"}
                                 </Button>
                             </div>
                         </div>
