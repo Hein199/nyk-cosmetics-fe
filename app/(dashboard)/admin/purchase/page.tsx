@@ -568,7 +568,7 @@ export default function AdminPurchasePage() {
                                             <div className="grid grid-cols-2 gap-2">
                                                 <Button
                                                     variant="outline"
-                                                    className="h-9"
+                                                    className="h-9 text-xs px-2 whitespace-nowrap"
                                                     onClick={() => {
                                                         setSelectedProductId(product.id);
                                                         setSelectedTab("history");
