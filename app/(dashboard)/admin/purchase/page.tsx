@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { INVENTORY_UNITS } from "@/lib/constants";
+import { INVENTORY_UNITS, MAX_DECIMAL_12_2_INTEGER, MAX_INT_32 } from "@/lib/constants";
 import { thaiToday } from "@/lib/utils";
 
 type Product = {
@@ -97,9 +97,8 @@ function getHistoryUnitLabel(unitType: string) {
     return "Pcs";
 }
 
-function formatHistoryDate(createdAt: string, expenseDate?: string | null) {
-    const dateValue = expenseDate ?? createdAt;
-    return new Date(dateValue).toLocaleDateString("en-GB", {
+function formatHistoryDate(createdAt: string) {
+    return new Date(createdAt).toLocaleDateString("en-GB", {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
@@ -112,6 +111,11 @@ function getUnitMultiplier(unitType: PurchaseUnitType) {
     return 1;
 }
 
+function getMaxQuantityForUnitType(unitType: PurchaseUnitType) {
+    const multiplier = getUnitMultiplier(unitType);
+    return Math.floor(MAX_INT_32 / Math.max(multiplier, 1));
+}
+
 function calculateLineTotal(purchasePricePerPcs: number, quantity: number, unitType: PurchaseUnitType) {
     if (!Number.isFinite(purchasePricePerPcs) || !Number.isFinite(quantity)) {
         return 0;
@@ -122,7 +126,7 @@ function calculateLineTotal(purchasePricePerPcs: number, quantity: number, unitT
     return purchasePricePerPcs * quantity * getUnitMultiplier(unitType);
 }
 
-function normalizeNumericInput(value: string, options?: { integer?: boolean }) {
+function normalizeNumericInput(value: string, options?: { integer?: boolean; max?: number }) {
     if (value === "") {
         return "";
     }
@@ -140,11 +144,26 @@ function normalizeNumericInput(value: string, options?: { integer?: boolean }) {
     }
 
     const normalized = options?.integer ? Math.trunc(parsed) : parsed;
-    return String(normalized);
+    const max = typeof options?.max === "number" ? options.max : Number.MAX_SAFE_INTEGER;
+    return String(Math.min(max, normalized));
 }
 
-function normalizeLineInput(field: "purchase_price_per_pcs" | "quantity", value: string) {
-    return normalizeNumericInput(value, { integer: field === "quantity" });
+function normalizeLineInput(
+    field: "purchase_price_per_pcs" | "quantity",
+    value: string,
+    unitType: PurchaseUnitType,
+) {
+    if (field === "quantity") {
+        return normalizeNumericInput(value, {
+            integer: true,
+            max: getMaxQuantityForUnitType(unitType),
+        });
+    }
+
+    return normalizeNumericInput(value, {
+        integer: true,
+        max: MAX_DECIMAL_12_2_INTEGER,
+    });
 }
 
 export default function AdminPurchasePage() {
@@ -260,14 +279,27 @@ export default function AdminPurchasePage() {
         }, 0);
     }, [lineItems]);
 
+    const isTotalAmountOverflow = totalAmount > MAX_DECIMAL_12_2_INTEGER;
+
     const hasInvalidPurchaseInputs = useMemo(() => {
         return lineItems.some((line) => {
             const purchasePricePerPcs = Number(line.purchase_price_per_pcs);
             const quantity = Number(line.quantity);
+            const multiplier = getUnitMultiplier(line.unit_type);
+            const quantityInPcs = quantity * multiplier;
+            const lineTotal = purchasePricePerPcs * quantityInPcs;
+
             return !Number.isFinite(purchasePricePerPcs)
                 || !Number.isFinite(quantity)
                 || purchasePricePerPcs <= 0
-                || quantity <= 0;
+                || purchasePricePerPcs > MAX_DECIMAL_12_2_INTEGER
+                || !Number.isInteger(quantity)
+                || quantity <= 0
+                || quantity > getMaxQuantityForUnitType(line.unit_type)
+                || !Number.isFinite(quantityInPcs)
+                || quantityInPcs > MAX_INT_32
+                || !Number.isFinite(lineTotal)
+                || lineTotal > MAX_DECIMAL_12_2_INTEGER;
         });
     }, [lineItems]);
 
@@ -316,13 +348,33 @@ export default function AdminPurchasePage() {
             const payloadItems = lineItems.map((line) => {
                 const quantity = Number(line.quantity);
                 const purchasePricePerPcs = Number(line.purchase_price_per_pcs);
+                const multiplier = getUnitMultiplier(line.unit_type);
+                const quantityInPcs = quantity * multiplier;
+                const lineTotal = purchasePricePerPcs * quantityInPcs;
+                const maxQuantityForUnit = getMaxQuantityForUnitType(line.unit_type);
 
                 if (!Number.isInteger(quantity) || quantity <= 0) {
                     throw new Error(`Quantity for ${line.name} must be a whole number greater than 0`);
                 }
+                if (quantity > maxQuantityForUnit) {
+                    throw new Error(
+                        `Quantity for ${line.name} is too large for ${getUnitLabel(line.unit_type)} (max ${maxQuantityForUnit.toLocaleString()})`,
+                    );
+                }
+                if (!Number.isFinite(quantityInPcs) || quantityInPcs > MAX_INT_32) {
+                    throw new Error(`Quantity for ${line.name} exceeds inventory limit`);
+                }
 
                 if (!Number.isFinite(purchasePricePerPcs) || purchasePricePerPcs <= 0) {
                     throw new Error("Amount must be greater than 0");
+                }
+                if (purchasePricePerPcs > MAX_DECIMAL_12_2_INTEGER) {
+                    throw new Error(
+                        `Amount for ${line.name} must not exceed ${MAX_DECIMAL_12_2_INTEGER.toLocaleString()} MMK`,
+                    );
+                }
+                if (!Number.isFinite(lineTotal) || lineTotal > MAX_DECIMAL_12_2_INTEGER) {
+                    throw new Error(`Total for ${line.name} is too large`);
                 }
 
                 return {
@@ -332,6 +384,14 @@ export default function AdminPurchasePage() {
                     purchase_price_per_pcs: line.purchase_price_per_pcs,
                 };
             });
+
+            const payloadTotal = payloadItems.reduce((sum, item) => {
+                return sum + Number(item.purchase_price_per_pcs) * item.quantity * getUnitMultiplier(item.unit_type);
+            }, 0);
+
+            if (!Number.isFinite(payloadTotal) || payloadTotal > MAX_DECIMAL_12_2_INTEGER) {
+                throw new Error(`Total purchase amount must not exceed ${MAX_DECIMAL_12_2_INTEGER.toLocaleString()} MMK`);
+            }
 
             return apiFetch<PurchaseResponse>("/purchases", {
                 method: "POST",
@@ -372,12 +432,18 @@ export default function AdminPurchasePage() {
             if (existingIndex >= 0) {
                 const next = [...current];
                 const previousQty = Number(next[existingIndex].quantity) || 0;
+                const maxQuantity = getMaxQuantityForUnitType(next[existingIndex].unit_type);
                 next[existingIndex] = {
                     ...next[existingIndex],
-                    quantity: String(previousQty + 1),
+                    quantity: String(Math.min(maxQuantity, previousQty + 1)),
                 };
                 return next;
             }
+
+            const lastPurchasePrice = Number(product.last_purchase_price ?? 0);
+            const safeLastPurchasePrice = Number.isFinite(lastPurchasePrice)
+                ? Math.min(MAX_DECIMAL_12_2_INTEGER, Math.max(0, Math.trunc(lastPurchasePrice)))
+                : 0;
 
             return [
                 ...current,
@@ -387,7 +453,7 @@ export default function AdminPurchasePage() {
                     category: product.category,
                     photo_url: product.photo_url,
                     current_stock: product.inventory?.quantity ?? 0,
-                    purchase_price_per_pcs: String(Number(product.last_purchase_price ?? 0)),
+                    purchase_price_per_pcs: String(safeLastPurchasePrice),
                     quantity: "1",
                     unit_type: INVENTORY_UNITS.PIECES,
                 },
@@ -399,14 +465,12 @@ export default function AdminPurchasePage() {
         setSuccess(null);
         setError(null);
 
-        const sanitizedValue = normalizeLineInput(field, value);
-
         setLineItems((current) =>
             current.map((line) =>
                 line.product_id === productId
                     ? {
                         ...line,
-                        [field]: sanitizedValue,
+                        [field]: normalizeLineInput(field, value, line.unit_type),
                     }
                     : line,
             ),
@@ -426,7 +490,7 @@ export default function AdminPurchasePage() {
 
                 const normalizedValue = currentValue === ""
                     ? "0"
-                    : normalizeLineInput(field, currentValue);
+                    : normalizeLineInput(field, currentValue, line.unit_type);
 
                 return {
                     ...line,
@@ -446,9 +510,12 @@ export default function AdminPurchasePage() {
                     return line;
                 }
 
+                const normalizedQuantity = normalizeLineInput("quantity", line.quantity, unitType);
+
                 return {
                     ...line,
                     unit_type: unitType,
+                    quantity: normalizedQuantity === "" ? "0" : normalizedQuantity,
                 };
             }),
         );
@@ -686,12 +753,22 @@ export default function AdminPurchasePage() {
                                         {lineItems.map((line) => {
                                             const quantity = Number(line.quantity);
                                             const multiplier = getUnitMultiplier(line.unit_type);
-                                            const pcsToAdd = Math.round(quantity * multiplier);
+                                            const quantityInPcs = quantity * multiplier;
+                                            const pcsToAdd = Number.isFinite(quantityInPcs) ? Math.round(quantityInPcs) : 0;
                                             const unitLabel = getUnitLabel(line.unit_type);
                                             const purchasePricePerPcs = Number(line.purchase_price_per_pcs);
-                                            const priceInvalid = !Number.isFinite(purchasePricePerPcs) || purchasePricePerPcs <= 0;
-                                            const quantityInvalid = !Number.isFinite(quantity) || quantity <= 0;
+                                            const maxQuantityForUnit = getMaxQuantityForUnitType(line.unit_type);
+                                            const priceTooLarge = Number.isFinite(purchasePricePerPcs) && purchasePricePerPcs > MAX_DECIMAL_12_2_INTEGER;
+                                            const quantityTooLarge = Number.isFinite(quantity) && quantity > maxQuantityForUnit;
+                                            const quantityPcsOverflow = Number.isFinite(quantityInPcs) && quantityInPcs > MAX_INT_32;
                                             const lineTotal = calculateLineTotal(purchasePricePerPcs, quantity, line.unit_type);
+                                            const lineTotalOverflow = Number.isFinite(lineTotal) && lineTotal > MAX_DECIMAL_12_2_INTEGER;
+                                            const priceInvalid = !Number.isFinite(purchasePricePerPcs) || purchasePricePerPcs <= 0 || priceTooLarge;
+                                            const quantityInvalid = !Number.isFinite(quantity)
+                                                || !Number.isInteger(quantity)
+                                                || quantity <= 0
+                                                || quantityTooLarge
+                                                || quantityPcsOverflow;
                                             return (
                                                 <div
                                                     key={line.product_id}
@@ -720,9 +797,9 @@ export default function AdminPurchasePage() {
                                                                 Purchase Price / Pcs
                                                             </label>
                                                             <Input
-                                                                type="number"
-                                                                min={0}
-                                                                step="0.01"
+                                                                type="text"
+                                                                inputMode="numeric"
+                                                                pattern="[0-9]*"
                                                                 value={line.purchase_price_per_pcs}
                                                                 onChange={(event) =>
                                                                     updateLineItem(line.product_id, "purchase_price_per_pcs", event.target.value)
@@ -733,7 +810,9 @@ export default function AdminPurchasePage() {
                                                             />
                                                             {priceInvalid && (
                                                                 <p className="text-[11px] text-red-600 mt-1">
-                                                                    Amount must be greater than 0
+                                                                    {priceTooLarge
+                                                                        ? `Amount must not exceed ${MAX_DECIMAL_12_2_INTEGER.toLocaleString()} MMK`
+                                                                        : "Amount must be greater than 0"}
                                                                 </p>
                                                             )}
                                                             <p className="text-[11px] text-gray-500 mt-1">
@@ -748,19 +827,22 @@ export default function AdminPurchasePage() {
                                                                 Quantity ({unitLabel})
                                                             </label>
                                                             <Input
-                                                                type="number"
-                                                                min={0}
-                                                                step="1"
+                                                                type="text"
+                                                                inputMode="numeric"
+                                                                pattern="[0-9]*"
                                                                 value={line.quantity}
                                                                 onChange={(event) =>
                                                                     updateLineItem(line.product_id, "quantity", event.target.value)
                                                                 }
                                                                 onBlur={() => handleLineItemBlur(line.product_id, "quantity")}
+                                                                onKeyDown={preventInvalidAmountKeys}
                                                                 className={`h-9 ${quantityInvalid ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                                                             />
                                                             {quantityInvalid && (
                                                                 <p className="text-[11px] text-red-600 mt-1">
-                                                                    Quantity must be greater than 0
+                                                                    {quantityTooLarge || quantityPcsOverflow
+                                                                        ? `Quantity is too large for ${unitLabel} (max ${maxQuantityForUnit.toLocaleString()})`
+                                                                        : "Quantity must be greater than 0"}
                                                                 </p>
                                                             )}
                                                         </div>
@@ -782,6 +864,12 @@ export default function AdminPurchasePage() {
                                                         </div>
                                                     </div>
 
+                                                    {lineTotalOverflow && (
+                                                        <p className="text-[11px] text-red-600 text-right">
+                                                            Line total is too large
+                                                        </p>
+                                                    )}
+
                                                     <p className="text-xs font-medium text-gray-700 text-right">
                                                         Total: {formatCurrency(Number.isFinite(lineTotal) ? lineTotal : 0)}
                                                     </p>
@@ -800,11 +888,23 @@ export default function AdminPurchasePage() {
                                         <span className="text-gray-700">Total Purchase Amount</span>
                                         <span className="font-bold text-pink-700">{formatCurrency(totalAmount)}</span>
                                     </div>
+                                    {isTotalAmountOverflow && (
+                                        <p className="text-xs text-red-600 mt-2">
+                                            Total must not exceed {MAX_DECIMAL_12_2_INTEGER.toLocaleString()} MMK
+                                        </p>
+                                    )}
                                 </div>
 
                                 <Button
                                     className="w-full h-10 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700"
-                                    disabled={lineItems.length === 0 || !selectedSupplierId || purchaseMutation.isPending || hasInvalidPurchaseInputs || hasFuturePurchaseDate}
+                                    disabled={
+                                        lineItems.length === 0
+                                        || !selectedSupplierId
+                                        || purchaseMutation.isPending
+                                        || hasInvalidPurchaseInputs
+                                        || hasFuturePurchaseDate
+                                        || isTotalAmountOverflow
+                                    }
                                     onClick={() => {
                                         setError(null);
                                         setSuccess(null);
@@ -859,7 +959,7 @@ export default function AdminPurchasePage() {
                                                         <table className="w-full text-sm">
                                                             <thead className="bg-gray-50 text-gray-700">
                                                                 <tr>
-                                                                    <th className="text-left px-3 py-2">Date</th>
+                                                                    <th className="text-left px-3 py-2">Updated Date</th>
                                                                     <th className="text-right px-3 py-2">Purchase Price</th>
                                                                     <th className="text-right px-3 py-2">Qty</th>
                                                                     <th className="text-right px-3 py-2">Total Price</th>
@@ -879,7 +979,7 @@ export default function AdminPurchasePage() {
                                                                             className={`border-t border-gray-100 ${index === 0 ? "bg-pink-50 font-semibold" : "bg-white"}`}
                                                                         >
                                                                             <td className="px-3 py-2 text-gray-700">
-                                                                                {formatHistoryDate(item.created_at, item.expense_date)}
+                                                                                {formatHistoryDate(item.created_at)}
                                                                             </td>
                                                                             <td className="px-3 py-2 text-right text-gray-800 whitespace-nowrap">
                                                                                 {formatCurrency(currentPrice)}

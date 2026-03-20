@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
+import { MAX_DECIMAL_12_2_INTEGER } from "@/lib/constants";
 import { thaiToday, toBangkokDateStr } from "@/lib/utils";
 
 interface Expense {
@@ -101,7 +102,32 @@ export default function ExpensesPage() {
         "CASH"
     );
     const [expenseDate, setExpenseDate] = useState(todayStr());
-    const isAmountInvalid = amount !== "" && Number(amount) <= 0;
+
+    const sanitizeAmountInput = (value: string) => {
+        if (value === "") {
+            return "";
+        }
+
+        const digitsOnly = value.replace(/\D/g, "");
+        if (digitsOnly === "") {
+            return "";
+        }
+
+        const cleaned = digitsOnly.replace(/^0+(?=\d)/, "");
+        const parsed = Number(cleaned);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+            return "";
+        }
+
+        return String(Math.min(MAX_DECIMAL_12_2_INTEGER, parsed));
+    };
+
+    const parsedAmount = Number(amount);
+    const isAmountInvalid = amount !== "" && (
+        !Number.isFinite(parsedAmount)
+        || parsedAmount <= 0
+        || parsedAmount > MAX_DECIMAL_12_2_INTEGER
+    );
     const isExpenseDateInvalid = expenseDate > todayDate;
 
     const preventInvalidAmountKeys = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -129,29 +155,11 @@ export default function ExpensesPage() {
     };
 
     const handleAmountChange = (value: string) => {
-        if (value === "") {
-            setAmount("");
-            return;
-        }
-
-        const digitsOnly = value.replace(/\D/g, "");
-        if (digitsOnly === "") {
-            return;
-        }
-
-        // Strip leading zeros while preserving a single zero when input is all zeros.
-        const cleaned = digitsOnly.replace(/^0+(?=\d)/, "");
-        const numberValue = Number(cleaned);
-
-        if (!Number.isFinite(numberValue) || numberValue < 0) {
-            return;
-        }
-
-        setAmount(cleaned);
+        setAmount(sanitizeAmountInput(value));
     };
 
     const handleAmountBlur = () => {
-        setAmount((prev) => String(Number(prev) || 0));
+        setAmount((prev) => sanitizeAmountInput(prev));
     };
 
     const handleExpenseDateChange = (value: string) => {
@@ -222,8 +230,14 @@ export default function ExpensesPage() {
 
     const handleCreate = () => {
         if (!token || !description || amount === "") return;
-        if (Number(amount) <= 0) {
+
+        const parsed = Number(amount);
+        if (!Number.isFinite(parsed) || parsed <= 0) {
             setError("Amount must be greater than 0");
+            return;
+        }
+        if (parsed > MAX_DECIMAL_12_2_INTEGER) {
+            setError(`Amount must not exceed ${MAX_DECIMAL_12_2_INTEGER.toLocaleString()} MMK`);
             return;
         }
         if (expenseDate > todayDate) {
@@ -466,7 +480,9 @@ export default function ExpensesPage() {
                                 />
                                 {isAmountInvalid && (
                                     <p className="text-xs text-red-600 mt-1">
-                                        Amount must be greater than 0
+                                        {Number(amount) > MAX_DECIMAL_12_2_INTEGER
+                                            ? `Amount must not exceed ${MAX_DECIMAL_12_2_INTEGER.toLocaleString()} MMK`
+                                            : "Amount must be greater than 0"}
                                     </p>
                                 )}
                             </div>
@@ -531,7 +547,7 @@ export default function ExpensesPage() {
                                 saving ||
                                 !description ||
                                 amount === "" ||
-                                Number(amount) <= 0 ||
+                                isAmountInvalid ||
                                 isExpenseDateInvalid
                             }
                             className="h-10 px-4 bg-pink-600 hover:bg-pink-700 text-white"

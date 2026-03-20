@@ -233,13 +233,13 @@ export default function CustomersPage() {
                                 <div className="space-y-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Customer Shop Name
+                                            Name
                                         </label>
                                         <Input
                                             type="text"
                                             value={newCustomer.shopName}
                                             onChange={(e) => setNewCustomer({ ...newCustomer, shopName: e.target.value })}
-                                            placeholder="Enter shop name"
+                                            placeholder="Enter customer name"
                                             className="w-full text-black"
                                         />
                                     </div>
@@ -252,20 +252,20 @@ export default function CustomersPage() {
                                             type="tel"
                                             value={newCustomer.phoneNumber}
                                             onChange={(e) => setNewCustomer({ ...newCustomer, phoneNumber: e.target.value })}
-                                            placeholder="Enter phone number"
+                                            placeholder="09xxxxxxxx"
                                             className="w-full text-black"
                                         />
                                     </div>
 
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Location
+                                            Address
                                         </label>
                                         <Input
                                             type="text"
                                             value={newCustomer.location}
                                             onChange={(e) => setNewCustomer({ ...newCustomer, location: e.target.value })}
-                                            placeholder="Enter location"
+                                            placeholder="Street, Township, City..."
                                             className="w-full text-black"
                                         />
                                     </div>

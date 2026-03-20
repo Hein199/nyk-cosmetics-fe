@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { INVENTORY_UNITS } from "@/lib/constants";
+import { INVENTORY_UNITS, MAX_DECIMAL_12_2_INTEGER } from "@/lib/constants";
 import { useCart } from "@/lib/cart-context";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
@@ -17,6 +17,8 @@ type Product = {
     description: string | null;
     category: string;
     unit_price: string | number;
+    custom_price_min: string | number;
+    custom_price_max: string | number;
     pcs_per_dozen: string | number;
     pcs_per_box: string | number;
     photo_url: string;
@@ -37,12 +39,20 @@ function formatCategory(category: string) {
     return category.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function sanitizeNonNegativeInteger(value: string) {
+function sanitizeNonNegativeInteger(value: string, max?: number) {
     const digitsOnly = value.replace(/\D/g, "");
     if (digitsOnly === "") {
         return "";
     }
-    return digitsOnly.replace(/^0+(?=\d)/, "");
+
+    const cleaned = digitsOnly.replace(/^0+(?=\d)/, "");
+    const parsed = Number(cleaned);
+    if (!Number.isFinite(parsed)) {
+        return "";
+    }
+
+    const capped = typeof max === "number" ? Math.min(max, parsed) : parsed;
+    return String(capped);
 }
 
 export default function ProductDetailPage() {
@@ -105,6 +115,39 @@ export default function ProductDetailPage() {
             }, 0);
     }, [cart, product]);
 
+    const cartTotalAmount = useMemo(() => {
+        return cart.reduce((sum, item) => sum + item.total, 0);
+    }, [cart]);
+
+    const configuredCustomMinPerUnit = useMemo(() => {
+        const minPerPcs = Number(product?.custom_price_min ?? 1);
+        if (!Number.isFinite(minPerPcs) || minPerPcs <= 0) {
+            return 1;
+        }
+        return Math.max(1, Math.trunc(minPerPcs * unitMultiplier));
+    }, [product?.custom_price_min, unitMultiplier]);
+
+    const configuredCustomMaxPerUnit = useMemo(() => {
+        const maxPerPcs = Number(product?.custom_price_max ?? MAX_DECIMAL_12_2_INTEGER);
+        if (!Number.isFinite(maxPerPcs) || maxPerPcs <= 0) {
+            return MAX_DECIMAL_12_2_INTEGER;
+        }
+        const maxForUnit = Math.trunc(maxPerPcs * unitMultiplier);
+        return Math.max(1, Math.min(MAX_DECIMAL_12_2_INTEGER, maxForUnit));
+    }, [product?.custom_price_max, unitMultiplier]);
+
+    const maxCustomPriceByRemainingTotal = useMemo(() => {
+        const safeQuantity = Math.max(1, quantity);
+        const remainingBudget = Math.max(0, MAX_DECIMAL_12_2_INTEGER - cartTotalAmount);
+        return Math.floor(remainingBudget / safeQuantity);
+    }, [cartTotalAmount, quantity]);
+
+    const effectiveCustomPriceMax = useMemo(() => {
+        return Math.max(0, Math.min(configuredCustomMaxPerUnit, maxCustomPriceByRemainingTotal));
+    }, [configuredCustomMaxPerUnit, maxCustomPriceByRemainingTotal]);
+
+    const isCustomPriceRangeAvailable = configuredCustomMinPerUnit <= effectiveCustomPriceMax;
+
     const maxQuantity = useMemo(() => {
         const stock = product?.inventory?.quantity ?? Number.MAX_SAFE_INTEGER;
         const remaining = Math.max(0, stock - existingCartPieces);
@@ -151,7 +194,7 @@ export default function ProductDetailPage() {
     };
 
     const handleCustomPriceInput = (value: string) => {
-        const normalized = sanitizeNonNegativeInteger(value);
+        const normalized = sanitizeNonNegativeInteger(value, effectiveCustomPriceMax);
         if (!normalized) {
             setCustomPrice("");
             return;
@@ -171,14 +214,19 @@ export default function ProductDetailPage() {
             return;
         }
 
-        const normalized = sanitizeNonNegativeInteger(customPrice);
+        const normalized = sanitizeNonNegativeInteger(customPrice, effectiveCustomPriceMax);
         const parsed = Number(normalized);
-        if (!Number.isFinite(parsed) || parsed <= 0) {
+        if (!Number.isFinite(parsed) || parsed <= 0 || parsed > effectiveCustomPriceMax) {
             setCustomPrice("");
             return;
         }
 
-        setCustomPrice(String(parsed));
+        if (parsed < configuredCustomMinPerUnit) {
+            setCustomPrice(String(configuredCustomMinPerUnit));
+            return;
+        }
+
+        setCustomPrice(String(Math.trunc(parsed)));
     };
 
     const handleDecrease = () => {
@@ -346,7 +394,16 @@ export default function ProductDetailPage() {
                                         type="checkbox"
                                         id="use-custom-price"
                                         checked={useCustomPrice}
-                                        onChange={(e) => setUseCustomPrice(e.target.checked)}
+                                        onChange={(e) => {
+                                            const nextChecked = e.target.checked;
+                                            if (nextChecked && !isCustomPriceRangeAvailable) {
+                                                setStockError("Custom price is unavailable for the current quantity and cart total.");
+                                                setUseCustomPrice(false);
+                                                return;
+                                            }
+                                            setStockError(null);
+                                            setUseCustomPrice(nextChecked);
+                                        }}
                                         className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
                                     />
                                     <label htmlFor="use-custom-price" className="text-sm text-gray-700">
@@ -357,6 +414,14 @@ export default function ProductDetailPage() {
                                                 : "Custom price per Pcs"}
                                     </label>
                                 </div>
+                                <p className="text-xs text-gray-500">
+                                    Allowed range: {formatCurrency(configuredCustomMinPerUnit)} - {formatCurrency(effectiveCustomPriceMax)}
+                                </p>
+                                {!isCustomPriceRangeAvailable && (
+                                    <p className="text-xs text-red-600">
+                                        No custom price is available for this quantity because order total limit would be exceeded.
+                                    </p>
+                                )}
                                 {useCustomPrice && (
                                     <Input
                                         type="text"
@@ -405,10 +470,36 @@ export default function ProductDetailPage() {
                                         const inventoryQty = product.inventory?.quantity ?? Number.MAX_SAFE_INTEGER;
                                         const newPieces = quantity * unitMultiplier;
                                         const parsedCustomPrice = Number(customPrice);
-                                        const safeCustomPrice =
-                                            useCustomPrice && Number.isFinite(parsedCustomPrice) && parsedCustomPrice > 0
-                                                ? parsedCustomPrice
-                                                : undefined;
+                                        const defaultPrice = Number(product.unit_price) * unitMultiplier;
+
+                                        let safeCustomPrice: number | undefined;
+                                        if (useCustomPrice) {
+                                            if (!isCustomPriceRangeAvailable) {
+                                                setStockError("Custom price is unavailable for the current quantity and cart total.");
+                                                return;
+                                            }
+
+                                            if (!Number.isFinite(parsedCustomPrice) || parsedCustomPrice <= 0) {
+                                                setStockError("Custom price must be greater than 0.");
+                                                return;
+                                            }
+
+                                            if (parsedCustomPrice < configuredCustomMinPerUnit || parsedCustomPrice > effectiveCustomPriceMax) {
+                                                setStockError(
+                                                    `Custom price must be between ${formatCurrency(configuredCustomMinPerUnit)} and ${formatCurrency(effectiveCustomPriceMax)}.`,
+                                                );
+                                                return;
+                                            }
+
+                                            safeCustomPrice = parsedCustomPrice;
+                                        }
+
+                                        const selectedPrice = safeCustomPrice ?? defaultPrice;
+                                        const nextOrderTotal = cartTotalAmount + selectedPrice * quantity;
+                                        if (nextOrderTotal > MAX_DECIMAL_12_2_INTEGER) {
+                                            setStockError(`Order total must not exceed ${MAX_DECIMAL_12_2_INTEGER.toLocaleString()} MMK.`);
+                                            return;
+                                        }
 
                                         if (existingCartPieces + newPieces > inventoryQty) {
                                             setStockError(`Insufficient stock.`);
@@ -422,7 +513,7 @@ export default function ProductDetailPage() {
                                             unit,
                                             safeCustomPrice,
                                             product.name,
-                                            Number(product.unit_price) * unitMultiplier
+                                            defaultPrice
                                         );
                                     }}
                                     disabled={maxQuantity === 0}

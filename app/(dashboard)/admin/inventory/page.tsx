@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
+import { MAX_DECIMAL_12_2_INTEGER, MAX_INT_32 } from "@/lib/constants";
 import { thaiToday } from "@/lib/utils";
 
 type Category = {
@@ -21,6 +22,8 @@ type Product = {
     description: string | null;
     category: string;
     unit_price: string | number;
+    custom_price_min: string | number;
+    custom_price_max: string | number;
     last_purchase_price: string | number | null;
     pcs_per_dozen: string | number;
     pcs_per_box: string | number;
@@ -45,6 +48,8 @@ const emptyForm = {
     description: "",
     category: "",
     unit_price: "",
+    custom_price_min: "1",
+    custom_price_max: String(MAX_DECIMAL_12_2_INTEGER),
     last_purchase_price: "",
     stockQuantity: "",
     stockUnit: "PCS" as "PCS" | "DOZEN" | "BOX",
@@ -82,9 +87,19 @@ function formatCategory(category: string) {
     return category;
 }
 
-function sanitizeAmountInput(value: string) {
+function sanitizeAmountInput(value: string, max: number = Number.MAX_SAFE_INTEGER) {
     const digitsOnly = value.replace(/\D/g, "");
-    return digitsOnly.replace(/^0+(?=\d)/, "");
+    if (digitsOnly === "") {
+        return "";
+    }
+
+    const normalized = digitsOnly.replace(/^0+(?=\d)/, "");
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+        return "";
+    }
+
+    return String(Math.min(max, parsed));
 }
 
 export default function AdminInventoryPage() {
@@ -180,51 +195,67 @@ export default function AdminInventoryPage() {
     };
 
     const handleUnitPriceChange = (value: string) => {
-        setForm((f) => ({ ...f, unit_price: sanitizeAmountInput(value) }));
+        setForm((f) => ({ ...f, unit_price: sanitizeAmountInput(value, MAX_DECIMAL_12_2_INTEGER) }));
     };
 
     const handleLastPurchasePriceChange = (value: string) => {
-        setForm((f) => ({ ...f, last_purchase_price: sanitizeAmountInput(value) }));
+        setForm((f) => ({ ...f, last_purchase_price: sanitizeAmountInput(value, MAX_DECIMAL_12_2_INTEGER) }));
+    };
+
+    const handleCustomPriceMinChange = (value: string) => {
+        setForm((f) => ({ ...f, custom_price_min: sanitizeAmountInput(value, MAX_DECIMAL_12_2_INTEGER) }));
+    };
+
+    const handleCustomPriceMaxChange = (value: string) => {
+        setForm((f) => ({ ...f, custom_price_max: sanitizeAmountInput(value, MAX_DECIMAL_12_2_INTEGER) }));
     };
 
     const handleUnitPriceBlur = () => {
-        setForm((f) => ({ ...f, unit_price: sanitizeAmountInput(f.unit_price) }));
+        setForm((f) => ({ ...f, unit_price: sanitizeAmountInput(f.unit_price, MAX_DECIMAL_12_2_INTEGER) }));
     };
 
     const handleLastPurchasePriceBlur = () => {
-        setForm((f) => ({ ...f, last_purchase_price: sanitizeAmountInput(f.last_purchase_price) }));
+        setForm((f) => ({ ...f, last_purchase_price: sanitizeAmountInput(f.last_purchase_price, MAX_DECIMAL_12_2_INTEGER) }));
+    };
+
+    const handleCustomPriceMinBlur = () => {
+        setForm((f) => ({ ...f, custom_price_min: sanitizeAmountInput(f.custom_price_min, MAX_DECIMAL_12_2_INTEGER) }));
+    };
+
+    const handleCustomPriceMaxBlur = () => {
+        setForm((f) => ({ ...f, custom_price_max: sanitizeAmountInput(f.custom_price_max, MAX_DECIMAL_12_2_INTEGER) }));
     };
 
     const handleStockQuantityChange = (value: string) => {
-        setForm((f) => ({ ...f, stockQuantity: sanitizeAmountInput(value) }));
+        setForm((f) => ({ ...f, stockQuantity: sanitizeAmountInput(value, MAX_INT_32) }));
     };
 
     const handleAdjustQuantityChange = (value: string) => {
-        setForm((f) => ({ ...f, adjustQuantity: sanitizeAmountInput(value) }));
+        setForm((f) => ({ ...f, adjustQuantity: sanitizeAmountInput(value, MAX_INT_32) }));
     };
 
     const handlePcsPerDozenChange = (value: string) => {
-        setForm((f) => ({ ...f, pcs_per_dozen: sanitizeAmountInput(value) }));
+        setForm((f) => ({ ...f, pcs_per_dozen: sanitizeAmountInput(value, MAX_INT_32) }));
     };
 
     const handlePcsPerBoxChange = (value: string) => {
-        setForm((f) => ({ ...f, pcs_per_box: sanitizeAmountInput(value) }));
+        setForm((f) => ({ ...f, pcs_per_box: sanitizeAmountInput(value, MAX_INT_32) }));
     };
 
     const handleStockQuantityBlur = () => {
-        setForm((f) => ({ ...f, stockQuantity: sanitizeAmountInput(f.stockQuantity) }));
+        setForm((f) => ({ ...f, stockQuantity: sanitizeAmountInput(f.stockQuantity, MAX_INT_32) }));
     };
 
     const handleAdjustQuantityBlur = () => {
-        setForm((f) => ({ ...f, adjustQuantity: sanitizeAmountInput(f.adjustQuantity) }));
+        setForm((f) => ({ ...f, adjustQuantity: sanitizeAmountInput(f.adjustQuantity, MAX_INT_32) }));
     };
 
     const handlePcsPerDozenBlur = () => {
-        setForm((f) => ({ ...f, pcs_per_dozen: sanitizeAmountInput(f.pcs_per_dozen) }));
+        setForm((f) => ({ ...f, pcs_per_dozen: sanitizeAmountInput(f.pcs_per_dozen, MAX_INT_32) }));
     };
 
     const handlePcsPerBoxBlur = () => {
-        setForm((f) => ({ ...f, pcs_per_box: sanitizeAmountInput(f.pcs_per_box) }));
+        setForm((f) => ({ ...f, pcs_per_box: sanitizeAmountInput(f.pcs_per_box, MAX_INT_32) }));
     };
 
     async function handleCreateCategory() {
@@ -256,7 +287,12 @@ export default function AdminInventoryPage() {
             await apiFetch(`/categories/${id}`, { method: "DELETE", token });
             queryClient.invalidateQueries({ queryKey: ["categories"] });
         } catch (err) {
-            setCategoryError(err instanceof Error ? err.message : "Failed to delete category");
+            const message = err instanceof Error ? err.message : "Failed to delete category";
+            if (message.toLowerCase().includes("cannot delete category") && message.toLowerCase().includes("used by")) {
+                setCategoryError(`${message} Please update those products to another category and try again.`);
+            } else {
+                setCategoryError(message);
+            }
         } finally {
             setDeletingCategoryId(null);
         }
@@ -276,6 +312,16 @@ export default function AdminInventoryPage() {
         if (unit === "DOZEN") return Math.round(quantity * pcsPerDozen);
         if (unit === "BOX") return Math.round(quantity * pcsPerBox);
         return Math.round(quantity);
+    }
+
+    function getMaxQuantityForUnit(unit: "PCS" | "DOZEN" | "BOX", pcsPerDozen: number, pcsPerBox: number) {
+        const multiplier = unit === "DOZEN"
+            ? Math.max(1, Math.round(pcsPerDozen))
+            : unit === "BOX"
+                ? Math.max(1, Math.round(pcsPerBox))
+                : 1;
+
+        return Math.floor(MAX_INT_32 / multiplier);
     }
 
     function convertFromPcs(quantityInPcs: number, unit: "PCS" | "DOZEN" | "BOX", pcsPerDozen: number, pcsPerBox: number) {
@@ -304,6 +350,8 @@ export default function AdminInventoryPage() {
             description: product.description ?? "",
             category: product.category,
             unit_price: String(product.unit_price),
+            custom_price_min: String(product.custom_price_min ?? 1),
+            custom_price_max: String(product.custom_price_max ?? MAX_DECIMAL_12_2_INTEGER),
             last_purchase_price: product.last_purchase_price == null ? "" : String(product.last_purchase_price),
             stockQuantity: String(product.inventory?.quantity ?? 0),
             stockUnit: "PCS",
@@ -332,6 +380,34 @@ export default function AdminInventoryPage() {
             setSaveError("Selling price must be greater than 0.");
             return;
         }
+        if (Number(rawUnitPrice) > MAX_DECIMAL_12_2_INTEGER) {
+            setSaveError(`Selling price must not exceed ${MAX_DECIMAL_12_2_INTEGER.toLocaleString()} MMK.`);
+            return;
+        }
+
+        const rawCustomPriceMin = String(form.custom_price_min ?? "").trim();
+        if (!/^[1-9]\d*$/.test(rawCustomPriceMin)) {
+            setSaveError("Custom price minimum must be greater than 0.");
+            return;
+        }
+        if (Number(rawCustomPriceMin) > MAX_DECIMAL_12_2_INTEGER) {
+            setSaveError(`Custom price minimum must not exceed ${MAX_DECIMAL_12_2_INTEGER.toLocaleString()} MMK.`);
+            return;
+        }
+
+        const rawCustomPriceMax = String(form.custom_price_max ?? "").trim();
+        if (!/^[1-9]\d*$/.test(rawCustomPriceMax)) {
+            setSaveError("Custom price maximum must be greater than 0.");
+            return;
+        }
+        if (Number(rawCustomPriceMax) > MAX_DECIMAL_12_2_INTEGER) {
+            setSaveError(`Custom price maximum must not exceed ${MAX_DECIMAL_12_2_INTEGER.toLocaleString()} MMK.`);
+            return;
+        }
+        if (Number(rawCustomPriceMin) > Number(rawCustomPriceMax)) {
+            setSaveError("Custom price minimum must be less than or equal to custom price maximum.");
+            return;
+        }
 
         let rawLastPurchasePrice: string | null = null;
 
@@ -339,6 +415,10 @@ export default function AdminInventoryPage() {
             const lastPurchasePrice = String(form.last_purchase_price ?? "").trim();
             if (!/^(0|[1-9]\d*)$/.test(lastPurchasePrice)) {
                 setSaveError("Last purchase price must be greater than or equal to 0.");
+                return;
+            }
+            if (Number(lastPurchasePrice) > MAX_DECIMAL_12_2_INTEGER) {
+                setSaveError(`Purchase price must not exceed ${MAX_DECIMAL_12_2_INTEGER.toLocaleString()} MMK.`);
                 return;
             }
 
@@ -350,10 +430,18 @@ export default function AdminInventoryPage() {
             setSaveError("Pcs per dozen must be greater than 0.");
             return;
         }
+        if (Number(rawPcsPerDozen) > MAX_INT_32) {
+            setSaveError("Pcs per dozen is too large.");
+            return;
+        }
 
         const rawPcsPerBox = String(form.pcs_per_box ?? "").trim();
         if (!/^[1-9]\d*$/.test(rawPcsPerBox)) {
             setSaveError("Pcs per box must be greater than 0.");
+            return;
+        }
+        if (Number(rawPcsPerBox) > MAX_INT_32) {
+            setSaveError("Pcs per box is too large.");
             return;
         }
 
@@ -364,11 +452,23 @@ export default function AdminInventoryPage() {
                 setSaveError("Stock quantity must be greater than or equal to 0.");
                 return;
             }
+            if (Number(stockQuantity) > MAX_INT_32) {
+                setSaveError("Stock quantity is too large.");
+                return;
+            }
             rawStockQuantity = stockQuantity;
         }
 
         const pcsPerDozen = Number(rawPcsPerDozen);
         const pcsPerBox = Number(rawPcsPerBox);
+
+        if (!editingProduct && rawStockQuantity !== null) {
+            const openingStockPcs = convertToPcs(Number(rawStockQuantity), form.stockUnit, pcsPerDozen, pcsPerBox);
+            if (!Number.isFinite(openingStockPcs) || openingStockPcs > MAX_INT_32) {
+                setSaveError("Opening stock is too large.");
+                return;
+            }
+        }
 
         setSaving(true);
         setSaveError(null);
@@ -381,6 +481,8 @@ export default function AdminInventoryPage() {
                 description: form.description || null,
                 category: form.category,
                 unit_price: rawUnitPrice,
+                custom_price_min: rawCustomPriceMin,
+                custom_price_max: rawCustomPriceMax,
                 last_purchase_price: rawLastPurchasePrice,
                 pcs_per_dozen: rawPcsPerDozen,
                 pcs_per_box: rawPcsPerBox,
@@ -390,6 +492,12 @@ export default function AdminInventoryPage() {
 
             if (editingProduct) {
                 const currentStock = Number(form.stockQuantity || 0);
+                if (!Number.isFinite(currentStock) || currentStock < 0 || currentStock > MAX_INT_32) {
+                    setSaveError("Current stock is out of range.");
+                    setSaving(false);
+                    return;
+                }
+
                 const rawAdjustQuantity = String(form.adjustQuantity ?? "").trim();
 
                 if (rawAdjustQuantity) {
@@ -400,13 +508,31 @@ export default function AdminInventoryPage() {
                     }
 
                     const adjustQty = Number(rawAdjustQuantity);
+                    const maxAdjustQuantity = getMaxQuantityForUnit(form.adjustUnit, pcsPerDozen, pcsPerBox);
+
+                    if (adjustQty > maxAdjustQuantity) {
+                        setSaveError(`Adjust quantity is too large for ${form.adjustUnit} (max ${maxAdjustQuantity.toLocaleString()}).`);
+                        setSaving(false);
+                        return;
+                    }
 
                     const deltaPcs = convertToPcs(adjustQty, form.adjustUnit, pcsPerDozen, pcsPerBox);
+                    if (!Number.isFinite(deltaPcs) || deltaPcs > MAX_INT_32) {
+                        setSaveError("Adjust quantity is too large.");
+                        setSaving(false);
+                        return;
+                    }
+
                     const signedDelta = form.adjustAction === "increase" ? deltaPcs : -deltaPcs;
                     const nextStock = currentStock + signedDelta;
 
                     if (nextStock < 0) {
                         setSaveError("Adjustment would make stock negative.");
+                        setSaving(false);
+                        return;
+                    }
+                    if (nextStock > MAX_INT_32) {
+                        setSaveError("Adjustment would exceed stock limit.");
                         setSaving(false);
                         return;
                     }
@@ -887,6 +1013,37 @@ export default function AdminInventoryPage() {
                                     placeholder="e.g. 50000"
                                     disabled={saving}
                                 />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-sm font-medium text-gray-700 block mb-1">Custom Price Min / Pcs (MMK) *</label>
+                                    <Input
+                                        type="text"
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
+                                        value={form.custom_price_min}
+                                        onChange={(e) => handleCustomPriceMinChange(e.target.value)}
+                                        onBlur={handleCustomPriceMinBlur}
+                                        onKeyDown={preventInvalidAmountKeys}
+                                        placeholder="e.g. 1000"
+                                        disabled={saving}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium text-gray-700 block mb-1">Custom Price Max / Pcs (MMK) *</label>
+                                    <Input
+                                        type="text"
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
+                                        value={form.custom_price_max}
+                                        onChange={(e) => handleCustomPriceMaxChange(e.target.value)}
+                                        onBlur={handleCustomPriceMaxBlur}
+                                        onKeyDown={preventInvalidAmountKeys}
+                                        placeholder="e.g. 50000"
+                                        disabled={saving}
+                                    />
+                                </div>
                             </div>
 
                             <div>

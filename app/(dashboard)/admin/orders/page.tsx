@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
+import { MAX_DECIMAL_12_2_INTEGER, MAX_INT_32 } from "@/lib/constants";
 import { formatId, thaiToday, formatThaiDate, toBangkokDateStr } from "@/lib/utils";
 
 type OrderListItem = {
@@ -92,6 +93,16 @@ function formatStatusLabel(status: string) {
     return normalized.replace("_", " ");
 }
 
+function getOrderUnitMultiplier(unitType: string) {
+    if (unitType === "D") return 12;
+    if (unitType === "P") return 24;
+    return 1;
+}
+
+function getMaxOrderQuantityForUnit(unitType: string) {
+    return Math.floor(MAX_INT_32 / Math.max(getOrderUnitMultiplier(unitType), 1));
+}
+
 export default function OrdersPage() {
     const { token, user } = useAuth();
     const queryClient = useQueryClient();
@@ -106,13 +117,18 @@ export default function OrdersPage() {
     const [systemName, setSystemName] = useState("NYK Cosmetics");
     const [systemLogo, setSystemLogo] = useState<string | null>(null);
 
-    const normalizeNonNegativeIntegerInput = (value: string) => {
+    const normalizeNonNegativeIntegerInput = (value: string, max: number = MAX_INT_32) => {
         const digitsOnly = value.replace(/\D/g, "");
         if (digitsOnly === "") {
             return 0;
         }
         const normalized = digitsOnly.replace(/^0+(?=\d)/, "");
-        return Number(normalized);
+        const parsed = Number(normalized);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+            return 0;
+        }
+
+        return Math.min(max, parsed);
     };
 
     const preventNegativeQuantityKeys = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -140,7 +156,25 @@ export default function OrdersPage() {
     };
 
     const preventNegativePriceKeys = (event: KeyboardEvent<HTMLInputElement>) => {
-        if (["-", "+", "e", "E"].includes(event.key)) {
+        const allowedControlKeys = [
+            "Backspace",
+            "Delete",
+            "ArrowLeft",
+            "ArrowRight",
+            "Tab",
+            "Home",
+            "End",
+        ];
+
+        if (event.ctrlKey || event.metaKey) {
+            return;
+        }
+
+        if (allowedControlKeys.includes(event.key)) {
+            return;
+        }
+
+        if (!/^\d$/.test(event.key)) {
             event.preventDefault();
         }
     };
@@ -152,7 +186,7 @@ export default function OrdersPage() {
                 if (data?.system_name) setSystemName(data.system_name);
                 if (data?.system_logo) setSystemLogo(data.system_logo);
             })
-            .catch(() => {});
+            .catch(() => { });
     }, [token]);
 
     const dateRangeKey = useMemo(() => `nyk-orders-date-range:${user?.id ?? "anon"}`, [user?.id]);
@@ -322,9 +356,10 @@ export default function OrdersPage() {
             if (mode === "edit") {
                 const initial: Record<number, { quantity: number; unit_price: number; unit_type: string }> = {};
                 for (const item of data.items) {
+                    const unitMultiplier = getOrderUnitMultiplier(item.unit_type);
                     initial[item.id] = {
                         quantity: item.quantity,
-                        unit_price: Number(item.unit_price),
+                        unit_price: Number(item.unit_price) / Math.max(unitMultiplier, 1),
                         unit_type: item.unit_type,
                     };
                 }
@@ -353,12 +388,57 @@ export default function OrdersPage() {
         setIsSaving(true);
         setSaveError(null);
         try {
-            const items = Object.entries(editedItems).map(([id, vals]) => ({
-                id: Number(id),
-                quantity: vals.quantity,
-                unit_price: String(vals.unit_price),
-                unit_type: vals.unit_type,
-            }));
+            const items: Array<{ id: number; quantity: number; unit_price: string; unit_type: string }> = [];
+            let nextTotal = 0;
+
+            for (const [id, vals] of Object.entries(editedItems)) {
+                const quantity = Number(vals.quantity);
+                const unitPrice = Number(vals.unit_price);
+                const unitType = vals.unit_type;
+                const unitMultiplier = getOrderUnitMultiplier(unitType);
+                const maxQuantityForUnit = getMaxOrderQuantityForUnit(unitType);
+                const requiredPcs = quantity * unitMultiplier;
+
+                if (!Number.isInteger(quantity) || quantity < 0) {
+                    throw new Error("Quantity must be a whole number greater than or equal to 0");
+                }
+                if (quantity > maxQuantityForUnit) {
+                    throw new Error(`Quantity is too large for ${unitTypeLabel(unitType)} (max ${maxQuantityForUnit.toLocaleString()})`);
+                }
+                if (!Number.isFinite(requiredPcs) || requiredPcs > MAX_INT_32) {
+                    throw new Error("Quantity exceeds inventory limit");
+                }
+
+                if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+                    throw new Error("Unit price must be greater than or equal to 0");
+                }
+                if (unitPrice > MAX_DECIMAL_12_2_INTEGER) {
+                    throw new Error(`Unit price must not exceed ${MAX_DECIMAL_12_2_INTEGER.toLocaleString()} MMK`);
+                }
+
+                const payloadUnitPrice = unitPrice * unitMultiplier;
+                if (!Number.isFinite(payloadUnitPrice) || payloadUnitPrice > MAX_DECIMAL_12_2_INTEGER) {
+                    throw new Error(`Unit price is too high for ${unitTypeLabel(unitType)}`);
+                }
+
+                const lineTotal = unitPrice * requiredPcs;
+                if (!Number.isFinite(lineTotal) || lineTotal > MAX_DECIMAL_12_2_INTEGER) {
+                    throw new Error("Line total is too large");
+                }
+
+                nextTotal += lineTotal;
+                if (!Number.isFinite(nextTotal) || nextTotal > MAX_DECIMAL_12_2_INTEGER) {
+                    throw new Error(`Order total must not exceed ${MAX_DECIMAL_12_2_INTEGER.toLocaleString()} MMK`);
+                }
+
+                items.push({
+                    id: Number(id),
+                    quantity,
+                    unit_price: String(payloadUnitPrice),
+                    unit_type: unitType,
+                });
+            }
+
             const updated = await apiFetch<OrderDetail>(`/orders/${orderDetails.id}/items`, {
                 method: "PATCH",
                 token,
@@ -381,6 +461,26 @@ export default function OrdersPage() {
             ...prev,
             [itemId]: { ...prev[itemId], [field]: value },
         }));
+    };
+
+    const handleEditedUnitTypeChange = (itemId: number, unitType: string) => {
+        setEditedItems((prev) => {
+            const currentItem = prev[itemId];
+            if (!currentItem) {
+                return prev;
+            }
+
+            const maxQuantity = getMaxOrderQuantityForUnit(unitType);
+
+            return {
+                ...prev,
+                [itemId]: {
+                    ...currentItem,
+                    unit_type: unitType,
+                    quantity: Math.min(maxQuantity, Math.max(0, currentItem.quantity)),
+                },
+            };
+        });
     };
 
     // Filter and search orders
@@ -862,7 +962,9 @@ export default function OrdersPage() {
                                                     const qty = isEditMode && edited ? edited.quantity : item.quantity;
                                                     const unitPrice = isEditMode && edited ? edited.unit_price : Number(item.unit_price);
                                                     const unitType = isEditMode && edited ? edited.unit_type : item.unit_type;
-                                                    const total = unitPrice * qty;
+                                                    const total = isEditMode
+                                                        ? unitPrice * qty * getOrderUnitMultiplier(unitType)
+                                                        : unitPrice * qty;
                                                     return (
                                                         <tr key={item.id} className={`border-b border-gray-300 ${index % 2 === 0
                                                             ? "bg-blue-50 hover:bg-blue-100"
@@ -874,7 +976,7 @@ export default function OrdersPage() {
                                                             <td className="py-3 px-4 border-r border-gray-300">
                                                                 <div>
                                                                     <p className="font-semibold text-gray-900">{item.product?.name ?? "-"}</p>
-                                                                    <p className="text-xs text-gray-600 font-medium">{item.id}</p>
+                                                                    {/* <p className="text-xs text-gray-600 font-medium">{item.id}</p> */}
                                                                 </div>
                                                             </td>
                                                             <td className="py-3 px-4 text-gray-700 font-medium border-r border-gray-300">
@@ -884,7 +986,7 @@ export default function OrdersPage() {
                                                                 {isEditMode ? (
                                                                     <select
                                                                         value={unitType}
-                                                                        onChange={(e) => updateEditedItem(item.id, "unit_type", e.target.value)}
+                                                                        onChange={(e) => handleEditedUnitTypeChange(item.id, e.target.value)}
                                                                         className="h-8 w-24 rounded border border-gray-300 bg-white px-2 text-xs text-gray-900"
                                                                     >
                                                                         <option value="Pcs">Pcs</option>
@@ -902,7 +1004,14 @@ export default function OrdersPage() {
                                                                         inputMode="numeric"
                                                                         pattern="[0-9]*"
                                                                         value={qty}
-                                                                        onChange={(e) => updateEditedItem(item.id, "quantity", normalizeNonNegativeIntegerInput(e.target.value))}
+                                                                        onChange={(e) => updateEditedItem(
+                                                                            item.id,
+                                                                            "quantity",
+                                                                            normalizeNonNegativeIntegerInput(
+                                                                                e.target.value,
+                                                                                getMaxOrderQuantityForUnit(unitType),
+                                                                            ),
+                                                                        )}
                                                                         onKeyDown={preventNegativeQuantityKeys}
                                                                         className="w-16 h-8 text-center text-sm font-semibold text-gray-900 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                                     />
@@ -913,11 +1022,15 @@ export default function OrdersPage() {
                                                             <td className="py-3 px-4 text-right text-gray-900 font-medium border-r border-gray-300">
                                                                 {isEditMode ? (
                                                                     <Input
-                                                                        type="number"
-                                                                        min={0}
-                                                                        step={100}
+                                                                        type="text"
+                                                                        inputMode="numeric"
+                                                                        pattern="[0-9]*"
                                                                         value={unitPrice}
-                                                                        onChange={(e) => updateEditedItem(item.id, "unit_price", Math.max(0, parseFloat(e.target.value) || 0))}
+                                                                        onChange={(e) => updateEditedItem(
+                                                                            item.id,
+                                                                            "unit_price",
+                                                                            normalizeNonNegativeIntegerInput(e.target.value, MAX_DECIMAL_12_2_INTEGER),
+                                                                        )}
                                                                         onKeyDown={preventNegativePriceKeys}
                                                                         className="w-24 h-8 text-right text-sm font-medium text-gray-900 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                                     />
@@ -956,7 +1069,9 @@ export default function OrdersPage() {
                                                                     const edited = editedItems[item.id];
                                                                     const qty = isEditMode && edited ? edited.quantity : item.quantity;
                                                                     const up = isEditMode && edited ? edited.unit_price : Number(item.unit_price);
-                                                                    return sum + up * qty;
+                                                                    const unitType = isEditMode && edited ? edited.unit_type : item.unit_type;
+                                                                    const multiplier = isEditMode ? getOrderUnitMultiplier(unitType) : 1;
+                                                                    return sum + up * qty * multiplier;
                                                                 },
                                                                 0
                                                             )
@@ -973,7 +1088,8 @@ export default function OrdersPage() {
                                                                         const edited = editedItems[item.id];
                                                                         const qty = edited ? edited.quantity : item.quantity;
                                                                         const up = edited ? edited.unit_price : Number(item.unit_price);
-                                                                        return sum + up * qty;
+                                                                        const unitType = edited ? edited.unit_type : item.unit_type;
+                                                                        return sum + up * qty * getOrderUnitMultiplier(unitType);
                                                                     }, 0)
                                                                     : Number(orderDetails.total_amount)
                                                             )}

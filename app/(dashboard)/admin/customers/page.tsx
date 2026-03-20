@@ -413,7 +413,7 @@ export default function CustomersPage() {
                     <table className="w-full text-sm">
                         <thead>
                             <tr>
-                                {["Date", "Order ID", "Total", "Paid", "Remaining", "Actions"].map((h, i) => (
+                                {["Date", "Order ID", "Status", "Total", "Paid", "Remaining", "Actions"].map((h, i) => (
                                     <th
                                         key={h}
                                         className={`py-2.5 px-4 text-sm font-medium text-white bg-blue-600 ${i !== 0 ? "border-l border-blue-500/40" : ""
@@ -427,21 +427,38 @@ export default function CustomersPage() {
                         <tbody>
                             {ordersLoading ? (
                                 <tr>
-                                    <td colSpan={6} className="py-8 text-center text-gray-400">Loading orders…</td>
+                                    <td colSpan={7} className="py-8 text-center text-gray-400">Loading orders…</td>
                                 </tr>
                             ) : customerOrders.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="py-8 text-center text-gray-400">No orders found.</td>
+                                    <td colSpan={7} className="py-8 text-center text-gray-400">No orders found.</td>
                                 </tr>
                             ) : (
                                 customerOrders.map((o) => (
                                     <tr key={o.id} className="border-b border-gray-100 hover:bg-gray-50">
                                         <td className="py-2.5 px-4 text-gray-600">{o.date}</td>
                                         <td className="py-2.5 px-4 font-mono text-gray-700 border-l border-gray-200">OR-{o.id}</td>
+                                        <td className="py-2.5 px-4 border-l border-gray-200">
+                                            <span
+                                                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${o.status.toLowerCase() === "delivered"
+                                                        ? "bg-green-100 text-green-700"
+                                                        : o.status.toLowerCase() === "confirmed"
+                                                            ? "bg-blue-100 text-blue-700"
+                                                            : o.status.toLowerCase() === "pending_admin"
+                                                                ? "bg-yellow-100 text-yellow-700"
+                                                                : "bg-gray-100 text-gray-600"
+                                                    }`}
+                                            >
+                                                {orderStatusLabel(o.status)}
+                                            </span>
+                                        </td>
                                         <td className="py-2.5 px-4 text-gray-900 border-l border-gray-200">{fmt(o.total_amount)}</td>
-                                        <td className="py-2.5 px-4 text-green-600 border-l border-gray-200">{fmt(o.paid_amount)}</td>
-                                        <td className={`py-2.5 px-4 border-l border-gray-200 font-medium ${outstandingColor(o.remaining_amount)}`}>
-                                            {fmt(o.remaining_amount)}
+                                        <td className={`py-2.5 px-4 border-l border-gray-200 ${o.status.toLowerCase() === "delivered" ? "text-green-600" : "text-gray-400"}`}>
+                                            {o.status.toLowerCase() === "delivered" ? fmt(o.paid_amount) : "-"}
+                                        </td>
+                                        <td className={`py-2.5 px-4 border-l border-gray-200 font-medium ${o.status.toLowerCase() === "delivered" ? outstandingColor(o.remaining_amount) : "text-gray-400"
+                                            }`}>
+                                            {o.status.toLowerCase() === "delivered" ? fmt(o.remaining_amount) : "-"}
                                         </td>
                                         <td className="py-2.5 px-4 border-l border-gray-200 text-center">
                                             <Button size="sm" variant="outline" onClick={() => handleViewOrderDetails(o.id)}>

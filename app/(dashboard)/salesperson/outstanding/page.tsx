@@ -47,17 +47,6 @@ interface OutstandingOrder {
     }[];
 }
 
-interface PaymentRecord {
-    id: number;
-    order_id: number | null;
-    amount_paid: string | number;
-    payment_type: string;
-    status: string;
-    created_at: string;
-    customer: { id: number; name: string };
-    order: { id: number; created_at: string } | null;
-}
-
 function formatCurrency(amount: number) {
     const safeAmount = Number.isFinite(amount) ? Math.abs(amount) : 0;
     return new Intl.NumberFormat("en-MM", {
@@ -97,9 +86,6 @@ export default function OutstandingPage() {
     const [selectedOrder, setSelectedOrder] = useState<OutstandingOrder | null>(
         null
     );
-    const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false);
-    const [allPayments, setAllPayments] = useState<PaymentRecord[]>([]);
-    const [loadingPayments, setLoadingPayments] = useState(false);
     const todayDate = thaiToday();
 
     const normalizeDateRange = (from: string, to: string) => {
@@ -383,153 +369,10 @@ export default function OutstandingPage() {
         return `Until ${formatDate(to)}`;
     };
 
-    const printablePayments = useMemo(() => {
-        const rangeFrom = paymentDate || fromDate;
-        const rangeTo = paymentDate || toDate;
-        return allPayments.filter((p) => {
-            const pDate = toBangkokDateStr(p.created_at);
-            return (
-                (!rangeFrom || pDate >= rangeFrom) &&
-                (!rangeTo || pDate <= rangeTo)
-            );
-        });
-    }, [allPayments, paymentDate, fromDate, toDate]);
-
-    const totalPrintableAmount = useMemo(
-        () =>
-            printablePayments.reduce(
-                (sum, p) => sum + Number(p.amount_paid),
-                0
-            ),
-        [printablePayments]
-    );
-
     return (
         <div className="space-y-6">
-            <style jsx global>{`
-                @media print {
-                    body * {
-                        visibility: hidden !important;
-                    }
-                    .printable,
-                    .printable * {
-                        visibility: visible !important;
-                    }
-                    .printable {
-                        position: absolute;
-                        left: 0;
-                        top: 0;
-                        width: 100%;
-                    }
-                    .no-print {
-                        display: none !important;
-                    }
-                }
-                .print-only {
-                    display: none;
-                }
-                @media print {
-                    .print-only {
-                        display: block;
-                    }
-                }
-            `}</style>
-
-            {/* Hidden print-only section */}
-            <div className="printable print-only">
-                <div className="p-6">
-                    <div className="mb-6">
-                        <div className="text-2xl font-semibold text-gray-900">
-                            Payments by Day
-                        </div>
-                        <div className="text-base font-medium text-black">
-                            Date:{" "}
-                            {paymentDate
-                                ? formatDate(paymentDate)
-                                : formatDateRange(fromDate, toDate)}
-                        </div>
-                        <div className="text-base font-medium text-black">
-                            User: {user?.username ?? "-"}
-                        </div>
-                    </div>
-                    <div className="max-h-[60vh] overflow-y-auto border border-gray-200 rounded-md text-black max-w-[90%] mx-auto">
-                        <table className="w-full text-sm border-collapse text-black">
-                            <thead>
-                                <tr className="bg-blue-600 text-white">
-                                    <th className="border border-blue-500 text-center py-2 px-3">
-                                        Order ID
-                                    </th>
-                                    <th className="border border-blue-500 text-center py-2 px-3">
-                                        Customer
-                                    </th>
-                                    <th className="border border-blue-500 text-center py-2 px-3">
-                                        Order Date
-                                    </th>
-                                    <th className="border border-blue-500 text-center py-2 px-3">
-                                        Payment Date
-                                    </th>
-                                    <th className="border border-blue-500 text-center py-2 px-3">
-                                        Amount
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {printablePayments.length === 0 ? (
-                                    <tr>
-                                        <td
-                                            colSpan={5}
-                                            className="border border-blue-500 py-4 text-center text-gray-500"
-                                        >
-                                            No payments recorded for selected
-                                            dates.
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    printablePayments.map((p) => (
-                                        <tr key={p.id}>
-                                            <td className="border border-blue-500 py-2 px-3">
-                                                {p.order_id ? formatId('ORD', p.order_id) : formatId('PAY', p.id)}
-                                            </td>
-                                            <td className="border border-blue-500 py-2 px-3">
-                                                {p.customer.name}
-                                            </td>
-                                            <td className="border border-blue-500 py-2 px-3">
-                                                {p.order
-                                                    ? formatDate(p.order.created_at)
-                                                    : "-"}
-                                            </td>
-                                            <td className="border border-blue-500 py-2 px-3">
-                                                {formatDate(p.created_at)}
-                                            </td>
-                                            <td className="border border-blue-500 py-2 px-3 text-right">
-                                                {formatCurrency(Number(p.amount_paid))}
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                    <div className="mt-6 max-w-[90%] mx-auto flex gap-4">
-                        <div className="border border-blue-600 bg-blue-50 h-24 w-1/2">
-                            <div className="text-xs text-blue-700 px-2 pt-2">
-                                Payment Accept by
-                            </div>
-                        </div>
-                        <div className="border border-blue-600 bg-blue-50 h-24 w-1/2">
-                            <div className="text-xs text-blue-700 px-2 pt-2">
-                                Total Payment Amount
-                            </div>
-                            <div className="px-2 pt-2 text-base font-semibold text-black">
-                                {formatCurrency(totalPrintableAmount)}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             {/* Main content */}
-            <div className="no-print">
+            <div>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900">
@@ -632,24 +475,6 @@ export default function OutstandingPage() {
                                         ? `for ${formatDateRange(fromDate, toDate)}`
                                         : ""}
                                 </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={async () => {
-                                        setIsPrintDialogOpen(true);
-                                        if (!token) return;
-                                        setLoadingPayments(true);
-                                        try {
-                                            const data = await apiFetch<PaymentRecord[]>("/payments", { token });
-                                            setAllPayments(data);
-                                        } catch { /* silently ignore */ }
-                                        finally { setLoadingPayments(false); }
-                                    }}
-                                >
-                                    Payment List For The Day
-                                </Button>
                             </div>
                             {paymentDateNotice && (
                                 <div className="text-xs text-red-600">
@@ -1036,133 +861,6 @@ export default function OutstandingPage() {
                         )}
                     </CardContent>
                 </Card>
-
-                {/* Print Dialog */}
-                <Dialog
-                    open={isPrintDialogOpen}
-                    onOpenChange={setIsPrintDialogOpen}
-                >
-                    <DialogContent className="w-[794px] h-[1123px] max-w-[95vw] max-h-[90vh] overflow-y-auto">
-                        <DialogHeader className="space-y-1 text-left">
-                            <DialogTitle className="text-2xl font-semibold text-gray-900">
-                                Payments by Day
-                            </DialogTitle>
-                            <div className="text-base font-medium text-black">
-                                Date:{" "}
-                                {paymentDate
-                                    ? formatDate(paymentDate)
-                                    : formatDateRange(fromDate, toDate)}
-                            </div>
-                            <div className="text-base font-medium text-black">
-                                User: {user?.username ?? "-"}
-                            </div>
-                        </DialogHeader>
-                        <div className="space-y-4">
-                            <div className="max-h-[60vh] overflow-y-auto border border-gray-200 rounded-md text-black max-w-[90%] mx-auto">
-                                <table className="w-full text-sm border-collapse text-black">
-                                    <thead>
-                                        <tr className="bg-blue-600 text-white">
-                                            <th className="border border-blue-500 text-center py-2 px-3">
-                                                Order ID
-                                            </th>
-                                            <th className="border border-blue-500 text-center py-2 px-3">
-                                                Customer
-                                            </th>
-                                            <th className="border border-blue-500 text-center py-2 px-3">
-                                                Order Date
-                                            </th>
-                                            <th className="border border-blue-500 text-center py-2 px-3">
-                                                Payment Date
-                                            </th>
-                                            <th className="border border-blue-500 text-center py-2 px-3">
-                                                Amount
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {loadingPayments ? (
-                                            <tr>
-                                                <td
-                                                    colSpan={5}
-                                                    className="border border-blue-500 py-4 text-center text-gray-500"
-                                                >
-                                                    Loading payments...
-                                                </td>
-                                            </tr>
-                                        ) : printablePayments.length === 0 ? (
-                                            <tr>
-                                                <td
-                                                    colSpan={5}
-                                                    className="border border-blue-500 py-4 text-center text-gray-500"
-                                                >
-                                                    No payments recorded for
-                                                    selected dates.
-                                                </td>
-                                            </tr>
-                                        ) : (
-                                            printablePayments.map((p) => (
-                                                <tr key={p.id}>
-                                                    <td className="border border-blue-500 py-2 px-3">
-                                                        {p.order_id ? formatId('ORD', p.order_id) : formatId('PAY', p.id)}
-                                                    </td>
-                                                    <td className="border border-blue-500 py-2 px-3">
-                                                        {p.customer.name}
-                                                    </td>
-                                                    <td className="border border-blue-500 py-2 px-3">
-                                                        {p.order
-                                                            ? formatDate(p.order.created_at)
-                                                            : "-"}
-                                                    </td>
-                                                    <td className="border border-blue-500 py-2 px-3">
-                                                        {formatDate(p.created_at)}
-                                                    </td>
-                                                    <td className="border border-blue-500 py-2 px-3 text-right">
-                                                        {formatCurrency(
-                                                            Number(p.amount_paid)
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            ))
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div className="mt-6 max-w-[90%] mx-auto flex gap-4">
-                                <div className="border border-blue-600 bg-blue-50 h-24 w-1/2">
-                                    <div className="text-xs text-blue-700 px-2 pt-2">
-                                        Payment Accept by
-                                    </div>
-                                </div>
-                                <div className="border border-blue-600 bg-blue-50 h-24 w-1/2">
-                                    <div className="text-xs text-blue-700 px-2 pt-2">
-                                        Total Payment Amount
-                                    </div>
-                                    <div className="px-2 pt-2 text-base font-semibold text-black">
-                                        {formatCurrency(totalPrintableAmount)}
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="max-w-[90%] mx-auto flex items-center justify-end gap-2">
-                                <Button
-                                    variant="outline"
-                                    className="h-9 w-24"
-                                    onClick={() => setIsPrintDialogOpen(false)}
-                                >
-                                    Close
-                                </Button>
-                                <Button
-                                    className="bg-blue-600 hover:bg-blue-700 text-white h-9 w-24"
-                                    onClick={() => {
-                                        setIsPrintDialogOpen(false);
-                                        window.print();
-                                    }}
-                                >
-                                    Print
-                                </Button>
-                            </div>
-                        </div>
-                    </DialogContent>
-                </Dialog>
 
                 {/* Order Detail Dialog */}
                 <Dialog

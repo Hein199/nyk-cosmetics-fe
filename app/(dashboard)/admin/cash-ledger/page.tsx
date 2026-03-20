@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
+import { MAX_DECIMAL_12_2_INTEGER } from "@/lib/constants";
 import { thaiToday, formatThaiDate } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -137,6 +138,12 @@ export default function CashLedgerPage() {
     const [modalSaving, setModalSaving] = useState(false);
     const [modalError, setModalError] = useState<string | null>(null);
     const isModalDateInvalid = Boolean(modalDate && modalDate > todayDate);
+    const parsedModalAmount = Number(modalAmount);
+    const isModalAmountInvalid = modalAmount !== "" && (
+        !Number.isFinite(parsedModalAmount)
+        || parsedModalAmount <= 0
+        || parsedModalAmount > MAX_DECIMAL_12_2_INTEGER
+    );
 
     // Delete confirmation
     const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -215,14 +222,29 @@ export default function CashLedgerPage() {
     };
 
     const handleModalAmountChange = (value: string) => {
+        if (value === "") {
+            setModalAmount("");
+            return;
+        }
+
         const digitsOnly = value.replace(/\D/g, "");
+        if (digitsOnly === "") {
+            setModalAmount("");
+            return;
+        }
+
         const normalized = digitsOnly.replace(/^0+(?=\d)/, "");
-        setModalAmount(normalized);
+        const parsed = Number(normalized);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+            setModalAmount("");
+            return;
+        }
+
+        setModalAmount(String(Math.min(MAX_DECIMAL_12_2_INTEGER, parsed)));
     };
 
     const handleModalAmountBlur = () => {
-        const normalized = modalAmount.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
-        setModalAmount(normalized);
+        handleModalAmountChange(modalAmount);
     };
 
     const preventInvalidAmountKeys = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -248,6 +270,10 @@ export default function CashLedgerPage() {
         const parsed = Number(rawAmount);
         if (isNaN(parsed) || parsed <= 0) {
             setModalError("Amount must be greater than 0.");
+            return;
+        }
+        if (parsed > MAX_DECIMAL_12_2_INTEGER) {
+            setModalError(`Amount must not exceed ${MAX_DECIMAL_12_2_INTEGER.toLocaleString()} MMK.`);
             return;
         }
 
@@ -662,6 +688,13 @@ export default function CashLedgerPage() {
                         {modalError && (
                             <p className="text-sm text-red-600">{modalError}</p>
                         )}
+                        {isModalAmountInvalid && !modalError && (
+                            <p className="text-sm text-red-600">
+                                {Number(modalAmount) > MAX_DECIMAL_12_2_INTEGER
+                                    ? `Amount must not exceed ${MAX_DECIMAL_12_2_INTEGER.toLocaleString()} MMK.`
+                                    : "Amount must be greater than 0."}
+                            </p>
+                        )}
                         {isModalDateInvalid && (
                             <p className="text-sm text-red-600">
                                 Date cannot be in the future.
@@ -686,6 +719,7 @@ export default function CashLedgerPage() {
                                 !modalAmount ||
                                 !modalDescription ||
                                 !modalDate ||
+                                isModalAmountInvalid ||
                                 isModalDateInvalid
                             }
                             className="h-10 px-4 bg-pink-600 hover:bg-pink-700 text-white"
