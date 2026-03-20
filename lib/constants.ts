@@ -12,3 +12,9 @@ export const INVENTORY_UNITS = {
     PACKAGE: 'PK',
     BOX: 'P',
 } as const;
+
+// DB-safe numeric limits used by frontend form caps.
+// Decimal(12,2) allows up to 9,999,999,999.99.
+export const MAX_DECIMAL_12_2_INTEGER = 9_999_999_999;
+// PostgreSQL int4 upper bound.
+export const MAX_INT_32 = 2_147_483_647;

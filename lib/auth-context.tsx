@@ -85,10 +85,29 @@ const normalizeRole = (role: string): AuthUser["role"] => {
     return normalized === "admin" ? "admin" : "salesperson";
 };
 
+const syncStoredUser = (user: AuthUser) => {
+    if (typeof window === "undefined") {
+        return;
+    }
+
+    if (sessionStorage.getItem(STORAGE_KEYS.token)) {
+        sessionStorage.setItem(STORAGE_KEYS.user, JSON.stringify(user));
+    }
+    if (localStorage.getItem(STORAGE_KEYS.token)) {
+        localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(user));
+    }
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<AuthUser | null>(null);
     const [token, setToken] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+
+    const forceLogout = useCallback(() => {
+        clearStoredAuth();
+        setUser(null);
+        setToken(null);
+    }, []);
 
     useEffect(() => {
         const stored = getStoredAuth();
@@ -142,10 +161,76 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const logout = useCallback(() => {
-        clearStoredAuth();
-        setUser(null);
-        setToken(null);
-    }, []);
+        forceLogout();
+    }, [forceLogout]);
+
+    const validateCurrentSession = useCallback(async () => {
+        if (!token || !user) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/_api/users/me`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            if (!response.ok) {
+                if (response.status === 401 || response.status === 403) {
+                    forceLogout();
+                }
+                return;
+            }
+
+            const data = (await response.json()) as {
+                username?: string;
+                role?: string;
+            };
+
+            const nextRole = normalizeRole(data.role ?? user.role);
+            if (nextRole !== user.role) {
+                forceLogout();
+                return;
+            }
+
+            const nextUsername = data.username?.trim() || user.username;
+            if (nextUsername !== user.username) {
+                const nextUser: AuthUser = {
+                    ...user,
+                    username: nextUsername,
+                    role: nextRole,
+                };
+                setUser(nextUser);
+                syncStoredUser(nextUser);
+            }
+        } catch {
+            // Ignore transient network errors and retry on next cycle/focus.
+        }
+    }, [token, user, forceLogout]);
+
+    useEffect(() => {
+        if (!token || !user || typeof window === "undefined") {
+            return;
+        }
+
+        void validateCurrentSession();
+
+        const intervalId = window.setInterval(() => {
+            void validateCurrentSession();
+        }, 30_000);
+
+        const handleWindowFocus = () => {
+            void validateCurrentSession();
+        };
+
+        window.addEventListener("focus", handleWindowFocus);
+
+        return () => {
+            window.clearInterval(intervalId);
+            window.removeEventListener("focus", handleWindowFocus);
+        };
+    }, [token, user, validateCurrentSession]);
 
     const value = useMemo(
         () => ({ user, token, loading, login, logout }),

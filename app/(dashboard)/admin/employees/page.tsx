@@ -120,6 +120,8 @@ const MOCK_SALARIES: SalaryRecord[] = [
 
 const BONUS_TYPES = ["Attendance Bonus", "Performance Bonus", "Outstanding Bonus"];
 const DEDUCTION_TYPES = ["Late", "Absent", "Damage", "Other"];
+const MAX_BASIC_SALARY = 9_999_999_999;
+const MAX_SALARY_DISPLAY = MAX_BASIC_SALARY.toLocaleString("en-US");
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -160,6 +162,10 @@ function toLocalDateInputValue(date: Date): string {
 function sanitizeAmountInput(value: string) {
     const digitsOnly = value.replace(/\D/g, "");
     return digitsOnly.replace(/^0+(?=\d)/, "");
+}
+
+function sanitizeBasicSalaryInput(value: string) {
+    return sanitizeAmountInput(value).slice(0, String(MAX_BASIC_SALARY).length);
 }
 
 const emptyEmployee = {
@@ -351,6 +357,9 @@ export default function EmployeesPage() {
         if (!/^[1-9]\d*$/.test(String(empForm.basic_salary).trim())) {
             return "Basic salary must be greater than 0.";
         }
+        if (Number(String(empForm.basic_salary).trim()) > MAX_BASIC_SALARY) {
+            return `Basic salary must not exceed ${MAX_BASIC_SALARY.toLocaleString("en-US")}.`;
+        }
         if (!empForm.start_date) return "Start date is required.";
         if (empForm.start_date > todayDate) {
             return "Start date cannot be in the future.";
@@ -469,6 +478,12 @@ export default function EmployeesPage() {
             return;
         }
 
+        const basicSalaryAmount = Number(rawBasicSalary);
+        if (basicSalaryAmount > MAX_BASIC_SALARY) {
+            setSalError(`Basic salary must not exceed ${MAX_SALARY_DISPLAY}.`);
+            return;
+        }
+
         const activeBonuses = salBonuses.filter((b) => b.type && b.amount);
         const activeDeductions = salDeductions.filter((d) => d.type && d.amount);
 
@@ -478,9 +493,53 @@ export default function EmployeesPage() {
             return;
         }
 
+        const hasBonusAmountOverMax = activeBonuses.some(
+            (b) => Number(String(b.amount).trim()) > MAX_BASIC_SALARY
+        );
+        if (hasBonusAmountOverMax) {
+            setSalError(`Bonus amount must not exceed ${MAX_SALARY_DISPLAY}.`);
+            return;
+        }
+
         const hasInvalidDeductionAmount = activeDeductions.some((d) => !/^[1-9]\d*$/.test(String(d.amount).trim()));
         if (hasInvalidDeductionAmount) {
             setSalError("Deduction amount must be greater than 0.");
+            return;
+        }
+
+        const hasDeductionAmountOverMax = activeDeductions.some(
+            (d) => Number(String(d.amount).trim()) > MAX_BASIC_SALARY
+        );
+        if (hasDeductionAmountOverMax) {
+            setSalError(`Deduction amount must not exceed ${MAX_SALARY_DISPLAY}.`);
+            return;
+        }
+
+        const totalBonusAmount = activeBonuses.reduce(
+            (sum, bonus) => sum + Number(String(bonus.amount).trim()),
+            0
+        );
+        if (totalBonusAmount > MAX_BASIC_SALARY) {
+            setSalError(`Total bonus must not exceed ${MAX_SALARY_DISPLAY}.`);
+            return;
+        }
+
+        const totalDeductionAmount = activeDeductions.reduce(
+            (sum, deduction) => sum + Number(String(deduction.amount).trim()),
+            0
+        );
+        if (totalDeductionAmount > MAX_BASIC_SALARY) {
+            setSalError(`Total deduction must not exceed ${MAX_SALARY_DISPLAY}.`);
+            return;
+        }
+
+        const netSalaryAmount = basicSalaryAmount + totalBonusAmount - totalDeductionAmount;
+        if (netSalaryAmount < 0) {
+            setSalError("Total salary must be greater than or equal to 0.");
+            return;
+        }
+        if (netSalaryAmount > MAX_BASIC_SALARY) {
+            setSalError(`Total salary must not exceed ${MAX_SALARY_DISPLAY}.`);
             return;
         }
 
@@ -514,7 +573,7 @@ export default function EmployeesPage() {
             const next = [...prev];
             next[index] = {
                 ...next[index],
-                [field]: field === "amount" ? sanitizeAmountInput(value) : value,
+                [field]: field === "amount" ? sanitizeBasicSalaryInput(value) : value,
             };
             return next;
         });
@@ -525,7 +584,7 @@ export default function EmployeesPage() {
             const next = [...prev];
             next[index] = {
                 ...next[index],
-                [field]: field === "amount" ? sanitizeAmountInput(value) : value,
+                [field]: field === "amount" ? sanitizeBasicSalaryInput(value) : value,
             };
             return next;
         });
@@ -846,17 +905,18 @@ export default function EmployeesPage() {
                                     type="text"
                                     inputMode="numeric"
                                     pattern="[0-9]*"
+                                    maxLength={10}
                                     value={empForm.basic_salary}
                                     onChange={(e) =>
                                         setEmpForm((f) => ({
                                             ...f,
-                                            basic_salary: sanitizeAmountInput(e.target.value),
+                                            basic_salary: sanitizeBasicSalaryInput(e.target.value),
                                         }))
                                     }
                                     onBlur={() =>
                                         setEmpForm((f) => ({
                                             ...f,
-                                            basic_salary: sanitizeAmountInput(f.basic_salary),
+                                            basic_salary: sanitizeBasicSalaryInput(f.basic_salary),
                                         }))
                                     }
                                     onKeyDown={preventInvalidAmountKeys}
@@ -1035,6 +1095,7 @@ export default function EmployeesPage() {
                                             type="text"
                                             inputMode="numeric"
                                             pattern="[0-9]*"
+                                            maxLength={10}
                                             className="w-full"
                                             placeholder="Amount"
                                             value={bonus.amount}
@@ -1070,6 +1131,7 @@ export default function EmployeesPage() {
                                             type="text"
                                             inputMode="numeric"
                                             pattern="[0-9]*"
+                                            maxLength={10}
                                             className="w-full"
                                             placeholder="Amount"
                                             value={deduction.amount}

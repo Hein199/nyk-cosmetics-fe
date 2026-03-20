@@ -97,21 +97,33 @@ export function CartProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('salesperson-remark', remark);
     }, [cart, selectedCustomer, customerSearch, orderDate, paymentType, remark]);
     const addToCart = useCallback((productId: number, quantity: number, unit: string, customPrice?: number, productName?: string, productPrice?: number) => {
-        if (!productName || !productPrice) return;
+        if (!productName || productPrice === undefined || productPrice === null) return;
 
-        const finalPrice = customPrice !== undefined ? customPrice : productPrice;
+        const basePrice = Number(productPrice);
+        if (!Number.isFinite(basePrice) || basePrice <= 0) return;
+        if (!Number.isFinite(quantity) || quantity <= 0) return;
+
+        const normalizedCustomPrice =
+            customPrice !== undefined && Number.isFinite(customPrice) && customPrice > 0 && customPrice !== basePrice
+                ? customPrice
+                : undefined;
+        const finalPrice = normalizedCustomPrice ?? basePrice;
+        const priceKey = finalPrice.toFixed(6);
 
         setCart(prevCart => {
             const existingIndex = prevCart.findIndex(
-                (item) => item.id === productId && item.unit === unit
+                (item) =>
+                    item.id === productId &&
+                    item.unit === unit &&
+                    (item.customPrice ?? item.price).toFixed(6) === priceKey,
             );
 
             if (existingIndex === -1) {
                 const newItem: CartItem = {
                     id: productId,
                     name: productName,
-                    price: productPrice,
-                    customPrice,
+                    price: basePrice,
+                    customPrice: normalizedCustomPrice,
                     quantity,
                     unit,
                     total: quantity * finalPrice,

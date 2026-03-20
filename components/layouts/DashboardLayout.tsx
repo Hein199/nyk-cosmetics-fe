@@ -143,6 +143,7 @@ export default function DashboardLayout({
     const { user, loading, logout } = useAuth();
 
     const resolvedRole = user?.role ?? userRole;
+    const resolvedRoleLabel = resolvedRole === "admin" ? "Admin" : "Salesperson";
     const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
     const [profileUsername, setProfileUsername] = useState<string | null>(null);
     const [systemName, setSystemName] = useState("NYK Cosmetics");
@@ -363,9 +364,14 @@ export default function DashboardLayout({
                                         </span>
                                     )}
                                 </div>
-                                <span className="hidden sm:block text-sm font-medium text-gray-700">
-                                    {resolvedName}
-                                </span>
+                                <div className="flex flex-col items-start leading-tight">
+                                    <span className="hidden sm:block text-sm font-medium text-gray-700">
+                                        {resolvedName}
+                                    </span>
+                                    <span className="text-[11px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 rounded-full px-2 py-0.5">
+                                        {resolvedRoleLabel}
+                                    </span>
+                                </div>
                             </Link>
                         </div>
                     </div>

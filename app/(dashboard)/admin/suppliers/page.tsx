@@ -180,6 +180,7 @@ export default function SuppliersPage() {
     const [addOpen, setAddOpen] = useState(false);
     const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
     const [deletingSupplier, setDeletingSupplier] = useState<Supplier | null>(null);
+    const [deleteError, setDeleteError] = useState("");
     const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
     const [supplierPurchases, setSupplierPurchases] = useState<SupplierPurchase[]>([]);
     const [purchasesLoading, setPurchasesLoading] = useState(false);
@@ -283,7 +284,12 @@ export default function SuppliersPage() {
                         <Button
                             size="sm"
                             className="bg-red-600 hover:bg-red-700 text-white"
-                            onClick={() => setDeletingSupplier(selectedSupplier)}
+                            disabled={purchasesLoading || supplierPurchases.length > 0}
+                            title={supplierPurchases.length > 0 ? "Cannot delete a supplier with linked purchases" : undefined}
+                            onClick={() => {
+                                setDeleteError("");
+                                setDeletingSupplier(selectedSupplier);
+                            }}
                         >
                             Delete
                         </Button>
@@ -486,20 +492,40 @@ export default function SuppliersPage() {
                             <p className="text-sm text-gray-600">
                                 Are you sure you want to delete <span className="font-semibold">{deletingSupplier.name}</span>?
                             </p>
+                            {deleteError && (
+                                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                                    {deleteError}
+                                </p>
+                            )}
                             <div className="flex justify-end gap-2 mt-4">
-                                <Button variant="outline" onClick={() => setDeletingSupplier(null)}>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setDeleteError("");
+                                        setDeletingSupplier(null);
+                                    }}
+                                >
                                     Cancel
                                 </Button>
                                 <Button
                                     className="bg-red-600 hover:bg-red-700 text-white"
                                     onClick={async () => {
-                                        await apiFetch(`/suppliers/${deletingSupplier.id}`, {
-                                            method: "DELETE",
-                                            token,
-                                        });
-                                        queryClient.invalidateQueries({ queryKey: ["admin-suppliers"] });
-                                        setDeletingSupplier(null);
-                                        setSelectedSupplier(null);
+                                        try {
+                                            await apiFetch(`/suppliers/${deletingSupplier.id}`, {
+                                                method: "DELETE",
+                                                token,
+                                            });
+                                            queryClient.invalidateQueries({ queryKey: ["admin-suppliers"] });
+                                            setDeleteError("");
+                                            setDeletingSupplier(null);
+                                            setSelectedSupplier(null);
+                                        } catch (error) {
+                                            setDeleteError(
+                                                error instanceof Error
+                                                    ? error.message
+                                                    : "Failed to delete supplier",
+                                            );
+                                        }
                                     }}
                                 >
                                     Delete
