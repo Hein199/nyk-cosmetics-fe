@@ -382,10 +382,22 @@ export default function OrdersPage() {
         }
     };
 
+    const getEditedItemDefaults = (itemId: number) => {
+        const sourceItem = orderDetails?.items.find((item) => item.id === itemId);
+        const sourceUnitType = sourceItem?.unit_type ?? "Pcs";
+        const unitMultiplier = getOrderUnitMultiplier(sourceUnitType);
+
+        return {
+            quantity: sourceItem?.quantity ?? 0,
+            unit_price: sourceItem ? Number(sourceItem.unit_price) / Math.max(unitMultiplier, 1) : 0,
+            unit_type: sourceUnitType,
+        };
+    };
+
     const updateEditedItem = (itemId: number, field: "quantity" | "unit_price" | "unit_type", value: number | string) => {
         setEditedItems((prev) => ({
             ...prev,
-            [itemId]: { ...prev[itemId], [field]: value },
+            [itemId]: { ...(prev[itemId] ?? getEditedItemDefaults(itemId)), [field]: value },
         }));
     };
 
@@ -899,9 +911,9 @@ export default function OrdersPage() {
                                             <tbody>
                                                 {orderDetails.items.map((item, index) => {
                                                     const edited = editedItems[item.id];
-                                                    const qty = isEditMode && edited ? edited.quantity : item.quantity;
-                                                    const unitPrice = isEditMode && edited ? edited.unit_price : Number(item.unit_price);
-                                                    const unitType = isEditMode && edited ? edited.unit_type : item.unit_type;
+                                                    const qty = isEditMode ? (edited?.quantity ?? item.quantity) : item.quantity;
+                                                    const unitPrice = isEditMode ? (edited?.unit_price ?? Number(item.unit_price)) : Number(item.unit_price);
+                                                    const unitType = isEditMode ? (edited?.unit_type ?? item.unit_type) : item.unit_type;
                                                     const total = isEditMode
                                                         ? unitPrice * qty * getOrderUnitMultiplier(unitType)
                                                         : unitPrice * qty;
@@ -925,7 +937,7 @@ export default function OrdersPage() {
                                                             <td className="py-3 px-4 text-center text-gray-700 font-medium border-r border-gray-300">
                                                                 {isEditMode ? (
                                                                     <select
-                                                                        value={unitType}
+                                                                        value={unitType ?? "Pcs"}
                                                                         onChange={(e) => handleEditedUnitTypeChange(item.id, e.target.value)}
                                                                         className="h-8 w-24 rounded border border-gray-300 bg-white px-2 text-xs text-gray-900"
                                                                     >
@@ -1007,9 +1019,9 @@ export default function OrdersPage() {
                                                             orderDetails.items.reduce(
                                                                 (sum, item) => {
                                                                     const edited = isEditMode ? editedItems[item.id] : undefined;
-                                                                    const qty = edited ? edited.quantity : item.quantity;
-                                                                    const up = edited ? edited.unit_price : Number(item.unit_price);
-                                                                    const unitType = edited ? edited.unit_type : item.unit_type;
+                                                                    const qty = edited?.quantity ?? item.quantity;
+                                                                    const up = edited?.unit_price ?? Number(item.unit_price);
+                                                                    const unitType = edited?.unit_type ?? item.unit_type;
                                                                     const multiplier = isEditMode ? getOrderUnitMultiplier(unitType) : 1;
                                                                     return sum + up * qty * multiplier;
                                                                 },
@@ -1026,9 +1038,9 @@ export default function OrdersPage() {
                                                                 isEditMode
                                                                     ? orderDetails.items.reduce((sum, item) => {
                                                                         const edited = editedItems[item.id];
-                                                                        const qty = edited ? edited.quantity : item.quantity;
-                                                                        const up = edited ? edited.unit_price : Number(item.unit_price);
-                                                                        const unitType = edited ? edited.unit_type : item.unit_type;
+                                                                        const qty = edited?.quantity ?? item.quantity;
+                                                                        const up = edited?.unit_price ?? Number(item.unit_price);
+                                                                        const unitType = edited?.unit_type ?? item.unit_type;
                                                                         return sum + up * qty * getOrderUnitMultiplier(unitType);
                                                                     }, 0)
                                                                     : Number(orderDetails.total_amount)
