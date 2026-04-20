@@ -570,7 +570,7 @@ export default function AdminPurchasePage() {
                 </div>
             )}
 
-            <div className="grid grid-cols-1 xl:grid-cols-[1.5fr_1fr] gap-6 items-start">
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,440px)] gap-6 items-start">
                 <Card>
                     <CardHeader className="space-y-4">
                         <CardTitle className="text-lg">Product Database</CardTitle>
@@ -658,7 +658,7 @@ export default function AdminPurchasePage() {
                     </CardContent>
                 </Card>
 
-                <Card className="xl:sticky xl:top-20">
+                <Card className="w-full xl:max-w-[440px] xl:justify-self-end xl:sticky xl:top-20">
                     <CardHeader className="space-y-3">
                         <CardTitle className="text-lg">Purchase Panel</CardTitle>
                         <div className="inline-flex rounded-lg bg-gray-100 p-1">
