@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
-import { formatId, thaiToday, thaiOffsetDay, formatThaiDate } from "@/lib/utils";
+import { formatId, thaiToday, thaiOffsetDay, formatThaiDate, formatMyanmarTime } from "@/lib/utils";
 
 type OrderListItem = {
     id: number;
@@ -157,10 +157,7 @@ export default function SalespersonPage() {
         return orders
             .map((order) => {
                 const dateKey = toDateKey(order.created_at);
-                const timeLabel = new Date(order.created_at).toLocaleTimeString("en-US", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                });
+                const timeLabel = formatMyanmarTime(order.created_at);
                 return {
                     id: order.id,
                     customer: order.customer?.name ?? "Unknown customer",
@@ -173,7 +170,7 @@ export default function SalespersonPage() {
             })
             .filter((order) => order.date >= fromDate && order.date <= toDate)
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-            }, [orders, fromDate, toDate, isDateRangeInvalid]);
+    }, [orders, fromDate, toDate, isDateRangeInvalid]);
 
     // Calculate statistics for the date range
     const rangeStats = useMemo(() => {
@@ -236,6 +233,7 @@ export default function SalespersonPage() {
         const [year, month] = monthString.split('-');
         const date = new Date(parseInt(year), parseInt(month) - 1);
         return date.toLocaleDateString('en-US', {
+            timeZone: "Asia/Yangon",
             year: 'numeric',
             month: 'long'
         });
@@ -299,7 +297,7 @@ export default function SalespersonPage() {
                     </p>
                     {lastUpdated && (
                         <p className="text-xs text-gray-400 mt-2">
-                            Last updated {lastUpdated.toLocaleTimeString()}
+                            Last updated {formatMyanmarTime(lastUpdated)}
                         </p>
                     )}
                     {ordersQueryError && (
@@ -461,7 +459,7 @@ export default function SalespersonPage() {
                                     <label className="text-sm font-medium text-gray-700 mb-2">
                                         Date Range
                                     </label>
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                                         <div className="flex flex-col">
                                             <label htmlFor="from-date" className="text-xs text-gray-500 mb-1">
                                                 From
@@ -473,7 +471,7 @@ export default function SalespersonPage() {
                                                 onChange={(e) => handleFromDate(e.target.value)}
                                                 lang="en-US"
                                                 max={toDate || todayDate}
-                                                className={`w-36 h-9 px-3 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
+                                                className={`w-full sm:w-36 h-9 px-3 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
                                                     ? "border-red-300 focus:ring-red-500 focus:border-red-500"
                                                     : "border-gray-300 focus:ring-pink-500 focus:border-pink-500"}`}
                                             />
@@ -489,7 +487,7 @@ export default function SalespersonPage() {
                                                 onChange={(e) => handleToDate(e.target.value)}
                                                 lang="en-US"
                                                 max={todayDate}
-                                                className={`w-36 h-9 px-3 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
+                                                className={`w-full sm:w-36 h-9 px-3 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
                                                     ? "border-red-300 focus:ring-red-500 focus:border-red-500"
                                                     : "border-gray-300 focus:ring-pink-500 focus:border-pink-500"}`}
                                                 min={fromDate}
@@ -504,12 +502,12 @@ export default function SalespersonPage() {
                                 </div>
                             </div>
 
-                            <div className="flex flex-nowrap gap-3 pt-6">
+                            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 pt-2 lg:pt-6">
                                 <Button
                                     size="sm"
                                     variant="outline"
                                     onClick={() => setPresetRange('today')}
-                                    className="text-xs px-3 py-1.5 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-9 w-36"
+                                    className="text-xs px-3 py-1.5 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-9 w-full sm:w-36"
                                 >
                                     Today
                                 </Button>
@@ -517,7 +515,7 @@ export default function SalespersonPage() {
                                     size="sm"
                                     variant="outline"
                                     onClick={() => setPresetRange('last7days')}
-                                    className="text-xs px-3 py-1.5 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-9 w-36"
+                                    className="text-xs px-3 py-1.5 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-9 w-full sm:w-36"
                                 >
                                     Last 7 Days
                                 </Button>
@@ -525,7 +523,7 @@ export default function SalespersonPage() {
                                     size="sm"
                                     variant="outline"
                                     onClick={() => setPresetRange('thisMonth')}
-                                    className="text-xs px-3 py-1.5 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-9 w-36"
+                                    className="text-xs px-3 py-1.5 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-9 w-full sm:w-36"
                                 >
                                     This Month
                                 </Button>
@@ -533,14 +531,14 @@ export default function SalespersonPage() {
                                     size="sm"
                                     variant="outline"
                                     onClick={() => setPresetRange('last30days')}
-                                    className="text-xs px-3 py-1.5 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-9 w-36"
+                                    className="text-xs px-3 py-1.5 rounded-lg hover:bg-pink-50 hover:border-pink-300 h-9 w-full sm:w-36"
                                 >
                                     Last 30 Days
                                 </Button>
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    className="text-xs px-3 py-1.5 rounded-lg hover:bg-gray-50 h-9 w-36"
+                                    className="text-xs px-3 py-1.5 rounded-lg hover:bg-gray-50 h-9 w-full sm:w-36"
                                     onClick={() => router.push("/salesperson/orders")}
                                 >
                                     View All Orders

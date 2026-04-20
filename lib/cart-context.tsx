@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from "react";
+import { thaiToday } from "@/lib/utils";
 
 export interface CartItem {
     id: number;
@@ -37,7 +38,7 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 function getLocalDateString() {
-    return new Date().toLocaleDateString("en-CA");
+    return thaiToday();
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {

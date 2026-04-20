@@ -19,7 +19,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import { MAX_DECIMAL_12_2_INTEGER } from "@/lib/constants";
-import { thaiToday, toBangkokDateStr } from "@/lib/utils";
+import { thaiToday, toBangkokDateStr, formatThaiDate } from "@/lib/utils";
 
 interface Expense {
     id: number;
@@ -286,7 +286,7 @@ export default function ExpensesPage() {
                             </CardDescription>
                         </div>
                         <div className="flex flex-col sm:flex-row gap-4">
-                            <div className="flex items-center gap-3">
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 w-full sm:w-auto">
                                 <div className="flex flex-col">
                                     <label className="text-xs text-gray-500 mb-1">
                                         From
@@ -296,7 +296,7 @@ export default function ExpensesPage() {
                                         value={fromDate}
                                         onChange={(e) => handleFromDate(e.target.value)}
                                         max={toDate || todayDate}
-                                        className={`w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
+                                        className={`w-full sm:w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
                                             ? "border-red-300 focus:ring-red-500"
                                             : "border-gray-300 focus:ring-pink-500"}`}
                                     />
@@ -310,7 +310,7 @@ export default function ExpensesPage() {
                                         value={toDate}
                                         onChange={(e) => handleToDate(e.target.value)}
                                         max={todayDate}
-                                        className={`w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
+                                        className={`w-full sm:w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
                                             ? "border-red-300 focus:ring-red-500"
                                             : "border-gray-300 focus:ring-pink-500"}`}
                                         min={fromDate}
@@ -318,12 +318,12 @@ export default function ExpensesPage() {
                                 </div>
                                 <div className="flex flex-col">
                                     <label className="text-xs text-transparent mb-1">.</label>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 w-full sm:w-auto">
                                         <Button
                                             size="sm"
                                             variant="outline"
                                             onClick={handleTodayDateRange}
-                                            className="text-xs h-10 w-16"
+                                            className="text-xs h-10 w-full sm:w-16"
                                         >
                                             Today
                                         </Button>
@@ -400,9 +400,7 @@ export default function ExpensesPage() {
                                                     {e.expenseCode}
                                                 </td>
                                                 <td className="py-3 px-4 text-sm text-gray-500">
-                                                    {new Date(
-                                                        e.created_at
-                                                    ).toLocaleDateString()}
+                                                    {formatThaiDate(e.created_at)}
                                                 </td>
                                                 <td className="py-3 px-4 font-medium text-gray-900">
                                                     {e.description}

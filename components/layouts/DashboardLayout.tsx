@@ -232,7 +232,7 @@ export default function DashboardLayout({
             >
                 {/* Logo */}
                 <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200">
-                    <Link href={resolvedRole === "admin" ? "/admin" : "/salesperson"} className="flex items-center gap-2">
+                    <Link href={resolvedRole === "admin" ? "/admin" : "/salesperson"} className="flex items-center gap-2 min-w-0">
                         <div className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden bg-gradient-to-br from-pink-500 to-rose-600">
                             {systemLogo ? (
                                 <img src={systemLogo} alt="Logo" className="w-full h-full object-cover" />
@@ -240,7 +240,7 @@ export default function DashboardLayout({
                                 <span className="text-white text-sm font-bold">{systemName.charAt(0)}</span>
                             )}
                         </div>
-                        <span className="font-semibold text-gray-900">{systemName}</span>
+                        <span className="hidden sm:block font-semibold text-gray-900 truncate max-w-[140px]">{systemName}</span>
                     </Link>
                     <button
                         className="lg:hidden p-1 rounded-md hover:bg-gray-100"
@@ -323,7 +323,7 @@ export default function DashboardLayout({
             <div className="lg:pl-64">
                 {/* Top navigation bar */}
                 <header className="h-16 bg-white border-b border-gray-200 sticky top-0 z-30">
-                    <div className="h-full px-4 flex items-center justify-between">
+                    <div className="h-full px-3 sm:px-4 flex items-center justify-between">
                         {/* Mobile menu button */}
                         <button
                             className="lg:hidden p-2 rounded-md hover:bg-gray-100"
@@ -346,14 +346,14 @@ export default function DashboardLayout({
                         </Link>
 
                         {/* Right side items */}
-                        <div className="flex items-center gap-3 ml-auto">
+                        <div className="flex items-center gap-2 sm:gap-3 ml-auto min-w-0">
                             {/* Cart Button - salesperson only */}
                             {resolvedRole === "salesperson" && <CartButton />}
 
                             {/* User avatar - links to profile */}
                             <Link
                                 href={`/${resolvedRole}/profile`}
-                                className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100"
+                                className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 min-w-0"
                             >
                                 <div className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden bg-gradient-to-br from-pink-400 to-rose-500">
                                     {profilePhoto ? (
@@ -365,7 +365,7 @@ export default function DashboardLayout({
                                     )}
                                 </div>
                                 <div className="flex flex-col items-start leading-tight">
-                                    <span className="hidden sm:block text-sm font-medium text-gray-700">
+                                    <span className="hidden sm:block text-sm font-medium text-gray-700 truncate max-w-[120px]">
                                         {resolvedName}
                                     </span>
                                     <span className="text-[11px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 rounded-full px-2 py-0.5">
@@ -378,7 +378,7 @@ export default function DashboardLayout({
                 </header>
 
                 {/* Page content */}
-                <main className="p-4 lg:p-6 bg-[#FFCDC9] min-h-screen">
+                <main className="p-3 sm:p-4 lg:p-6 bg-[#FFCDC9] min-h-screen">
                     {children}
                 </main>
             </div>

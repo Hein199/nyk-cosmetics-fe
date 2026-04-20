@@ -410,80 +410,86 @@ export default function CustomersPage() {
                             </span>
                         </span>
                     </div>
-                    <table className="w-full text-sm">
-                        <thead>
-                            <tr>
-                                {["Date", "Order ID", "Status", "Total", "Paid", "Remaining", "Actions"].map((h, i) => (
-                                    <th
-                                        key={h}
-                                        className={`py-2.5 px-4 text-sm font-medium text-white bg-blue-600 ${i !== 0 ? "border-l border-blue-500/40" : ""
-                                            } ${h === "Actions" ? "text-center" : "text-left"}`}
-                                    >
-                                        {h}
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {ordersLoading ? (
+                    <div className="overflow-x-auto">
+                        <table className="w-full min-w-[780px] text-sm">
+                            <thead>
                                 <tr>
-                                    <td colSpan={7} className="py-8 text-center text-gray-400">Loading orders…</td>
+                                    {["Date", "Order ID", "Status", "Total", "Paid", "Remaining", "Actions"].map((h, i) => (
+                                        <th
+                                            key={h}
+                                            className={`py-2.5 px-4 text-sm font-medium text-white bg-blue-600 ${i !== 0 ? "border-l border-blue-500/40" : ""
+                                                } ${h === "Actions" ? "text-center" : "text-left"}`}
+                                        >
+                                            {h}
+                                        </th>
+                                    ))}
                                 </tr>
-                            ) : customerOrders.length === 0 ? (
-                                <tr>
-                                    <td colSpan={7} className="py-8 text-center text-gray-400">No orders found.</td>
-                                </tr>
-                            ) : (
-                                customerOrders.map((o) => (
-                                    <tr key={o.id} className="border-b border-gray-100 hover:bg-gray-50">
-                                        <td className="py-2.5 px-4 text-gray-600">{o.date}</td>
-                                        <td className="py-2.5 px-4 font-mono text-gray-700 border-l border-gray-200">OR-{o.id}</td>
-                                        <td className="py-2.5 px-4 border-l border-gray-200">
-                                            <span
-                                                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${o.status.toLowerCase() === "delivered"
+                            </thead>
+                            <tbody>
+                                {ordersLoading ? (
+                                    <tr>
+                                        <td colSpan={7} className="py-8 text-center text-gray-400">Loading orders…</td>
+                                    </tr>
+                                ) : customerOrders.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={7} className="py-8 text-center text-gray-400">No orders found.</td>
+                                    </tr>
+                                ) : (
+                                    customerOrders.map((o) => (
+                                        <tr key={o.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                            <td className="py-2.5 px-4 text-gray-600">{o.date}</td>
+                                            <td className="py-2.5 px-4 font-mono text-gray-700 border-l border-gray-200">OR-{o.id}</td>
+                                            <td className="py-2.5 px-4 border-l border-gray-200">
+                                                <span
+                                                    className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${o.status.toLowerCase() === "delivered"
                                                         ? "bg-green-100 text-green-700"
                                                         : o.status.toLowerCase() === "confirmed"
                                                             ? "bg-blue-100 text-blue-700"
                                                             : o.status.toLowerCase() === "pending_admin"
                                                                 ? "bg-yellow-100 text-yellow-700"
                                                                 : "bg-gray-100 text-gray-600"
-                                                    }`}
-                                            >
-                                                {orderStatusLabel(o.status)}
-                                            </span>
-                                        </td>
-                                        <td className="py-2.5 px-4 text-gray-900 border-l border-gray-200">{fmt(o.total_amount)}</td>
-                                        <td className={`py-2.5 px-4 border-l border-gray-200 ${o.status.toLowerCase() === "delivered" ? "text-green-600" : "text-gray-400"}`}>
-                                            {o.status.toLowerCase() === "delivered" ? fmt(o.paid_amount) : "-"}
-                                        </td>
-                                        <td className={`py-2.5 px-4 border-l border-gray-200 font-medium ${o.status.toLowerCase() === "delivered" ? outstandingColor(o.remaining_amount) : "text-gray-400"
-                                            }`}>
-                                            {o.status.toLowerCase() === "delivered" ? fmt(o.remaining_amount) : "-"}
-                                        </td>
-                                        <td className="py-2.5 px-4 border-l border-gray-200 text-center">
-                                            <Button size="sm" variant="outline" onClick={() => handleViewOrderDetails(o.id)}>
-                                                View
-                                            </Button>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
+                                                        }`}
+                                                >
+                                                    {orderStatusLabel(o.status)}
+                                                </span>
+                                            </td>
+                                            <td className="py-2.5 px-4 text-gray-900 border-l border-gray-200">{fmt(o.total_amount)}</td>
+                                            <td className={`py-2.5 px-4 border-l border-gray-200 ${o.status.toLowerCase() === "delivered" ? "text-green-600" : "text-gray-400"}`}>
+                                                {o.status.toLowerCase() === "delivered" ? fmt(o.paid_amount) : "-"}
+                                            </td>
+                                            <td className={`py-2.5 px-4 border-l border-gray-200 font-medium ${o.status.toLowerCase() === "delivered" ? outstandingColor(o.remaining_amount) : "text-gray-400"
+                                                }`}>
+                                                {o.status.toLowerCase() === "delivered" ? fmt(o.remaining_amount) : "-"}
+                                            </td>
+                                            <td className="py-2.5 px-4 border-l border-gray-200 text-center">
+                                                <Button size="sm" variant="outline" onClick={() => handleViewOrderDetails(o.id)}>
+                                                    View
+                                                </Button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
                 <Dialog open={orderDialogOpen} onOpenChange={setOrderDialogOpen}>
-                    <DialogContent className="relative max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <DialogContent className="relative w-[calc(100vw-1rem)] sm:w-auto sm:max-w-4xl max-h-[90vh] overflow-y-auto px-3 sm:px-6">
                         <DialogHeader>
-                            <div className="flex items-center justify-between pr-8">
-                                <h3 className="text-lg font-semibold text-gray-900">Order Details</h3>
+                            <div className="flex items-center justify-between gap-3 pr-10">
+                                <h3 className="text-base sm:text-lg font-semibold text-gray-900">Order Details</h3>
                             </div>
-                            <DialogClose onClick={() => setOrderDialogOpen(false)} className="text-gray-500 hover:text-gray-700">
+                            <DialogClose
+                                onClick={() => setOrderDialogOpen(false)}
+                                className="absolute right-4 top-4 rounded-md p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                                aria-label="Close"
+                            >
                                 ✕
                             </DialogClose>
                         </DialogHeader>
 
-                        <div className="p-6 space-y-4">
+                        <div className="p-3 sm:p-6 space-y-4 sm:space-y-5">
                             {orderDetailsLoading && (
                                 <p className="text-sm text-gray-500">Loading order details...</p>
                             )}
@@ -496,7 +502,7 @@ export default function CustomersPage() {
 
                             {selectedOrderDetails && (
                                 <>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
                                         <div className="rounded-md border border-gray-200 p-3 bg-gray-50">
                                             <p className="text-xs text-gray-500 mb-1">Order ID</p>
                                             <p className="font-semibold text-gray-900">OR-{selectedOrderDetails.id}</p>
@@ -508,7 +514,12 @@ export default function CustomersPage() {
                                         <div className="rounded-md border border-gray-200 p-3 bg-gray-50">
                                             <p className="text-xs text-gray-500 mb-1">Date</p>
                                             <p className="font-semibold text-gray-900">
-                                                {new Date(selectedOrderDetails.created_at).toLocaleDateString()}
+                                                {new Date(selectedOrderDetails.created_at).toLocaleDateString("en-US", {
+                                                    timeZone: "Asia/Yangon",
+                                                    year: "numeric",
+                                                    month: "short",
+                                                    day: "numeric",
+                                                })}
                                             </p>
                                         </div>
                                         <div className="rounded-md border border-gray-200 p-3 bg-gray-50">
@@ -517,35 +528,37 @@ export default function CustomersPage() {
                                         </div>
                                     </div>
 
-                                    <div className="rounded-md border border-gray-200 overflow-hidden">
-                                        <table className="w-full text-sm">
-                                            <thead>
-                                                <tr>
-                                                    {["Product", "Qty", "Unit", "Unit Price", "Total"].map((header, index) => (
-                                                        <th
-                                                            key={header}
-                                                            className={`py-2.5 px-3 text-sm font-medium text-white bg-blue-600 ${index !== 0 ? "border-l border-blue-500/40" : ""} text-left`}
-                                                        >
-                                                            {header}
-                                                        </th>
-                                                    ))}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {selectedOrderDetails.items.map((item) => {
-                                                    const lineTotal = Number(item.unit_price) * item.quantity;
-                                                    return (
-                                                        <tr key={item.id} className="border-b border-gray-100">
-                                                            <td className="py-2.5 px-3 text-gray-900">{item.product?.name ?? "-"}</td>
-                                                            <td className="py-2.5 px-3 text-gray-700 border-l border-gray-200">{item.quantity}</td>
-                                                            <td className="py-2.5 px-3 text-gray-700 border-l border-gray-200">{unitTypeLabel(item.unit_type)}</td>
-                                                            <td className="py-2.5 px-3 text-gray-700 border-l border-gray-200">{fmt(Number(item.unit_price))}</td>
-                                                            <td className="py-2.5 px-3 text-gray-900 border-l border-gray-200 font-medium">{fmt(lineTotal)}</td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
+                                    <div className="border-2 border-gray-300 rounded-lg overflow-x-auto shadow-sm">
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full min-w-[760px] text-sm border-collapse">
+                                                <thead>
+                                                    <tr>
+                                                        {["Product", "Qty", "Unit", "Unit Price", "Total"].map((header, index) => (
+                                                            <th
+                                                                key={header}
+                                                                className={`py-2.5 px-3 text-sm font-medium text-white bg-blue-600 ${index !== 0 ? "border-l border-blue-500/40" : ""} text-left`}
+                                                            >
+                                                                {header}
+                                                            </th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {selectedOrderDetails.items.map((item) => {
+                                                        const lineTotal = Number(item.unit_price) * item.quantity;
+                                                        return (
+                                                            <tr key={item.id} className="border-b border-gray-100">
+                                                                <td className="py-2.5 px-3 text-gray-900">{item.product?.name ?? "-"}</td>
+                                                                <td className="py-2.5 px-3 text-gray-700 border-l border-gray-200">{item.quantity}</td>
+                                                                <td className="py-2.5 px-3 text-gray-700 border-l border-gray-200">{unitTypeLabel(item.unit_type)}</td>
+                                                                <td className="py-2.5 px-3 text-gray-700 border-l border-gray-200">{fmt(Number(item.unit_price))}</td>
+                                                                <td className="py-2.5 px-3 text-gray-900 border-l border-gray-200 font-medium">{fmt(lineTotal)}</td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
 
                                     {selectedOrderDetails.remark && (

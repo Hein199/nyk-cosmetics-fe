@@ -385,7 +385,7 @@ export default function CashLedgerPage() {
 
                     {/* Filters */}
                     <div className="pt-2 space-y-4">
-                        <div className="flex flex-wrap items-end gap-4">
+                        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-end gap-4">
                             <div className="flex flex-col">
                                 <label className="text-xs text-gray-500 mb-1">
                                     From
@@ -397,7 +397,7 @@ export default function CashLedgerPage() {
                                         handleFromDateChange(e.target.value)
                                     }
                                     max={toDate || todayDate}
-                                    className={`w-40 h-10 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white shadow-sm ${isFromDateInvalid ? "border-red-500" : "border-gray-300"}`}
+                                    className={`w-full sm:w-40 h-10 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white shadow-sm ${isFromDateInvalid ? "border-red-500" : "border-gray-300"}`}
                                 />
                             </div>
                             <div className="flex flex-col">
@@ -410,13 +410,13 @@ export default function CashLedgerPage() {
                                     onChange={(e) => handleToDateChange(e.target.value)}
                                     max={todayDate}
                                     min={fromDate}
-                                    className={`w-40 h-10 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white shadow-sm ${isToDateInvalid ? "border-red-500" : "border-gray-300"}`}
+                                    className={`w-full sm:w-40 h-10 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white shadow-sm ${isToDateInvalid ? "border-red-500" : "border-gray-300"}`}
                                 />
                             </div>
                             <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-10 text-xs"
+                                className="h-10 w-full sm:w-auto text-xs"
                                 onClick={() => {
                                     const todayStr = today();
                                     setFromDate(todayStr);

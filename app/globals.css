@@ -24,3 +24,10 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Keep data tables usable on small screens without changing desktop layout. */
+@media (max-width: 768px) {
+  .overflow-x-auto>table {
+    min-width: 720px;
+  }
+}
