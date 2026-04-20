@@ -99,6 +99,7 @@ function getHistoryUnitLabel(unitType: string) {
 
 function formatHistoryDate(createdAt: string) {
     return new Date(createdAt).toLocaleDateString("en-GB", {
+        timeZone: "Asia/Yangon",
         day: "2-digit",
         month: "2-digit",
         year: "numeric",

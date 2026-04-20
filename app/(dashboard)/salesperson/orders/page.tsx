@@ -22,7 +22,7 @@ import { SystemLogo } from "@/components/ui/system-logo";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import { MAX_DECIMAL_12_2_INTEGER, MAX_INT_32 } from "@/lib/constants";
-import { formatId, thaiToday, formatThaiDate, toBangkokDateStr } from "@/lib/utils";
+import { formatId, thaiToday, formatThaiDate, toBangkokDateStr, formatMyanmarTime } from "@/lib/utils";
 
 type OrderListItem = {
     id: number;
@@ -48,6 +48,12 @@ type OrderDetail = {
         product?: { name: string; category?: string | null } | null;
     }>;
     salesperson?: { id: number; username: string } | null;
+};
+
+type EditedOrderItem = {
+    quantity: number;
+    unit_price: number;
+    unit_type: string;
 };
 
 function unitTypeLabel(unit: string) {
@@ -96,11 +102,7 @@ function formatStatusLabel(status: string) {
 }
 
 function formatOrderTime(dateString: string) {
-    return new Date(dateString).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-    });
+    return formatMyanmarTime(dateString, true);
 }
 
 function getOrderUnitMultiplier(unitType: string) {
@@ -121,7 +123,7 @@ export default function OrdersPage() {
     const [statusFilter, setStatusFilter] = useState("all");
     const [ordersError] = useState<string | null>(null);
     const [isEditMode, setIsEditMode] = useState(false);
-    const [editedItems, setEditedItems] = useState<Record<number, { quantity: number; unit_price: number; unit_type: string }>>({});
+    const [editedItems, setEditedItems] = useState<Record<number, EditedOrderItem>>({});
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -309,6 +311,26 @@ export default function OrdersPage() {
         setSaveError(null);
     };
 
+    const getEditedItemDefaults = (itemId: number): EditedOrderItem | null => {
+        if (!orderDetails) {
+            return null;
+        }
+
+        const source = orderDetails.items.find((item) => item.id === itemId);
+        if (!source) {
+            return null;
+        }
+
+        const unitType = source.unit_type ?? "Pcs";
+        const unitMultiplier = getOrderUnitMultiplier(unitType);
+
+        return {
+            quantity: source.quantity,
+            unit_price: Number(source.unit_price) / Math.max(unitMultiplier, 1),
+            unit_type: unitType,
+        };
+    };
+
     const handleSaveEdit = async () => {
         if (!orderDetails || !token) return;
         setIsSaving(true);
@@ -382,28 +404,24 @@ export default function OrdersPage() {
         }
     };
 
-    const getEditedItemDefaults = (itemId: number) => {
-        const sourceItem = orderDetails?.items.find((item) => item.id === itemId);
-        const sourceUnitType = sourceItem?.unit_type ?? "Pcs";
-        const unitMultiplier = getOrderUnitMultiplier(sourceUnitType);
-
-        return {
-            quantity: sourceItem?.quantity ?? 0,
-            unit_price: sourceItem ? Number(sourceItem.unit_price) / Math.max(unitMultiplier, 1) : 0,
-            unit_type: sourceUnitType,
-        };
-    };
-
     const updateEditedItem = (itemId: number, field: "quantity" | "unit_price" | "unit_type", value: number | string) => {
-        setEditedItems((prev) => ({
-            ...prev,
-            [itemId]: { ...(prev[itemId] ?? getEditedItemDefaults(itemId)), [field]: value },
-        }));
+        setEditedItems((prev) => {
+            const fallback = getEditedItemDefaults(itemId);
+            const base = prev[itemId] ?? fallback;
+            if (!base) {
+                return prev;
+            }
+
+            return {
+                ...prev,
+                [itemId]: { ...base, [field]: value },
+            };
+        });
     };
 
     const handleEditedUnitTypeChange = (itemId: number, unitType: string) => {
         setEditedItems((prev) => {
-            const currentItem = prev[itemId];
+            const currentItem = prev[itemId] ?? getEditedItemDefaults(itemId);
             if (!currentItem) {
                 return prev;
             }
@@ -464,7 +482,7 @@ export default function OrdersPage() {
                     </p>
                     {lastUpdated && (
                         <p className="text-xs text-gray-400 mt-2">
-                            Last updated {lastUpdated.toLocaleTimeString()}
+                            Last updated {formatMyanmarTime(lastUpdated)}
                         </p>
                     )}
                 </div>
@@ -494,7 +512,7 @@ export default function OrdersPage() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                             Date Range
                         </label>
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
                             <div className="flex flex-col">
                                 <label htmlFor="from-date" className="text-xs text-gray-500 mb-1">
                                     From
@@ -505,7 +523,7 @@ export default function OrdersPage() {
                                     value={fromDate}
                                     onChange={(e) => handleFromDate(e.target.value)}
                                     max={toDate || todayDate}
-                                    className={`w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
+                                    className={`w-full sm:w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
                                         ? "border-red-300 focus:ring-red-500 focus:border-red-500"
                                         : "border-gray-300 focus:ring-pink-500 focus:border-pink-500"}`}
                                 />
@@ -520,7 +538,7 @@ export default function OrdersPage() {
                                     value={toDate}
                                     onChange={(e) => handleToDate(e.target.value)}
                                     max={todayDate}
-                                    className={`w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
+                                    className={`w-full sm:w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
                                         ? "border-red-300 focus:ring-red-500 focus:border-red-500"
                                         : "border-gray-300 focus:ring-pink-500 focus:border-pink-500"}`}
                                     min={fromDate}
@@ -532,7 +550,7 @@ export default function OrdersPage() {
                                     size="sm"
                                     variant="outline"
                                     onClick={handleTodayDateRange}
-                                    className="text-xs h-10"
+                                    className="text-xs h-10 w-full sm:w-auto"
                                 >
                                     Today
                                 </Button>
@@ -773,9 +791,9 @@ export default function OrdersPage() {
 
             {/* Order Details Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="relative max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="relative w-[calc(100vw-1rem)] sm:w-auto sm:max-w-4xl max-h-[90vh] overflow-y-auto px-3 sm:px-6">
                     <DialogHeader>
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-3 pr-10">
                             <div className="flex items-center space-x-4">
                                 <SystemLogo
                                     size="lg"
@@ -810,7 +828,7 @@ export default function OrdersPage() {
                                     </div>
                                 )}
                                 {orderDetails && (
-                                    <div className="grid grid-cols-2 gap-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div>
                                             <h3 className="text-xl font-bold text-gray-900 mb-3">
                                                 Order #{orderDetails.id}
@@ -881,8 +899,8 @@ export default function OrdersPage() {
                                     <h4 className="text-lg font-semibold text-gray-900 mb-3 border-b border-gray-200 pb-2">
                                         Items Ordered
                                     </h4>
-                                    <div className="border-2 border-gray-300 rounded-lg overflow-hidden shadow-sm">
-                                        <table className="w-full text-sm border-collapse">
+                                    <div className="border-2 border-gray-300 rounded-lg overflow-x-auto shadow-sm">
+                                        <table className="w-full min-w-[760px] text-sm border-collapse">
                                             <thead className="bg-blue-600 text-white">
                                                 <tr>
                                                     <th className="text-center py-3 px-4 font-bold border-r border-blue-500 w-12">
@@ -1068,7 +1086,7 @@ export default function OrdersPage() {
                             )}
 
                             {orderDetails && (
-                                <div className="mt-4 flex items-center justify-end gap-3">
+                                <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
                                     {isEditMode ? (
                                         <>
                                             {saveError && (

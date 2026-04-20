@@ -161,6 +161,7 @@ export default function SalespersonProfilePage() {
                             <label className="text-sm font-medium text-gray-700 block mb-1">Account Created</label>
                             <p className="text-sm text-gray-900 py-2 px-3 bg-gray-100 rounded-lg">
                                 {new Date(profile.created_at).toLocaleDateString("en-US", {
+                                    timeZone: "Asia/Yangon",
                                     year: "numeric",
                                     month: "long",
                                     day: "numeric",

@@ -716,33 +716,33 @@ export default function AdminInventoryPage() {
                             </div>
                         </div>
 
-                        <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
+                        <div className="flex flex-col sm:flex-row sm:flex-nowrap items-stretch sm:items-center gap-3">
                             <Input
                                 placeholder="Search inventory history..."
                                 value={historySearch}
                                 onChange={(e) => setHistorySearch(e.target.value)}
-                                className="flex-1 min-w-[240px]"
+                                className="w-full sm:flex-1 sm:min-w-[240px]"
                             />
 
-                            <div className="flex items-center gap-2 flex-nowrap">
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                                 <Input
                                     type="date"
                                     value={startDate}
                                     onChange={(e) => handleFromDateChange(e.target.value)}
                                     max={endDate || todayDate}
-                                    className={`h-10 min-w-[140px] ${isFromDateInvalid ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                                    className={`h-10 w-full sm:min-w-[140px] ${isFromDateInvalid ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                                 />
-                                <span className="text-gray-400 text-sm">→</span>
+                                <span className="hidden sm:inline text-gray-400 text-sm">→</span>
                                 <Input
                                     type="date"
                                     value={endDate}
                                     onChange={(e) => handleToDateChange(e.target.value)}
                                     max={todayDate}
-                                    className={`h-10 min-w-[140px] ${isToDateInvalid ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                                    className={`h-10 w-full sm:min-w-[140px] ${isToDateInvalid ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                                 />
                                 <Button
                                     variant="outline"
-                                    className="h-10"
+                                    className="h-10 w-full sm:w-auto"
                                     onClick={() => {
                                         setStartDate(todayDate);
                                         setEndDate(todayDate);
@@ -805,6 +805,7 @@ export default function AdminInventoryPage() {
                                                     >
                                                         <td className="py-3 px-4 whitespace-nowrap text-xs sm:text-sm text-gray-600">
                                                             {new Date(entry.created_at).toLocaleString("en-MM", {
+                                                                timeZone: "Asia/Yangon",
                                                                 year: "numeric",
                                                                 month: "short",
                                                                 day: "numeric",

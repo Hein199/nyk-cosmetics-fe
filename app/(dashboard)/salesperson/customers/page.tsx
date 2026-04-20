@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
+import { formatMyanmarTime } from "@/lib/utils";
 
 type Customer = {
     id: number;
@@ -131,7 +132,7 @@ export default function CustomersPage() {
                             </div>
                             {lastUpdated && (
                                 <div className="mt-2 text-xs text-gray-400">
-                                    Last updated {lastUpdated.toLocaleTimeString()}
+                                    Last updated {formatMyanmarTime(lastUpdated)}
                                 </div>
                             )}
                         </div>

@@ -137,6 +137,7 @@ function formatCurrency(amount: number) {
 function formatDate(dateStr: string | undefined) {
     if (!dateStr) return "-";
     return new Date(dateStr).toLocaleDateString("en-US", {
+        timeZone: "Asia/Yangon",
         month: "short",
         day: "numeric",
         year: "numeric",
@@ -147,6 +148,7 @@ function formatMonth(monthStr: string | undefined) {
     if (!monthStr) return "-";
     const [year, month] = monthStr.split("-");
     return new Date(Number(year), Number(month) - 1).toLocaleDateString("en-US", {
+        timeZone: "Asia/Yangon",
         month: "short",
         year: "numeric",
     });
@@ -730,26 +732,26 @@ export default function EmployeesPage() {
                                 <CardTitle>Salary Records</CardTitle>
                                 <CardDescription>{filteredSalaryRecords.length} records</CardDescription>
                             </div>
-                            <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
-                                <div className="flex items-center gap-2 flex-nowrap">
+                            <div className="flex flex-col sm:flex-row sm:flex-nowrap items-stretch sm:items-center gap-3">
+                                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                                     <Input
                                         type="date"
                                         value={salaryFromDate}
                                         onChange={(e) => handleSalaryFromDateChange(e.target.value)}
                                         max={salaryToDate || todayDate}
-                                        className={`h-10 min-w-[140px] ${isSalaryFromDateInvalid ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                                        className={`h-10 w-full sm:min-w-[140px] ${isSalaryFromDateInvalid ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                                     />
-                                    <span className="text-gray-400 text-sm">→</span>
+                                    <span className="hidden sm:inline text-gray-400 text-sm">→</span>
                                     <Input
                                         type="date"
                                         value={salaryToDate}
                                         onChange={(e) => handleSalaryToDateChange(e.target.value)}
                                         max={todayDate}
-                                        className={`h-10 min-w-[140px] ${isSalaryToDateInvalid ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                                        className={`h-10 w-full sm:min-w-[140px] ${isSalaryToDateInvalid ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                                     />
                                     <Button
                                         variant="outline"
-                                        className="h-10"
+                                        className="h-10 w-full sm:w-auto"
                                         onClick={() => {
                                             setSalaryFromDate(todayDate);
                                             setSalaryToDate(todayDate);

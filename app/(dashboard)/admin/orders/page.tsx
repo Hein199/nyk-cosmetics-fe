@@ -20,7 +20,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import { MAX_DECIMAL_12_2_INTEGER, MAX_INT_32 } from "@/lib/constants";
-import { formatId, thaiToday, formatThaiDate, toBangkokDateStr } from "@/lib/utils";
+import { formatId, thaiToday, formatThaiDate, toBangkokDateStr, formatMyanmarTime } from "@/lib/utils";
 
 type OrderListItem = {
     id: number;
@@ -46,6 +46,12 @@ type OrderDetail = {
         product?: { name: string; category?: string | null } | null;
     }>;
     salesperson?: { id: number; username: string } | null;
+};
+
+type EditedOrderItem = {
+    quantity: number;
+    unit_price: number;
+    unit_type: string;
 };
 
 function unitTypeLabel(unit: string) {
@@ -111,7 +117,7 @@ export default function OrdersPage() {
     const [employeeFilter, setEmployeeFilter] = useState("all");
     const [isEditMode, setIsEditMode] = useState(false);
     const [ordersError, setOrdersError] = useState<string | null>(null);
-    const [editedItems, setEditedItems] = useState<Record<number, { quantity: number; unit_price: number; unit_type: string }>>({});
+    const [editedItems, setEditedItems] = useState<Record<number, EditedOrderItem>>({});
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [systemName, setSystemName] = useState("NYK Cosmetics");
@@ -456,16 +462,44 @@ export default function OrdersPage() {
         }
     };
 
+    const getEditedItemDefaults = (itemId: number): EditedOrderItem | null => {
+        if (!orderDetails) {
+            return null;
+        }
+
+        const source = orderDetails.items.find((item) => item.id === itemId);
+        if (!source) {
+            return null;
+        }
+
+        const unitType = source.unit_type ?? "Pcs";
+        const unitMultiplier = getOrderUnitMultiplier(unitType);
+
+        return {
+            quantity: source.quantity,
+            unit_price: Number(source.unit_price) / Math.max(unitMultiplier, 1),
+            unit_type: unitType,
+        };
+    };
+
     const updateEditedItem = (itemId: number, field: "quantity" | "unit_price" | "unit_type", value: number | string) => {
-        setEditedItems(prev => ({
-            ...prev,
-            [itemId]: { ...prev[itemId], [field]: value },
-        }));
+        setEditedItems((prev) => {
+            const fallback = getEditedItemDefaults(itemId);
+            const base = prev[itemId] ?? fallback;
+            if (!base) {
+                return prev;
+            }
+
+            return {
+                ...prev,
+                [itemId]: { ...base, [field]: value },
+            };
+        });
     };
 
     const handleEditedUnitTypeChange = (itemId: number, unitType: string) => {
         setEditedItems((prev) => {
-            const currentItem = prev[itemId];
+            const currentItem = prev[itemId] ?? getEditedItemDefaults(itemId);
             if (!currentItem) {
                 return prev;
             }
@@ -540,7 +574,7 @@ export default function OrdersPage() {
                     </p>
                     {lastUpdated && (
                         <p className="text-xs text-gray-400 mt-2">
-                            Last updated {lastUpdated.toLocaleTimeString()}
+                            Last updated {formatMyanmarTime(lastUpdated)}
                         </p>
                     )}
                 </div>
@@ -558,7 +592,7 @@ export default function OrdersPage() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                             Date Range
                         </label>
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
                             <div className="flex flex-col">
                                 <label htmlFor="from-date" className="text-xs text-gray-500 mb-1">
                                     From
@@ -569,7 +603,7 @@ export default function OrdersPage() {
                                     value={fromDate}
                                     onChange={(e) => handleFromDate(e.target.value)}
                                     max={toDate || todayDate}
-                                    className={`w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
+                                    className={`w-full sm:w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
                                         ? "border-red-300 focus:ring-red-500 focus:border-red-500"
                                         : "border-gray-300 focus:ring-pink-500 focus:border-pink-500"}`}
                                 />
@@ -584,7 +618,7 @@ export default function OrdersPage() {
                                     value={toDate}
                                     onChange={(e) => handleToDate(e.target.value)}
                                     max={todayDate}
-                                    className={`w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
+                                    className={`w-full sm:w-40 px-3 py-2 text-sm text-black border rounded-lg focus:outline-none focus:ring-2 bg-white shadow-sm ${isDateRangeInvalid
                                         ? "border-red-300 focus:ring-red-500 focus:border-red-500"
                                         : "border-gray-300 focus:ring-pink-500 focus:border-pink-500"}`}
                                     min={fromDate}
@@ -596,7 +630,7 @@ export default function OrdersPage() {
                                     size="sm"
                                     variant="outline"
                                     onClick={handleTodayDateRange}
-                                    className="text-xs h-10"
+                                    className="text-xs h-10 w-full sm:w-auto"
                                 >
                                     Today
                                 </Button>
@@ -693,7 +727,7 @@ export default function OrdersPage() {
                                         <div>
                                             <p className="text-gray-500">{formatDate(order.created_at)}</p>
                                             <p className="text-gray-500">
-                                                {new Date(order.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                                {formatMyanmarTime(order.created_at)}
                                             </p>
                                         </div>
                                         <span className="font-semibold text-gray-900 text-lg">
@@ -777,7 +811,7 @@ export default function OrdersPage() {
                                                     {formatDate(order.created_at)}
                                                 </td>
                                                 <td className="py-3 px-4 text-center font-medium text-gray-900 border-r border-gray-300">
-                                                    {new Date(order.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                                    {formatMyanmarTime(order.created_at)}
                                                 </td>
                                                 <td className="py-3 px-4 text-center font-bold text-gray-900 border-r border-gray-300">
                                                     {formatCurrency(Number(order.total_amount))}
@@ -814,9 +848,9 @@ export default function OrdersPage() {
 
             {/* Order Details Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="relative max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="relative w-[calc(100vw-1rem)] sm:w-auto sm:max-w-4xl max-h-[90vh] overflow-y-auto px-3 sm:px-6">
                     <DialogHeader>
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-3 pr-10">
                             <div className="flex items-center space-x-4">
                                 {/* System Branding Logo */}
                                 <div className="flex items-center space-x-3">
@@ -863,7 +897,7 @@ export default function OrdersPage() {
                                     </div>
                                 )}
                                 {orderDetails && (
-                                    <div className="grid grid-cols-2 gap-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div>
                                             <h3 className="text-xl font-bold text-gray-900 mb-3">
                                                 Order {formatId('ORD', orderDetails.id)}
@@ -876,7 +910,7 @@ export default function OrdersPage() {
                                                 <div className="flex">
                                                     <span className="w-24 text-gray-600">Time:</span>
                                                     <span className="text-gray-900">
-                                                        {new Date(orderDetails.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                                        {formatMyanmarTime(orderDetails.created_at)}
                                                     </span>
                                                 </div>
                                                 <div className="flex">
@@ -929,8 +963,8 @@ export default function OrdersPage() {
                                     <h4 className="text-lg font-semibold text-gray-900 mb-3 border-b border-gray-200 pb-2">
                                         Items Ordered
                                     </h4>
-                                    <div className="border-2 border-gray-300 rounded-lg overflow-hidden shadow-sm">
-                                        <table className="w-full text-sm border-collapse">
+                                    <div className="border-2 border-gray-300 rounded-lg overflow-x-auto shadow-sm">
+                                        <table className="w-full min-w-[760px] text-sm border-collapse">
                                             <thead className="bg-blue-600 text-white">
                                                 <tr>
                                                     <th className="text-center py-3 px-4 font-bold border-r border-blue-500 w-12">
@@ -959,9 +993,9 @@ export default function OrdersPage() {
                                             <tbody>
                                                 {orderDetails.items.map((item, index) => {
                                                     const edited = editedItems[item.id];
-                                                    const qty = isEditMode && edited ? edited.quantity : item.quantity;
-                                                    const unitPrice = isEditMode && edited ? edited.unit_price : Number(item.unit_price);
-                                                    const unitType = isEditMode && edited ? edited.unit_type : item.unit_type;
+                                                    const qty = isEditMode ? (edited?.quantity ?? item.quantity) : item.quantity;
+                                                    const unitPrice = isEditMode ? (edited?.unit_price ?? Number(item.unit_price)) : Number(item.unit_price);
+                                                    const unitType = isEditMode ? (edited?.unit_type ?? item.unit_type) : item.unit_type;
                                                     const total = isEditMode
                                                         ? unitPrice * qty * getOrderUnitMultiplier(unitType)
                                                         : unitPrice * qty;
@@ -985,7 +1019,7 @@ export default function OrdersPage() {
                                                             <td className="py-3 px-4 text-center text-gray-700 font-medium border-r border-gray-300">
                                                                 {isEditMode ? (
                                                                     <select
-                                                                        value={unitType}
+                                                                        value={unitType ?? "Pcs"}
                                                                         onChange={(e) => handleEditedUnitTypeChange(item.id, e.target.value)}
                                                                         className="h-8 w-24 rounded border border-gray-300 bg-white px-2 text-xs text-gray-900"
                                                                     >
@@ -1066,10 +1100,10 @@ export default function OrdersPage() {
                                                         {formatCurrency(
                                                             orderDetails.items.reduce(
                                                                 (sum, item) => {
-                                                                    const edited = editedItems[item.id];
-                                                                    const qty = isEditMode && edited ? edited.quantity : item.quantity;
-                                                                    const up = isEditMode && edited ? edited.unit_price : Number(item.unit_price);
-                                                                    const unitType = isEditMode && edited ? edited.unit_type : item.unit_type;
+                                                                    const edited = isEditMode ? editedItems[item.id] : undefined;
+                                                                    const qty = edited?.quantity ?? item.quantity;
+                                                                    const up = edited?.unit_price ?? Number(item.unit_price);
+                                                                    const unitType = edited?.unit_type ?? item.unit_type;
                                                                     const multiplier = isEditMode ? getOrderUnitMultiplier(unitType) : 1;
                                                                     return sum + up * qty * multiplier;
                                                                 },
@@ -1086,9 +1120,9 @@ export default function OrdersPage() {
                                                                 isEditMode
                                                                     ? orderDetails.items.reduce((sum, item) => {
                                                                         const edited = editedItems[item.id];
-                                                                        const qty = edited ? edited.quantity : item.quantity;
-                                                                        const up = edited ? edited.unit_price : Number(item.unit_price);
-                                                                        const unitType = edited ? edited.unit_type : item.unit_type;
+                                                                        const qty = edited?.quantity ?? item.quantity;
+                                                                        const up = edited?.unit_price ?? Number(item.unit_price);
+                                                                        const unitType = edited?.unit_type ?? item.unit_type;
                                                                         return sum + up * qty * getOrderUnitMultiplier(unitType);
                                                                     }, 0)
                                                                     : Number(orderDetails.total_amount)
@@ -1114,7 +1148,7 @@ export default function OrdersPage() {
                                     </div>
 
                                     {orderDetails.salesperson?.id && (
-                                        <div className="mt-4 flex items-center justify-end gap-3">
+                                        <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
                                             {isEditMode ? (
                                                 <>
                                                     {saveError && (
